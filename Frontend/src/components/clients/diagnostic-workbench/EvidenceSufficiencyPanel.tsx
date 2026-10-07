@@ -1,9 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
+import { sourceBasisLabelHu } from "@/lib/growApi";
 import type { DiagnosticWorkbenchDto } from "@/lib/diagnosticWorkbenchApi";
 import {
   PROVENANCE_LABELS_HU,
+  evidenceReviewStatusLabelHu,
+  growthUnresolvedItemLabel,
   verificationStatusLabelHu,
   sufficiencyBadge,
 } from "@/lib/diagnosticWorkbenchApi";
@@ -83,11 +86,11 @@ export function EvidenceSufficiencyPanel({
                 : "border-slate-200 bg-white text-slate-700"
             }`}
           >
-            <span className="font-semibold block">Explicit ismeretlen tények (UNKNOWN):</span>
+            <span className="font-semibold block">Kifejezetten ismeretlen tények:</span>
             <span className="mt-1 block text-sm font-medium">
               {missing.hasUnknownFacts
                 ? "Van explicit ismeretlenként jelölt tény."
-                : "Nincs explicit UNKNOWN státuszú rögzített tény."}
+                : "Nincs explicit ismeretlen státuszú rögzített tény."}
             </span>
           </div>
 
@@ -131,7 +134,7 @@ export function EvidenceSufficiencyPanel({
             <ul className="list-disc list-inside space-y-0.5 text-[11px]">
               {missing.unresolvedItems.map((item, idx) => (
                 <li key={idx}>
-                  <span className="font-mono font-medium">{item.code}</span>: {item.message}
+                  {growthUnresolvedItemLabel(item)}
                 </li>
               ))}
             </ul>
@@ -216,7 +219,7 @@ export function EvidenceSufficiencyPanel({
                 <div className="flex items-start justify-between gap-2">
                   <span className="font-semibold text-[var(--adm-text)]">{rec.title}</span>
                   <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-700">
-                    {rec.status}
+                    {evidenceReviewStatusLabelHu(rec.status)}
                   </span>
                 </div>
 
@@ -309,6 +312,7 @@ export function EvidenceSufficiencyPanel({
                       ) : null}
 
                       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] text-[var(--adm-text-muted)] pt-1">
+                        <span data-testid="diagnostic-evidence-source-basis">{sourceBasisLabelHu(res.sourceBasis)}</span>
                         <span>Eredet: {res.origin || "—"}</span>
                         <span>Hitelesítés: {verificationStatusLabelHu(res.verificationStatus)}</span>
                         <span>Erősség: {res.strength}</span>
@@ -370,6 +374,7 @@ export function EvidenceSufficiencyPanel({
                       ) : null}
 
                       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] text-[var(--adm-text-muted)] pt-1">
+                        <span data-testid="diagnostic-evidence-source-basis">{sourceBasisLabelHu(res.sourceBasis)}</span>
                         <span>Eredet: {res.origin || "—"}</span>
                         <span>Hitelesítés: {verificationStatusLabelHu(res.verificationStatus)}</span>
                         <span>Erősség: {res.strength}</span>

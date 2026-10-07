@@ -1,4 +1,6 @@
 "use client";
+import { ViewportDialog } from "@/components/ui/ViewportDialog";
+
 
 /**
  * Communication picker drawer (CASE-INTAKE-VISUAL-CORRECTION-1).
@@ -18,17 +20,24 @@ import { getCommunications, type CommunicationItem } from "@/lib/api";
 import { intake, ACCENT_BG, ACCENT_TEXT } from "./intakeStyles";
 
 export function CaseCommunicationPickerDrawer({
-  open, clientId, selectedIds, primaryId, onCancel, onConfirm,
+  open, clientId, selectedIds, primaryId, singleSelect = false, busy = false, error = null, onCancel, onConfirm,
 }: {
   open: boolean;
   clientId: string;
   selectedIds: string[];
   primaryId: string;
+  /** Single-thread mode: exactly one thread is selected and linked. */
+  singleSelect?: boolean;
+  /** Link-in-progress flag: disables confirm and labels it accordingly. */
+  busy?: boolean;
+  /** Link failure surfaced truthfully inside the drawer. */
+  error?: string | null;
   onCancel: () => void;
   onConfirm: (ids: string[], primary: string) => void;
 }) {
   const [items, setItems] = useState<CommunicationItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [query, setQuery] = useState("");
   const [showAssigned, setShowAssigned] = useState(false);
   // Staged selection: cancelling must leave the form untouched.
@@ -45,19 +54,13 @@ export function CaseCommunicationPickerDrawer({
     if (!open) return;
     let active = true;
     setLoading(true);
+    setLoadError(false);
     getCommunications({ limit: 50, clientId: clientId || undefined })
       .then((r) => { if (active) setItems(r.communications || []); })
-      .catch(() => { if (active) setItems([]); })
+      .catch(() => { if (active) { setItems([]); setLoadError(true); } })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [open, clientId]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onCancel]);
 
   const { available, assigned } = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -73,6 +76,11 @@ export function CaseCommunicationPickerDrawer({
   if (!open) return null;
 
   const toggle = (id: string) => {
+    if (singleSelect) {
+      setStaged([id]);
+      setStagedPrimary(id);
+      return;
+    }
     setStaged((prev) => {
       const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
       setStagedPrimary((p) => (next.includes(p) ? p : next[0] || ""));
@@ -81,27 +89,11 @@ export function CaseCommunicationPickerDrawer({
   };
 
   return (
-    <div className={intake.overlay} role="presentation" onMouseDown={onCancel}>
-      <div className="flex h-full items-end justify-center p-0 sm:items-center sm:p-6">
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Kommunikáció kiválasztása"
-          data-testid="comm-picker-drawer"
-          onMouseDown={(e) => e.stopPropagation()}
-          className="flex h-[92vh] w-full max-w-[760px] flex-col overflow-hidden rounded-t-xl bg-white shadow-[0_24px_70px_rgba(16,22,19,0.34)] sm:h-[80vh] sm:rounded-xl"
-        >
-          <header className="flex items-center justify-between gap-3 border-b border-[rgba(16,22,19,0.14)] px-4 py-3">
-            <div className="min-w-0">
-              <h3 className="font-serif text-[19px] font-semibold text-[#16201A]">Kommunikáció kiválasztása</h3>
-              <p data-testid="comm-picker-count" className={`text-[12px] font-semibold ${ACCENT_TEXT.terracotta}`}>
-                {staged.length === 0 ? "Nincs kiválasztva" : `${staged.length} beszélgetés kiválasztva`}
-              </p>
-            </div>
-            <button type="button" onClick={onCancel} aria-label="Bezárás" className="text-[13px] font-semibold text-[#7A8479] hover:text-[#16201A]">✕</button>
-          </header>
+    <ViewportDialog open={open} title="Kommunikáció kiválasztása" onClose={onCancel} busy={busy} testId="comm-picker-drawer" maxWidth="max-w-3xl">
+
 
           <div className="border-b border-[rgba(16,22,19,0.10)] px-4 py-2.5">
+            <p data-testid="comm-picker-count" role="status" className="mb-2 text-sm text-[var(--adm-text-muted)]">{`${staged.length} beszélgetés kiválasztva`}</p>
             <input
               data-testid="comm-picker-search"
               className={`${intake.field} mt-0`}
@@ -115,6 +107,10 @@ export function CaseCommunicationPickerDrawer({
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
             {loading ? (
               <p className="text-[12.5px] text-[#7A8479]">Levelezés betöltése…</p>
+            ) : loadError ? (
+              <p role="alert" data-testid="comm-picker-load-error" className={`text-[12.5px] font-semibold ${ACCENT_TEXT.terracotta}`}>
+                A levelezés betöltése nem sikerült. Próbáld újra.
+              </p>
             ) : (
               <>
                 {available.length === 0 ? (
@@ -147,7 +143,7 @@ export function CaseCommunicationPickerDrawer({
                                 {c.createdAt ? ` · ${new Date(c.createdAt).toLocaleDateString("hu-HU")}` : ""}
                               </p>
                             </div>
-                            {sel ? (
+                            {sel && !singleSelect ? (
                               <button
                                 type="button"
                                 data-testid="comm-picker-primary"
@@ -197,20 +193,22 @@ export function CaseCommunicationPickerDrawer({
             <p data-testid="comm-disclosure" className="text-[11px] leading-[15px] text-[#5C6660]">
               A hozzárendelt levelezés csatolmányaiból nem jön létre automatikusan dokumentum.
             </p>
+            {error ? (
+              <p role="alert" data-testid="comm-picker-link-error" className={`w-full text-[11.5px] font-semibold ${ACCENT_TEXT.terracotta}`}>{error}</p>
+            ) : null}
             <div className="ml-auto flex items-center gap-2">
-            <button type="button" data-testid="comm-picker-cancel" className={intake.secondaryAction} onClick={onCancel}>Mégse</button>
+            <button type="button" data-testid="comm-picker-cancel" className={intake.secondaryAction} onClick={onCancel} disabled={busy}>Mégse</button>
             <button
               type="button"
               data-testid="comm-picker-confirm"
               className={intake.primaryAction}
+              disabled={busy || (singleSelect && staged.length !== 1)}
               onClick={() => onConfirm(staged, stagedPrimary)}
             >
-              Kiválasztás megerősítése
+              {busy ? "Kapcsolás…" : "Kiválasztás megerősítése"}
             </button>
             </div>
           </footer>
-        </div>
-      </div>
-    </div>
+    </ViewportDialog>
   );
 }

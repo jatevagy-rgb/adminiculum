@@ -20,11 +20,11 @@ jest.mock('../src/middleware/auth', () => ({
 jest.mock('../src/prisma/prisma.service', () => {
   const mock: any = {
     $queryRaw: jest.fn(),
-    communication: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn(), count: jest.fn(), create: jest.fn() },
+    communication: { findUnique: jest.fn(), updateMany: jest.fn(), update: jest.fn(), findMany: jest.fn(), count: jest.fn(), create: jest.fn() },
     communicationAttachment: { findMany: jest.fn() },
     client: { findUnique: jest.fn(), findMany: jest.fn() },
     user: { findUnique: jest.fn() },
-    case: { findUnique: jest.fn(), findMany: jest.fn() },
+    case: { findFirst: jest.fn(), findUnique: jest.fn(), findMany: jest.fn() },
     caseCollaborator: { findFirst: jest.fn() },
     task: { create: jest.fn(), findMany: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
     timelineEvent: { create: jest.fn() },
@@ -111,6 +111,8 @@ describe('POST /communications/:id/create-case', () => {
     jest.resetAllMocks();
     (prisma as any).$transaction = jest.fn((cb: any) => cb(prisma));
     process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
+    (prisma as any).case.findFirst.mockImplementation((args: any) => (prisma as any).case.findUnique(args));
+    (prisma as any).communication.updateMany.mockResolvedValue({ count: 1 });
   });
 
   afterEach(() => { delete process.env.ENABLE_COMMUNICATIONS_PERSISTENCE; });
@@ -178,7 +180,7 @@ describe('POST /communications/:id/create-case', () => {
     expect(casesService.createCase).toHaveBeenCalledWith(expect.objectContaining({
       title: validBody.title, clientId: 'client-1', clientName: 'Teszt Kft.', matterType: 'LEASE', createdById: 'user-1',
     }), prisma, { withinTransaction: true, provisionCaseFolders: false });
-    expect((prisma as any).communication.update).toHaveBeenCalledWith({ where: { id: 'comm-1' }, data: { caseId: 'case-new' } });
+    expect((prisma as any).communication.updateMany).toHaveBeenCalledWith({ where: { id: 'comm-1', caseId: null, clientId: 'client-1' }, data: { caseId: 'case-new' } });
     expect(response.body.case).toEqual({ id: 'case-new', caseNumber: 'CASE-2026-001', title: validBody.title });
   });
 
@@ -213,6 +215,16 @@ describe('POST /communications/:id/create-case', () => {
     expect(casesService.createCase).not.toHaveBeenCalled();
   });
 
+  it('rejects a concurrently linked source before saving audit or initial tasks', async () => {
+    seedUnlinkedCommunication();
+    (prisma as any).communication.updateMany.mockResolvedValue({ count: 0 });
+    const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', { body: validBody });
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('COMMUNICATION_ALREADY_LINKED');
+    expect((prisma as any).timelineEvent.create).not.toHaveBeenCalled();
+    expect((prisma as any).task.create).not.toHaveBeenCalled();
+  });
+
   it('does not return success when a later in-transaction task write fails', async () => {
     seedUnlinkedCommunication();
     (prisma as any).task.create.mockRejectedValue(new Error('task insert failed'));
@@ -229,6 +241,8 @@ describe('communication case association and canonical case read projection', ()
     jest.resetAllMocks();
     (prisma as any).$transaction = jest.fn((cb: any) => cb(prisma));
     process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
+    (prisma as any).case.findFirst.mockImplementation((args: any) => (prisma as any).case.findUnique(args));
+    (prisma as any).communication.updateMany.mockResolvedValue({ count: 1 });
     (prisma as any).communicationAttachment.findMany.mockResolvedValue([]);
     (prisma as any).task.findMany.mockResolvedValue([]);
     (prisma as any).client.findMany.mockResolvedValue([]);
@@ -240,10 +254,10 @@ describe('communication case association and canonical case read projection', ()
   it.each(['create-case', 'link-case'])('%s preserves the original message and projects it through the case query', async (action) => {
     let stored: any = { ...routeCommunication, createdById: 'user-1', content: 'Original incoming message', type: 'EMAIL', createdAt: new Date('2026-01-01T00:00:00Z'), updatedAt: new Date('2026-01-01T00:00:00Z') };
     (prisma as any).communication.findUnique.mockImplementation(async () => ({ ...stored }));
-    (prisma as any).communication.update.mockImplementation(async ({ where, data }: any) => {
-      expect(where).toEqual({ id: 'comm-1' });
+    (prisma as any).communication.updateMany.mockImplementation(async ({ where, data }: any) => {
+      expect(where).toEqual({ id: 'comm-1', caseId: null, clientId: 'client-1' });
       stored = { ...stored, ...data };
-      return { ...stored };
+      return { count: 1 };
     });
     (prisma as any).client.findUnique.mockResolvedValue({ id: 'client-1', name: 'Client' });
     (prisma as any).case.findUnique.mockResolvedValue({ id: 'case-new', caseNumber: 'CASE-1', clientId: 'client-1', assignedLawyerId: 'user-1' });
@@ -253,7 +267,7 @@ describe('communication case association and canonical case read projection', ()
     expect(response.status).toBe(action === 'create-case' ? 201 : 200);
     expect(stored).toMatchObject({ id: 'comm-1', caseId: 'case-new', clientId: 'client-1', content: 'Original incoming message' });
     expect((prisma as any).communication.create).not.toHaveBeenCalled();
-    (prisma as any).$queryRaw.mockResolvedValue([{ ...stored }]);
+    (prisma as any).$queryRaw.mockClear().mockResolvedValue([{ ...stored }]);
     const listed = await requestJson(createApp(), 'GET', '/communications?caseId=case-new&clientId=client-1');
     expect(listed.status).toBe(200);
     // The same canonical filter scope is applied to the ordered list read and
@@ -271,7 +285,7 @@ describe('communication case association and canonical case read projection', ()
     const response = await requestJson(createApp(), 'POST', '/communications/comm-1/link-case', { body: { caseId: 'other-case' } });
     expect(response.status).toBe(409);
     expect(response.body.code).toBe('CLIENT_CASE_MISMATCH');
-    expect((prisma as any).communication.update).not.toHaveBeenCalled();
+    expect((prisma as any).communication.updateMany).not.toHaveBeenCalled();
   });
 
   it('returns CASE_ACCESS_FORBIDDEN when the actor cannot read the currently linked case', async () => {
@@ -300,7 +314,7 @@ describe('communication case association and canonical case read projection', ()
     expect(response.body.code).toBe('COMMUNICATION_ACCESS_FORBIDDEN');
   });
 
-  it('reassigns a same-client communication and preserves audit history without changing tasks', async () => {
+  it('rejects implicit reassignment of a same-client communication without changing history or tasks', async () => {
     const stored = { id: 'comm-1', caseId: 'case-a', clientId: 'client-1', createdById: 'user-1', subject: 'Subject' };
     const cases: Record<string, any> = {
       'case-a': { id: 'case-a', caseNumber: 'A-1', clientId: 'client-1', assignedLawyerId: 'user-1', createdById: 'owner' },
@@ -312,10 +326,10 @@ describe('communication case association and canonical case read projection', ()
     (prisma as any).task.findFirst.mockResolvedValue(null);
     (prisma as any).communication.update.mockImplementation(async ({ data }: any) => ({ ...stored, ...data }));
     const response = await requestJson(createApp(), 'POST', '/communications/comm-1/link-case', { body: { caseId: 'case-b' } });
-    expect(response.status).toBe(200);
-    expect(response.body.communication.caseId).toBe('case-b');
-    expect((prisma as any).communication.update).toHaveBeenCalledWith({ where: { id: 'comm-1' }, data: { caseId: 'case-b', clientId: 'client-1' } });
-    expect((prisma as any).timelineEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ payload: expect.objectContaining({ previousCaseId: 'case-a' }) }) }));
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('COMMUNICATION_ALREADY_LINKED');
+    expect((prisma as any).communication.updateMany).not.toHaveBeenCalled();
+    expect((prisma as any).timelineEvent.create).not.toHaveBeenCalled();
     expect((prisma as any).task.update).not.toHaveBeenCalled();
   });
 
@@ -328,9 +342,31 @@ describe('communication case association and canonical case read projection', ()
     (prisma as any).task.findFirst.mockResolvedValue(task);
     const response = await requestJson(createApp(), 'POST', '/communications/comm-1/link-case', { body: { caseId: 'case-b' } });
     expect(response.status).toBe(409);
-    expect(response.body.code).toBe('COMMUNICATION_TASK_CASE_MISMATCH');
+    expect(response.body.code).toBe('COMMUNICATION_ALREADY_LINKED');
     expect((prisma as any).communication.update).not.toHaveBeenCalled();
     expect(task.caseId).toBe('case-a');
     expect((prisma as any).task.update).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('communication primary list failures', () => {
+  beforeEach(() => { jest.resetAllMocks(); (prisma as any).case.findMany.mockResolvedValue([]); });
+  it('returns a typed safe error, never a successful empty list or database diagnostics', async () => {
+    (prisma as any).$queryRaw.mockRejectedValue(new Error('secret database connection diagnostic'));
+    const response = await requestJson(createApp(), 'GET', '/communications');
+    expect(response.status).toBe(503);
+    expect(response.body.code).toBe('COMMUNICATION_READ_FAILED');
+    expect(response.body.communications).toBeUndefined();
+    expect(JSON.stringify(response.body)).not.toContain('secret');
+    expect((prisma as any).communication.count).not.toHaveBeenCalled();
+  });
+  it('a successful empty result stays a genuine empty result', async () => {
+    (prisma as any).$queryRaw.mockResolvedValue([]);
+    (prisma as any).communication.count.mockResolvedValue(0);
+    const response = await requestJson(createApp(), 'GET', '/communications');
+    expect(response.status).toBe(200);
+    expect(response.body.communications).toEqual([]);
+    expect(response.body.pagination.total).toBe(0);
   });
 });

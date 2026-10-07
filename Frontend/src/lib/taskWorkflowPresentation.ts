@@ -1,4 +1,5 @@
 import { ApiError } from "./api";
+import { BUSINESS_TIME_ZONE, formatDeadline } from "./businessDateTime";
 import type {
   SubmissionReadinessCode,
   SubmissionWarningCode,
@@ -64,6 +65,32 @@ export const DOCUMENT_ROLE_LABELS: Record<string, string> = {
   REVIEW_REFERENCE: "Review-háttéranyag",
   FINAL_OUTPUT: "Végleges eredmény",
 };
+
+/**
+ * Human Hungarian labels for the canonical DocumentReviewStatus lifecycle. Used
+ * by ordinary review presentation so the raw state token never reaches the UI.
+ */
+export const DOCUMENT_REVIEW_STATUS_LABELS: Record<string, string> = {
+  DRAFT: "Piszkozat",
+  ASSIGNED: "Kijelölve",
+  READY_FOR_REVIEW: "Review-ra kész",
+  IN_REVIEW: "Review alatt",
+  RESUBMITTED: "Újra beküldve",
+  CHANGES_REQUESTED: "Módosítás kérve",
+  APPROVED: "Jóváhagyva",
+  READY_FOR_CLIENT: "Ügyfélnek kész",
+  PUBLISHED: "Közzétéve",
+  CLOSED: "Lezárva",
+  CANCELLED: "Visszavonva",
+};
+
+export const UNKNOWN_DOCUMENT_REVIEW_STATUS_LABEL = "Ismeretlen review állapot";
+
+export function documentReviewStatusLabel(status?: string | null): string {
+  const key = String(status || "").trim().toUpperCase();
+  if (!key) return UNKNOWN_DOCUMENT_REVIEW_STATUS_LABEL;
+  return DOCUMENT_REVIEW_STATUS_LABELS[key] || UNKNOWN_DOCUMENT_REVIEW_STATUS_LABEL;
+}
 
 export const EXTERNAL_ACTION_LABELS: Record<string, string> = {
   CLIENT_SEND: "Ügyfélnek küldés",
@@ -165,15 +192,11 @@ export function nextActorLabel(
 export function formatDate(value?: string | null): string {
   if (!value) return "—";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString("hu-HU");
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString("hu-HU", { timeZone: BUSINESS_TIME_ZONE });
 }
 
 export function formatDateTime(value?: string | null): string {
-  if (!value) return "—";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? "—"
-    : date.toLocaleString("hu-HU", { dateStyle: "short", timeStyle: "short" });
+  return formatDeadline(value);
 }
 
 export function formatMinutes(minutes?: number | null): string {

@@ -1,3 +1,5 @@
+import { addCalendarDays, businessDateKey } from './businessTime';
+
 export type WorkflowDeadlineSourceType = 'TASK' | 'CASE_DEADLINE';
 export type WorkflowDeadlineStatus = 'OPEN' | 'COMPLETED' | 'CANCELLED' | 'SUPERSEDED';
 export type WorkflowDeadlineUrgency = 'OVERDUE' | 'TODAY' | 'TOMORROW' | 'THIS_WEEK' | 'LATER';
@@ -22,6 +24,8 @@ export interface WorkflowDeadlineDto {
   startsAt?: string | null;
   dueAt: string;
   allDay: boolean;
+  /** Persisted DateTime sources are timestamps; midnight never implies DATE_ONLY. */
+  temporalType?: 'DATE_ONLY' | 'TIMESTAMP';
   status: WorkflowDeadlineStatus;
   urgency: WorkflowDeadlineUrgency;
   importance: WorkflowDeadlineImportance;
@@ -61,18 +65,12 @@ export function deriveDeadlineUrgency(dueAt: string, now: Date, agendaWindowDays
   const due = new Date(dueAt);
   if (Number.isNaN(due.getTime())) return 'LATER';
 
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const tomorrowStart = new Date(todayStart);
-  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-  const dayAfterTomorrowStart = new Date(tomorrowStart);
-  dayAfterTomorrowStart.setDate(dayAfterTomorrowStart.getDate() + 1);
-  const windowEnd = new Date(todayStart);
-  windowEnd.setDate(windowEnd.getDate() + agendaWindowDays + 1);
-
   if (due.getTime() < now.getTime()) return 'OVERDUE';
-  if (due.getTime() >= todayStart.getTime() && due.getTime() < tomorrowStart.getTime()) return 'TODAY';
-  if (due.getTime() >= tomorrowStart.getTime() && due.getTime() < dayAfterTomorrowStart.getTime()) return 'TOMORROW';
-  if (due.getTime() < windowEnd.getTime()) return 'THIS_WEEK';
+  const today = businessDateKey(now);
+  const dueDay = businessDateKey(due);
+  if (dueDay === today) return 'TODAY';
+  if (dueDay === addCalendarDays(today, 1)) return 'TOMORROW';
+  if (dueDay < addCalendarDays(today, agendaWindowDays + 1)) return 'THIS_WEEK';
   return 'LATER';
 }
 

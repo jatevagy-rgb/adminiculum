@@ -34,6 +34,7 @@ import {
   countdownFromIso,
   presetOption,
 } from "@/lib/duePresets";
+import { ViewportDialog } from "@/components/ui/ViewportDialog";
 import { AdminButton } from "@/components/adminiculum/ui";
 
 // Accepted upload types — the current safe allowlist (unchanged in this slice).
@@ -87,32 +88,7 @@ async function fileToBase64(file: File): Promise<string> {
 
 /** Accessible modal shell: escape + backdrop close (blocked while busy), focus on open. */
 export function WorkspaceModal({ title, onClose, busy, children }: { title: string; onClose: () => void; busy?: boolean; children: React.ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !busy) onClose(); };
-    document.addEventListener("keydown", onKey);
-    ref.current?.focus();
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose, busy]);
-  return (
-    <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-[rgba(17,24,20,0.45)] p-4 sm:p-8" role="presentation" onMouseDown={() => { if (!busy) onClose(); }}>
-      <div
-        ref={ref}
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        className="mt-6 w-full max-w-lg overflow-hidden rounded-xl border border-[var(--adm-border)] bg-white shadow-[0_30px_80px_rgba(0,42,35,0.25)] focus:outline-none"
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b border-[var(--adm-border)] px-4 py-3">
-          <h3 className="font-serif text-[18px] font-medium text-[var(--adm-text)]">{title}</h3>
-          <button type="button" onClick={() => { if (!busy) onClose(); }} disabled={busy} className="text-[12px] font-semibold text-[var(--adm-text-muted)] hover:text-[var(--adm-text)] disabled:opacity-50" aria-label="Bezárás">✕</button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
+  return <ViewportDialog title={title} onClose={onClose} busy={busy} maxWidth="max-w-lg">{children}</ViewportDialog>;
 }
 
 function FieldError({ message }: { message?: string | null }) {

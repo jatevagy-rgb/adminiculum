@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { listCaseContextSources } from '@/lib/caseContextSources';
+import { formatDeadline } from '@/lib/businessDateTime';
 import { AdminButton } from "@/components/adminiculum/ui";
 import {
   copyDirectPromptToClipboard,
@@ -120,13 +122,29 @@ export function WordCompactPromptCollection({
   clientId,
   sanitizedContext,
 }: WordCompactPromptCollectionProps) {
+  const [sources, setSources] = useState<Array<{ id: string; label: string; context: SanitizedContextSource }>>([]);
+  const [selectedSourceId, setSelectedSourceId] = useState('');
+  const [sourceError, setSourceError] = useState(false);
+  useEffect(() => {
+    let active = true;
+    setSources([]); setSelectedSourceId(''); setSourceError(false);
+    listCaseContextSources(caseId).then((items) => {
+      if (!active) return;
+      setSources(items.filter((source) => source.anonymizedText && source.anonymizationSnapshot).map((source) => ({
+        id: source.id, label: `${source.origin === 'COMMUNICATION' ? 'Üzenetből előkészítve' : 'Beillesztett háttér'} · ${formatDeadline(source.updatedAt)}`,
+        context: { isReady: true, sourceId: source.id, caseId, clientId, sanitizedText: source.anonymizedText },
+      })));
+    }).catch(() => { if (active) setSourceError(true); });
+    return () => { active = false; };
+  }, [caseId, clientId]);
+  const selectedContext = sanitizedContext || sources.find((source) => source.id === selectedSourceId)?.context;
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [fallbackText, setFallbackText] = useState<string | null>(null);
   const [fallbackScope, setFallbackScope] = useState<string | null>(null);
   const [copiedScope, setCopiedScope] = useState<string | null>(null);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const scope = `${caseId}\u0000${clientId ?? ""}\u0000${sanitizedContext?.documentId ?? ""}\u0000${sanitizedContext?.sourceId ?? ""}\u0000${sanitizedContext?.documentVersionId ?? ""}`;
+  const scope = `${caseId}\u0000${clientId ?? ""}\u0000${selectedContext?.documentId ?? ""}\u0000${selectedContext?.sourceId ?? ""}\u0000${selectedContext?.documentVersionId ?? ""}`;
   const currentScope = useRef(scope);
   currentScope.current = scope;
   useEffect(() => {
@@ -140,13 +158,13 @@ export function WordCompactPromptCollection({
     const requestScope = scope;
     setError(null);
     try {
-      const safeContext = await resolveSafePromptContext(sanitizedContext, { caseId, clientId, documentId: sanitizedContext?.documentId });
+      const safeContext = await resolveSafePromptContext(selectedContext, { caseId, clientId, documentId: selectedContext?.documentId });
       if (currentScope.current !== requestScope) return;
 
       const promptText = action.buildPrompt({
         caseId,
         clientId,
-        documentId: sanitizedContext?.documentId,
+        documentId: selectedContext?.documentId,
         sanitizedContext: safeContext,
       });
 
@@ -162,7 +180,7 @@ export function WordCompactPromptCollection({
         setFallbackScope(requestScope);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "A prompt másolása sikertelen.");
+      setError("A prompt másolása sikertelen. Próbáld újra.");
     }
   };
 
@@ -177,13 +195,22 @@ export function WordCompactPromptCollection({
             Gyors promptok vágólapra
           </span>
           <h4 className="text-[14px] font-bold text-[var(--adm-text)]">
-            Közvetlen AI prompt gyűjtemény
+            AI promptok és ügyösszefoglaló
           </h4>
         </div>
         <span className="text-[11px] text-[var(--adm-text-muted)]">
-          1-kattintásos másolás külső LLM-hez
+          Prompt másolása saját AI-eszközhöz
         </span>
       </div>
+
+      {!sanitizedContext ? <label className="block text-sm">Anonimizált ügyháttér
+        <select className="mt-1 min-h-10 w-full rounded-lg border border-[var(--adm-border)] px-3" value={selectedSourceId} onChange={(event) => setSelectedSourceId(event.target.value)}>
+          <option value="">Csak promptváz, ügyadatok nélkül</option>
+          {sources.map((source) => <option key={source.id} value={source.id}>{source.label}</option>)}
+        </select>
+      </label> : null}
+      {sourceError ? <p className="text-xs text-[var(--adm-text-muted)]">Az előkészített ügyháttér nem tölthető be. A promptváz továbbra is másolható.</p> : null}
+      {selectedContext?.sanitizedText ? <details className="text-sm"><summary className="min-h-10 cursor-pointer">Másolandó anonimizált háttér ellenőrzése</summary><p className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-lg border border-[var(--adm-border)] p-3">{selectedContext.sanitizedText}</p></details> : null}
 
       {error ? (
         <div

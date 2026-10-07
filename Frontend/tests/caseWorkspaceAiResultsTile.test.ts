@@ -78,7 +78,7 @@ describe("Case Workspace AI eredmények tile", () => {
     const row = toAiResultRow(draft({ promptTemplateSnapshot: null }), docs);
     assert.equal(row.title, "contract-review · v3");
     const unknownCategory = toAiResultRow(draft({ promptTemplateSnapshot: { legalWorkCategory: "CUSTOM_THING" } }), docs);
-    assert.equal(unknownCategory.typeLabel, "CUSTOM_THING");
+    assert.equal(unknownCategory.typeLabel, "Egyéb jogi munka");
   });
 
   it("4. renders title, type, status, createdAt, linked documents and a Megnyitás action", () => {
@@ -147,7 +147,7 @@ describe("Case Workspace AI eredmények tile", () => {
     assert.doesNotMatch(src, /https?:\/\//);
     assert.doesNotMatch(src, /openai|anthropic|claude|gemini/i);
     const modal = read("src/components/ai-prompts/AIPromptPreparationModal.tsx");
-    assert.match(modal, /Adminiculum nem hív külső AI-t/);
+    assert.match(modal, /Külső AI-hívás: nincs/);
   });
 
   it("11. #400 notes replies and #387 Leadás surfaces remain untouched", () => {
@@ -155,7 +155,7 @@ describe("Case Workspace AI eredmények tile", () => {
     assert.equal(overview.split('aria-label="Műveletek"').length - 1, 1);
     assert.match(overview, /id="ck-notes-primary"/);
     assert.match(overview, /data-testid="task-submission-leadas"/);
-    assert.match(overview, /setAiPromptOpen\(true\)\}>\s*AI előkészítés<\/AdminButton>/);
+    assert.match(overview, /setAiPromptOpen\(true\); \}\}>Csoportos előkészítés és promptelőnézet<\/AdminButton>/);
     assert.match(overview, /id="ck-comms"/);
     assert.match(overview, /id="ck-documents"/);
   });

@@ -27,6 +27,7 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
       to: req.query.to,
       limit: req.query.limit,
       offset: req.query.offset,
+      queue: req.query.queue,
     });
     res.json(agenda);
   } catch (error) {

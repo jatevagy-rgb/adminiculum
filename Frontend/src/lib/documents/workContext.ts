@@ -9,6 +9,7 @@
  * This module is deliberately React-free and dependency-light so it can be unit
  * tested directly.
  */
+import { BUSINESS_TIME_ZONE } from "../businessDateTime";
 export type Accent = "petrol" | "terracotta" | "green" | "ochre" | "navy" | "neutral";
 
 /**
@@ -58,7 +59,33 @@ export interface WorkContextCardInput {
 /** Human Hungarian label for a logical work status; raw enums never reach the UI. */
 export function workStatusLabel(status: string | null | undefined): string {
   if (!status) return "—";
-  return DOCUMENT_WORK_STATUS_LABELS[status] || status;
+  return DOCUMENT_WORK_STATUS_LABELS[status] || "Ismeretlen állapot";
+}
+
+/**
+ * Human Hungarian role labels for canonical document roles. The work card role
+ * is otherwise a free-text field, so a genuine human-entered value is preserved;
+ * only an unrecognized all-caps canonical token degrades to a neutral label
+ * instead of leaking the raw identifier into ordinary presentation.
+ */
+export const DOCUMENT_ROLE_LABELS: Record<string, string> = {
+  SOURCE: "Forrásdokumentum",
+  TEMPLATE: "Sablon",
+  DELIVERABLE: "Leadandó eredmény",
+  FINAL_OUTPUT: "Végleges eredmény",
+  WORKING_COPY: "Munkapéldány",
+  REFERENCE: "Hivatkozott anyag",
+  ATTACHMENT: "Melléklet",
+  OTHER: "Egyéb dokumentumszerep",
+};
+
+export function documentRoleLabel(role: string | null | undefined): string | null {
+  const trimmed = String(role || "").trim();
+  if (!trimmed) return null;
+  const mapped = DOCUMENT_ROLE_LABELS[trimmed.toUpperCase()];
+  if (mapped) return mapped;
+  if (/^[A-Z0-9_]+$/.test(trimmed)) return "Egyéb dokumentumszerep";
+  return "Nem meghatározott";
 }
 
 /** Status → accent, so one colour carries one meaning across every surface. */
@@ -79,7 +106,7 @@ export function workStatusAccent(status: string | null | undefined): Accent {
 export function formatDocDate(value: string | null | undefined): string {
   if (!value) return "—";
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("hu-HU");
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("hu-HU", { timeZone: BUSINESS_TIME_ZONE });
 }
 
 export function priorityLabel(priority: string | null | undefined): string {

@@ -27,11 +27,11 @@ describe('Legacy overview retired', () => {
   });
 });
 
-describe('Top tabs reduced to Áttekintés + Kommunikáció', () => {
-  it('CaseWorkspaceNav exposes only overview + communications as primary tabs', () => {
+describe('Primary tabs retain overview and context', () => {
+  it('CaseWorkspaceNav exposes overview and context while communication lives in its canonical leaf', () => {
     const tabsBlock = nav.slice(nav.indexOf('const tabs = ['), nav.indexOf('];', nav.indexOf('const tabs = [')));
     expect(tabsBlock).toContain('"Áttekintés"');
-    expect(tabsBlock).toContain('"Kommunikáció"');
+    expect(tabsBlock).toContain('"Kontextus"');
     expect(tabsBlock).not.toContain('"Dokumentumok"');
     expect(tabsBlock).not.toContain('"Feladatok"');
     expect(tabsBlock).not.toContain('"Határidők"');
@@ -48,10 +48,9 @@ describe('Inline actions wired into the workspace', () => {
   it('exposes create/edit task, upload, deadline, and case-comment triggers', () => {
     // Primary actions live in the hero; panel-level triggers are compact.
     expect(overview).toContain('Új feladat');
-    expect(overview).toContain('+ Feladat');
-    expect(overview).toContain('+ Feltöltés');
-    expect(overview).toContain('+ Határidő');
-    expect(overview).toContain('+ Megjegyzés');
+    expect(overview).toContain('Dokumentum feltöltése');
+    expect(overview).toContain('Határidő hozzáadása');
+    expect(overview).toContain('Megjegyzés hozzáadása');
     expect(overview).toContain('Kommentek');
   });
 
@@ -75,12 +74,14 @@ describe('Inline actions wired into the workspace', () => {
 
   it('keeps discreet secondary links into the compatibility routes', () => {
     // The cockpit links out to the communication log rather than duplicating it.
-    expect(overview).toContain(`/cases/${'${caseId}'}/communications`);
+    expect(overview).toContain('<WordWideCommunicationLeaf');
+    const leaf = read('Frontend/src/components/cases/word-workflow/tools/WordWideCommunicationLeaf.tsx');
+    expect(leaf).toContain('/communications?caseId=${encodeURIComponent(caseId)}&communicationId=${encodeURIComponent(selectedItem.id)}');
   });
 
   it('preserves the explicit time-unavailable state (never fake)', () => {
-    expect(overview).toContain('ws.time.available');
-    expect(overview).toContain('Nem áll rendelkezésre megbízható ügy-szintű összesítés.');
+    expect(overview).toContain('<CaseTimeBillingSummary');
+    expect(read('Frontend/src/components/cases/CaseTimeBillingSummary.tsx')).toContain('Az idő-összesítő jelenleg nem érhető el.');
   });
 });
 
@@ -103,7 +104,8 @@ describe('Action modals are safe', () => {
   });
 
   it('closes on escape / cancel without saving', () => {
-    expect(actions).toContain('e.key === "Escape"');
+    expect(actions).toContain('<ViewportDialog');
+    expect(read('Frontend/src/components/ui/useDialogAccessibility.ts')).toContain('event.key === "Escape"');
     expect(actions).toContain('Mégse');
   });
 

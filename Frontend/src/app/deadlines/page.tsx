@@ -1,10 +1,11 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { Alert, Badge, Button, EmptyState, PageHeader, QuietLink, StatusChip } from "@/components/ui";
+import { businessDateKey, businessDateTimeInput, businessDateTimeToIso, formatDeadline } from "@/lib/businessDateTime";
 import {
   completeTask,
   getWorkflowAgenda,
@@ -40,33 +41,23 @@ function openCtaLabel(item: WorkflowDeadlineItem, caseHref: string): string {
   return "Megnyitás";
 }
 
-function formatDateTime(value: string, timezone: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("hu-HU", { dateStyle: "medium", timeStyle: "short", timeZone: timezone });
-}
-
-function inputDateTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (part: number) => String(part).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+function appendAgenda(previous: WorkflowAgendaResponse | null, next: WorkflowAgendaResponse): WorkflowAgendaResponse {
+  return { ...next, days: [...(previous?.days || []), ...next.days] };
 }
 
 function AgendaItemCard({
   item,
-  timezone,
   busyId,
   onComplete,
   onReschedule,
 }: {
   item: WorkflowDeadlineItem;
-  timezone: string;
   busyId: string | null;
   onComplete: (item: WorkflowDeadlineItem) => void;
   onReschedule: (item: WorkflowDeadlineItem, dueAt: string) => void;
 }) {
-  const [draftDueAt, setDraftDueAt] = useState(inputDateTime(item.dueAt));
+  const [draftDueAt, setDraftDueAt] = useState(businessDateTimeInput(item.dueAt));
+  useEffect(() => setDraftDueAt(businessDateTimeInput(item.dueAt)), [item.dueAt]);
   const busy = busyId === item.id;
   const caseHref = `/cases/${encodeURIComponent(item.caseId)}`;
   const primaryIsCaseHref = item.href === caseHref;
@@ -77,7 +68,7 @@ function AgendaItemCard({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <StatusChip tone={item.urgency === "OVERDUE" ? "danger" : item.urgency === "TODAY" ? "warning" : item.urgency === "TOMORROW" ? "gold" : "neutral"}>{URGENCY_LABELS[item.urgency]}</StatusChip>
-            <span className="text-xs text-[#6B7280]">{SOURCE_LABELS[item.sourceType] || item.sourceType}</span>
+            <span className="text-xs text-[#6B7280]">{SOURCE_LABELS[item.sourceType] || "Határidős tétel"}</span>
           </div>
           <h3 className="mt-1 truncate text-sm font-semibold text-[#1F2937]">{item.title}</h3>
           {item.safeDescription && <p className="mt-1 truncate text-xs text-[#6B7280]">{item.safeDescription}</p>}
@@ -87,8 +78,8 @@ function AgendaItemCard({
           <p>{item.responsibility.assignee?.displayName || item.responsibility.responsibleLawyer?.displayName || "Nincs kijelölve"}</p>
         </div>
         <div>
-          <p className="text-xs font-semibold text-[#1F2937]">{formatDateTime(item.dueAt, timezone)}</p>
-          <p className="text-xs text-[#6B7280]">{STATUS_LABELS[item.status] || item.status}</p>
+          <p className="text-xs font-semibold text-[#1F2937]">{formatDeadline(item.dueAt, item.temporalType || (item.allDay ? "DATE_ONLY" : "TIMESTAMP"))}</p>
+          <p className="text-xs text-[#6B7280]">{STATUS_LABELS[item.status] || "Nincs állapotadat"}</p>
         </div>
         <div className="flex flex-wrap items-center justify-start gap-2 xl:justify-end">
           {item.href && (
@@ -132,6 +123,9 @@ function DeadlinesAgendaContent() {
   const initialCaseId = searchParams?.get("caseId") || "";
   const initialView = searchParams?.get("view") === "day" ? "day" : searchParams?.get("view") === "week" ? "week" : "agenda";
   const [agenda, setAgenda] = useState<WorkflowAgendaResponse | null>(null);
+  const [overdue, setOverdue] = useState<WorkflowAgendaResponse | null>(null);
+  const generation = useRef(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [scope, setScope] = useState<"MY_WORK" | "MY_CASES" | "CASE">(initialScope);
   const [caseId] = useState(initialCaseId);
   const [status, setStatus] = useState<"OPEN" | "COMPLETED" | "ALL">("OPEN");
@@ -142,34 +136,69 @@ function DeadlinesAgendaContent() {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const loadAgenda = useCallback(async () => {
+    const request = ++generation.current;
     setLoading(true);
+    setLoadingMore(false);
     setError(null);
+    setAgenda(null);
+    setOverdue(null);
     try {
-      const result = await getWorkflowAgenda({ scope, status, caseId: scope === "CASE" ? caseId : undefined, limit: 100 });
+      const query = { scope, caseId: scope === "CASE" ? caseId : undefined, limit: 100 };
+      const [result, overdueResult] = await Promise.all([
+        getWorkflowAgenda({ ...query, status }),
+        status === "COMPLETED" ? Promise.resolve(null) : getWorkflowAgenda({ ...query, status: "OPEN", queue: "OVERDUE" }),
+      ]);
+      if (request !== generation.current) return;
       setAgenda(result);
-    } catch (err) {
-      console.error("Agenda load failed:", err);
+      setOverdue(overdueResult);
+    } catch {
+      if (request !== generation.current) return;
       setError("Az agenda most nem érhető el.");
     } finally {
-      setLoading(false);
+      if (request === generation.current) setLoading(false);
     }
   }, [caseId, scope, status]);
 
   useEffect(() => {
-    loadAgenda();
+    void loadAgenda();
+    return () => { generation.current += 1; };
   }, [loadAgenda]);
 
-  const flatItems = useMemo(() => agenda?.days.flatMap((day) => day.items) || [], [agenda]);
+  const loadMore = async (queue: "CALENDAR" | "OVERDUE") => {
+    const previous = queue === "OVERDUE" ? overdue : agenda;
+    if (!previous?.pagination.hasMore || loadingMore) return;
+    const request = generation.current;
+    setLoadingMore(true);
+    setError(null);
+    try {
+      const result = await getWorkflowAgenda({ scope, caseId: scope === "CASE" ? caseId : undefined,
+        status: queue === "OVERDUE" ? "OPEN" : status, queue, limit: 100,
+        offset: previous.pagination.offset + previous.pagination.limit });
+      if (request !== generation.current) return;
+      if (queue === "OVERDUE") setOverdue(appendAgenda(previous, result));
+      else setAgenda(appendAgenda(previous, result));
+    } catch {
+      if (request === generation.current) setError("A további határidők nem tölthetők be. Próbálja újra.");
+    } finally {
+      if (request === generation.current) setLoadingMore(false);
+    }
+  };
+
+  const flatItems = useMemo(() => [...new Map(
+    [...(overdue?.days || []), ...(agenda?.days || [])].flatMap((day) => day.items).map((item) => [item.id, item]),
+  ).values()], [agenda, overdue]);
   const visibleItems = useMemo(() => {
-    const today = new Date();
-    const start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+    const today = businessDateKey(new Date());
+    const weekEnd = new Date(`${today}T12:00:00Z`);
+    weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
+    const end = weekEnd.toISOString().slice(0, 10);
     const viewItems = flatItems.filter((item) => {
       if (calendarView === "agenda") return true;
       const due = new Date(item.dueAt);
       if (Number.isNaN(due.getTime())) return false;
-      const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime();
-      if (calendarView === "day") return dueDay === start;
-      return dueDay >= start && dueDay < start + 7 * 24 * 60 * 60 * 1000;
+      const dueDay = item.temporalType === "DATE_ONLY" || item.allDay ? item.dueAt.slice(0, 10) : businessDateKey(due);
+      if (calendarView === "day") return dueDay === today;
+      return dueDay >= today && dueDay < end;
     });
     return urgencyFilter === "ALL" ? viewItems : viewItems.filter((item) => item.urgency === urgencyFilter);
   }, [calendarView, flatItems, urgencyFilter]);
@@ -201,11 +230,10 @@ function DeadlinesAgendaContent() {
     if (item.sourceType !== "TASK") return;
     setBusyId(item.id);
     try {
-      await rescheduleTaskDeadline(item.sourceId, new Date(dueAt).toISOString());
+      await rescheduleTaskDeadline(item.sourceId, businessDateTimeToIso(dueAt));
       await loadAgenda();
-    } catch (err) {
-      console.error("Deadline reschedule failed:", err);
-      await loadAgenda();
+    } catch {
+      setError("Az átütemezés nem sikerült. Ellenőrizze a budapesti idő szerint megadott dátumot és időpontot.");
     } finally {
       setBusyId(null);
     }
@@ -250,15 +278,12 @@ function DeadlinesAgendaContent() {
 
         <div className="mt-3 grid gap-0 overflow-hidden rounded-[12px] border border-[#E5E7E6] bg-white sm:grid-cols-5">
           {[
-            ["OVERDUE", "Lejárt", agenda?.summary.overdue ?? 0],
-            ["TODAY", "Ma", agenda?.summary.today ?? 0],
-            ["TOMORROW", "Holnap", agenda?.summary.tomorrow ?? 0],
-            ["THIS_WEEK", "Ezen a héten", agenda?.summary.thisWeek ?? 0],
-            ["LATER", "Később", agenda?.summary.later ?? 0],
-          ].map(([valueKey, label, value]) => (
+            ["OVERDUE", "Lejárt"], ["TODAY", "Ma"], ["TOMORROW", "Holnap"],
+            ["THIS_WEEK", "Ezen a héten"], ["LATER", "Később"],
+          ].map(([valueKey, label]) => (
             <button key={label} type="button" aria-pressed={urgencyFilter === valueKey} onClick={() => setUrgencyFilter(urgencyFilter === valueKey ? "ALL" : valueKey as WorkflowDeadlineUrgency)} className={`flex items-center justify-between border-r border-[#E5E7E6] px-3 py-3 text-left last:border-r-0 ${urgencyFilter === valueKey ? "bg-[#F8FAF9] outline outline-1 outline-inset outline-[#0F3D32]" : "bg-white hover:bg-[#F8FAF9]"}`}>
               <p className="text-xs font-semibold text-[#6B7280]">{label}</p>
-              <p className="text-base font-bold text-[#1F2937]">{value}</p>
+              <p className="text-base font-bold text-[#1F2937]">{loading || !agenda ? "—" : `${flatItems.filter((item) => item.status === "OPEN" && item.urgency === valueKey).length}${(valueKey === "OVERDUE" ? overdue?.pagination.hasMore : agenda.pagination.hasMore) ? "+" : ""}`}</p>
             </button>
           ))}
         </div>
@@ -267,6 +292,8 @@ function DeadlinesAgendaContent() {
 
         {loading ? (
           <p className="mt-5 text-xs text-[var(--adm-text-muted)]">Határidők betöltése…</p>
+        ) : !agenda ? (
+          <Button className="mt-4" variant="neutral" onClick={() => void loadAgenda()}>Újrapróbálás</Button>
         ) : visibleItems.length === 0 ? (
           <div className="mt-4 rounded-[12px] border border-[#E5E7E6] bg-white p-4">
             <EmptyState title="Nincs határidős tétel ebben a nézetben." action={<Button size="sm" variant="neutral" onClick={() => { setUrgencyFilter("ALL"); setStatus("OPEN"); }}>Szűrők törlése</Button>} />
@@ -281,13 +308,17 @@ function DeadlinesAgendaContent() {
                 </div>
                 <div className="divide-y divide-[#E5E7E6]">
                   {group.items.map((item) => (
-                    <AgendaItemCard key={item.id} item={item} timezone={agenda?.timezone || "Europe/Budapest"} busyId={busyId} onComplete={completeDeadline} onReschedule={rescheduleDeadline} />
+                    <AgendaItemCard key={item.id} item={item} busyId={busyId} onComplete={completeDeadline} onReschedule={rescheduleDeadline} />
                   ))}
                 </div>
               </section>
             ))}
           </div>
         )}
+        {!loading && <div className="mt-4 flex flex-wrap gap-2">
+          {overdue?.pagination.hasMore && <Button variant="neutral" disabled={loadingMore} onClick={() => void loadMore("OVERDUE")}>További lejárt tételek</Button>}
+          {agenda?.pagination.hasMore && <Button variant="neutral" disabled={loadingMore} onClick={() => void loadMore("CALENDAR")}>További naptári tételek</Button>}
+        </div>}
       </div>
     </div>
   );

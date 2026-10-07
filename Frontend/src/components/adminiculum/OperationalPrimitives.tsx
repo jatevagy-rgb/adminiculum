@@ -27,7 +27,7 @@ export function OperationalPageHeader({
   secondaryActions,
   level = "h1",
 }: OperationalPageHeaderProps) {
-  const titleClass = "font-serif text-[30px] font-medium leading-tight text-[var(--adm-text)]";
+  const titleClass = "font-sans text-[30px] font-semibold leading-tight text-[var(--adm-text)]";
   return (
     <header className="flex flex-col gap-3 border-b border-[var(--adm-border)] pb-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">

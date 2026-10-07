@@ -19,6 +19,7 @@ import {
   captureProcessObservation,
 } from '../company-growth/observation/processObservationService';
 import { submitSurveyIntake, listSurveyIntakes } from '../company-observatory/intake';
+import { listGrowAssessmentSummaries } from '../company-growth/assessments/workforce';
 import { ObservatoryIngestionService } from '../company-observatory/ingestion/service';
 import {
   importExternalOpportunityBatch,
@@ -33,7 +34,7 @@ import {
   publishOpportunityPublication,
   revokeOpportunityPublication,
   listOpportunityPublications,
-  listOpportunityPublicationWorkspaces,
+  getOpportunityPublicationWorkspaceContext,
 } from '../company-growth/opportunityPublicationService';
 
 const observatory = new ObservatoryIngestionService();
@@ -53,6 +54,10 @@ function fail(res: Response, error: unknown): void {
 }
 
 clientCompanyRouter.use(authenticate);
+
+clientCompanyRouter.get('/clients/:clientId/grow/assessment-summaries', async (req, res) => {
+  try { res.json(await listGrowAssessmentSummaries(actor(req), String(req.params.clientId))); } catch (e) { fail(res, e); }
+});
 
 // Operating profile
 clientCompanyRouter.get('/clients/:clientId/operating-profile', async (req, res) => {
@@ -382,7 +387,7 @@ clientCompanyRouter.get('/clients/:clientId/grow/outcomes', async (req, res) => 
 
 // Grow customer-opportunity publication (workforce-only; no customer read route).
 clientCompanyRouter.get('/clients/:clientId/grow/opportunity-publication-workspaces', async (req, res) => {
-  try { res.json({ items: await listOpportunityPublicationWorkspaces(actor(req), String(req.params.clientId)) }); } catch (e) { fail(res, e); }
+  try { res.json(await getOpportunityPublicationWorkspaceContext(actor(req), String(req.params.clientId))); } catch (e) { fail(res, e); }
 });
 clientCompanyRouter.get('/clients/:clientId/grow/opportunities/:opportunityId/publications', async (req, res) => {
   try { res.json({ items: await listOpportunityPublications(actor(req), String(req.params.clientId), String(req.params.opportunityId)) }); } catch (e) { fail(res, e); }

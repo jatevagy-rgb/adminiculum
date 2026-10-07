@@ -1,6 +1,8 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { formatDeadline } from "@/lib/businessDateTime";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   getCommunications,
   getCommunicationById,
@@ -14,6 +16,10 @@ export interface WordWideCommunicationLeafProps {
   clientId: string | null;
   readOnly?: boolean;
   onChanged?: () => void;
+  onAddThread?: () => void;
+  refreshKey?: number;
+  replyNeededIds?: readonly string[];
+  communicationSignals?: ReadonlyArray<{ id: string; internal: boolean }>;
 }
 
 const typeLabels: Record<string, string> = {
@@ -25,16 +31,7 @@ const typeLabels: Record<string, string> = {
 };
 
 function formatMessageDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return "—";
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return dateStr;
-  return date.toLocaleString("hu-HU", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatDeadline(dateStr);
 }
 
 /**
@@ -75,6 +72,10 @@ function splitQuotedHistory(content: string): {
 export function WordWideCommunicationLeaf({
   caseId,
   readOnly = false,
+  onAddThread,
+  refreshKey = 0,
+  replyNeededIds = [],
+  communicationSignals = [],
 }: WordWideCommunicationLeafProps) {
   const [items, setItems] = useState<CommunicationItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -83,6 +84,9 @@ export function WordWideCommunicationLeaf({
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const generation = useRef(0);
+  const [detailError, setDetailError] = useState<string | null>(null);
+
   // Search & filter
   const [filterQuery, setFilterQuery] = useState("");
   // Collapsed state for quotes per message
@@ -90,25 +94,27 @@ export function WordWideCommunicationLeaf({
 
   const loadCommunications = useCallback(async () => {
     if (!caseId) return;
+    const request = ++generation.current;
     setLoading(true);
     setError(null);
     try {
       const result = await getCommunications({ caseId, limit: 100 });
+      if (request !== generation.current) return;
       const commList = Array.isArray(result) ? result : (result?.communications ?? []);
       setItems(commList);
-      if (commList.length > 0 && !selectedId) {
-        setSelectedId(commList[0].id);
-      }
+      setSelectedId((current) => commList.some((item) => item.id === current) ? current : commList[0]?.id ?? null);
     } catch {
-      setError("A kommunikációs előzmények betöltése jelenleg sikertelen.");
+      if (request === generation.current) { setItems([]); setSelectedId(null); setError("A kommunikációs előzmények betöltése jelenleg sikertelen."); }
     } finally {
-      setLoading(false);
+      if (request === generation.current) setLoading(false);
     }
-  }, [caseId, selectedId]);
+  }, [caseId]);
 
   useEffect(() => {
+    setItems([]); setDetails({}); setSelectedId(null); setShowQuotedFor({});
     void loadCommunications();
-  }, [loadCommunications]);
+    return () => { generation.current += 1; };
+  }, [loadCommunications, refreshKey]);
 
   // Load details for selected message if not already cached
   useEffect(() => {
@@ -116,6 +122,7 @@ export function WordWideCommunicationLeaf({
 
     let active = true;
     setLoadingDetail(true);
+    setDetailError(null);
     getCommunicationById(selectedId)
       .then((detail) => {
         if (active && detail) {
@@ -123,7 +130,7 @@ export function WordWideCommunicationLeaf({
         }
       })
       .catch(() => {
-        // detail load failed; summary remains visible
+        if (active) setDetailError("A teljes üzenet most nem érhető el. Az alábbi szöveg csak kivonat.");
       })
       .finally(() => {
         if (active) setLoadingDetail(false);
@@ -169,13 +176,14 @@ export function WordWideCommunicationLeaf({
           </h3>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          {!readOnly && onAddThread ? <AdminButton variant="neutral" size="sm" onClick={onAddThread}>E-mail thread hozzárendelése</AdminButton> : null}
           <input
             type="search"
             value={filterQuery}
             onChange={(e) => setFilterQuery(e.target.value)}
             placeholder="Keresés az üzenetekben..."
-            className="h-10 rounded border border-[var(--adm-border)] px-3 text-[12px] text-[var(--adm-text)] focus:border-[var(--adm-green-800)] focus:outline-none"
+            className="h-10 min-w-0 flex-1 rounded border border-[var(--adm-border)] px-3 text-[12px] text-[var(--adm-text)] focus:border-[var(--adm-green-800)] focus:outline-none"
             aria-label="Keresés az ügy üzeneteiben"
           />
           <AdminButton
@@ -209,21 +217,23 @@ export function WordWideCommunicationLeaf({
             Ehhez az ügyhöz még nincs rögzített kommunikáció.
           </p>
           <p className="mt-1 text-[11.5px] text-[var(--adm-text-secondary)]">
-            A levelezések és egyeztetések a Kommunikációs munkatérből rendelhetők ehhez az ügyhöz.
+            A meglévő beszélgetéseket az E-mail thread hozzárendelése gombbal választhatod ki.
           </p>
         </div>
       ) : (
         /* Wide readable master-detail or scrollable chain */
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[380px_1fr]">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(220px,1fr)_minmax(0,2fr)]">
           {/* Thread List Sidebar / Accordion */}
           <div className="space-y-2 border-r-0 lg:border-r lg:border-[var(--adm-border)] lg:pr-4">
             <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text-muted)]">
               Üzenetek ({filteredItems.length})
             </span>
-            <div className="max-h-[650px] space-y-2 overflow-y-auto pr-1">
+            <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
               {filteredItems.map((item) => {
                 const isSelected = item.id === selectedId;
                 const isIncoming = item.direction === "INBOUND";
+                const signal = communicationSignals.find((entry) => entry.id === item.id);
+                const replyNeeded = replyNeededIds.includes(item.id);
                 return (
                   <button
                     key={item.id}
@@ -238,13 +248,17 @@ export function WordWideCommunicationLeaf({
                   >
                     <div className="flex items-center justify-between gap-1">
                       <span className="text-[10.5px] font-semibold text-[var(--adm-text-muted)]">
-                        {isIncoming ? "↙ Bejövő" : "↗ Kimenő"} · {typeLabels[item.type] || item.type}
+                        {isIncoming ? "↙ Bejövő" : item.direction === "OUTBOUND" ? "↗ Kimenő" : "Irány nincs megadva"} · {typeLabels[item.type] || "Kommunikáció"}
                       </span>
                       <span className="text-[10px] text-[var(--adm-text-muted)]">
                         {formatMessageDate(item.effectiveMessageAt || item.createdAt)}
                       </span>
                     </div>
 
+                    {signal || replyNeeded ? <div className="mt-1 flex flex-wrap gap-1 text-xs">
+                      {replyNeeded ? <span data-testid="reply-needed" className="font-semibold text-[var(--adm-terracotta-700)]">Válaszra vár</span> : null}
+                      {signal ? <span className="text-[var(--adm-text-muted)]">{signal.internal ? "Belső" : "Külső"}</span> : null}
+                    </div> : null}
                     <h4 className="mt-1 text-[12.5px] font-bold text-[var(--adm-text)] line-clamp-1">
                       {item.subject || "Nincs tárgy"}
                     </h4>
@@ -282,10 +296,10 @@ export function WordWideCommunicationLeaf({
                     </h2>
                     <div className="flex items-center gap-1.5">
                       <AdminBadge tone="blue">
-                        {typeLabels[selectedItem.type] || selectedItem.type}
+                        {typeLabels[selectedItem.type] || "Kommunikáció"}
                       </AdminBadge>
                       <AdminBadge tone={selectedItem.direction === "INBOUND" ? "green" : "neutral"}>
-                        {selectedItem.direction === "INBOUND" ? "Bejövő üzenet" : "Kimenő üzenet"}
+                        {selectedItem.direction === "INBOUND" ? "Bejövő üzenet" : selectedItem.direction === "OUTBOUND" ? "Kimenő üzenet" : "Irány nincs megadva"}
                       </AdminBadge>
                     </div>
                   </div>
@@ -308,6 +322,8 @@ export function WordWideCommunicationLeaf({
                   </dl>
                 </div>
 
+                <Link className="text-sm font-semibold text-[var(--adm-green-800)] underline" href={`/communications?caseId=${encodeURIComponent(caseId)}&communicationId=${encodeURIComponent(selectedItem.id)}`}>Teljes beszélgetés megnyitása</Link>
+                {detailError ? <p role="alert" className="text-sm text-[var(--adm-text-muted)]">{detailError}</p> : null}
                 {/* Message Body Content */}
                 {loadingDetail ? (
                   <div className="p-8 text-center text-[12px] text-[var(--adm-text-muted)]">
@@ -324,7 +340,7 @@ export function WordWideCommunicationLeaf({
                     const isQuotedOpen = Boolean(showQuotedFor[selectedItem.id]);
 
                     return (
-                      <div className="rounded border border-[var(--adm-border)] bg-white p-5 leading-relaxed">
+                      <div className="max-h-[480px] overflow-y-auto rounded border border-[var(--adm-border)] bg-white p-3 leading-relaxed [overflow-wrap:anywhere]">
                         {/* Main email text */}
                         <div
                           className="whitespace-pre-wrap font-sans text-[13px] leading-6 text-[var(--adm-text)]"

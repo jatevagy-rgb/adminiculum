@@ -59,12 +59,26 @@ export function rehydrateDocument(
   // semantics (unique tokens, not per-occurrence counts).
   const tokenMap = new Map<string, string>();
   const mappedTokenSet = new Set<string>();
+  const ambiguous = new Set<string>();
   for (const item of redactedItems || []) {
     const normalizedReplacement = item.replacement.toUpperCase().trim();
+    if (tokenMap.has(normalizedReplacement) && tokenMap.get(normalizedReplacement) !== item.original) {
+      ambiguous.add(normalizedReplacement);
+    }
     tokenMap.set(normalizedReplacement, item.original);
     mappedTokenSet.add(normalizedReplacement);
   }
   const totalTokens = mappedTokenSet.size;
+
+  // Historical role-only mappings can contain several different originals for
+  // one token. Never choose the last person silently, even if that token does
+  // not appear in this particular response.
+  if (ambiguous.size > 0) {
+    return { success: false, rehydratedContent: null, rehydrationStatus: 'FAILED',
+      warnings: [...ambiguous].map((token) => ({ token, reason: 'Ambiguous historical token mapping; regenerate from the original source.' })),
+      totalTokens, resolvedTokens: 0, unresolvedTokens: ambiguous.size,
+      error: 'Az anonimizált megfeleltetés nem egyértelmű. Készítsen új anonimizált változatot az eredeti forrásból.' };
+  }
 
   if (!aiResponseText || aiResponseText.trim().length === 0) {
     return {
@@ -95,8 +109,6 @@ export function rehydrateDocument(
 
   const placeholderRegex = /\[([^\[\]\r\n]+)\]/g;
 
-  let result = aiResponseText;
-  let match: RegExpExecArray | null;
 
   const resolvedSet = new Set<string>();
   const unresolvedSet = new Set<string>();
@@ -111,15 +123,16 @@ export function rehydrateDocument(
   // First pass: replace every known placeholder with its original value.
   // A function replacer is used so `original` is inserted literally — never
   // interpreted as a replacement pattern (`$&`, `$1`, `$\``, `$'`, ...).
-  while ((match = placeholderRegex.exec(aiResponseText)) !== null) {
-    const placeholder = match[0];
-    const tokenKey = match[1].toUpperCase().trim();
+  // A single pass also prevents restored originals containing bracketed text
+  // from being interpreted again as another person's token.
+  const result = aiResponseText.replace(placeholderRegex, (placeholder, inner: string) => {
+    const tokenKey = inner.toUpperCase().trim();
     const normalizedKey = `[${tokenKey}]`;
     const original = tokenMap.get(normalizedKey);
 
     if (original !== undefined) {
-      result = result.replace(new RegExp(escapeRegex(placeholder), 'g'), () => original);
       resolvedSet.add(normalizedKey);
+      return original;
     } else if (looksLikeKnownToken(tokenKey)) {
       warnings.push({
         token: placeholder,
@@ -128,7 +141,8 @@ export function rehydrateDocument(
       });
       unresolvedSet.add(normalizedKey);
     }
-  }
+    return placeholder;
+  });
 
   // Second pass: defensively report any mapped token that was never resolved and
   // is still present in the output (e.g. produced by a partial or malformed

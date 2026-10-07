@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getCases, type CaseListItem } from "@/lib/api";
 import { bindComplianceProposal, confirmComplianceProposal, createComplianceProposal, listComplianceProposals, proposalKinds, rejectComplianceProposal, startCaseFromComplianceProposal, updateComplianceProposal, type ComplianceProposal } from "@/lib/complianceProposalApi";
 import { complianceOverviewApi } from "@/lib/complianceOverviewApi";
+import { complianceFindingStatusLabel, complianceRecommendationLabel } from "@/lib/complianceWorkbenchPresentation";
 
 export type ComplianceEvidenceFreshness = "CURRENT" | "STALE";
 export type ComplianceEvidenceSourceType = "DOCUMENT_VERSION" | "CLIENT_FACT" | "OBSERVATION" | "EXTERNAL_REFERENCE";
@@ -500,10 +501,12 @@ export function ComplianceAttentionSummary({ findings }: { findings: ComplianceF
   );
 }
 
-export function ComplianceFindingRow({ finding }: { finding: ComplianceFindingView }) {
+export function ComplianceFindingRow({ finding, focused = false }: { finding: ComplianceFindingView; focused?: boolean }) {
+  const ref = useRef<HTMLLIElement>(null);
+  useEffect(() => { if (focused) { ref.current?.scrollIntoView?.({ block: "center" }); ref.current?.focus({ preventScroll: true }); } }, [focused]);
   const status = getComplianceFindingStatus(finding);
   return (
-    <li className="rounded border border-[var(--adm-border)] bg-white p-3">
+    <li ref={ref} tabIndex={-1} data-finding-id={finding.id} className="rounded border border-[var(--adm-border)] bg-white p-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="font-medium text-[var(--adm-text)]">{finding.title}</p>
@@ -512,14 +515,15 @@ export function ComplianceFindingRow({ finding }: { finding: ComplianceFindingVi
         {status ? <span className={`rounded border px-2 py-1 text-xs ${complianceOutcomeClass[status]}`}>{complianceOutcomeLabels[status]}</span> : null}
       </div>
       {finding.description ? <p className="mt-2 text-sm text-[var(--adm-text)]">{finding.description}</p> : null}
-      {finding.operationalStatus ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Belső állapot: {finding.operationalStatus}</p> : null}
-      {finding.recommendation ? <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Következő áttekintés: {finding.recommendation}</p> : null}
+      {finding.operationalStatus ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Belső állapot: {complianceFindingStatusLabel(finding.operationalStatus)}</p> : null}
+      {finding.recommendation ? <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Következő áttekintés: {complianceRecommendationLabel(finding.recommendation)}</p> : null}
     </li>
   );
 }
 
-export function ComplianceRequirementGroup({ title, findings }: { title: string; findings: ComplianceFindingView[] }) {
+export function ComplianceRequirementGroup({ title, findings, focusFindingId }: { title: string; findings: ComplianceFindingView[]; focusFindingId?: string | null }) {
   const [open, setOpen] = useState(isComplianceGroupInitiallyOpen(findings));
+  useEffect(() => { if (findings.some(f => f.id === focusFindingId)) setOpen(true); }, [findings, focusFindingId]);
   return (
     <section className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
       <button type="button" className="flex w-full items-start justify-between gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)]" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
@@ -529,7 +533,7 @@ export function ComplianceRequirementGroup({ title, findings }: { title: string;
         </span>
         <span aria-hidden="true" className="shrink-0 text-xs text-[var(--adm-text-muted)]">{open ? "Elrejtés" : "Megnyitás"}</span>
       </button>
-      {open ? <ul className="mt-3 space-y-2">{findings.map((finding) => <ComplianceFindingRow key={finding.id} finding={finding} />)}</ul> : null}
+      {open ? <ul className="mt-3 space-y-2">{findings.map((finding) => <ComplianceFindingRow key={finding.id} finding={finding} focused={finding.id === focusFindingId} />)}</ul> : null}
     </section>
   );
 }
@@ -540,12 +544,14 @@ export function ComplianceOverviewPanel({
   error = null,
   onRetry,
   title = "Compliance áttekintés",
+  focusFindingId,
 }: {
   findings: ComplianceFindingView[];
   loading?: boolean;
   error?: string | null;
   onRetry?: () => void;
   title?: string;
+  focusFindingId?: string | null;
 }) {
   const groups = useMemo(() => groupComplianceFindings(findings), [findings]);
   return (
@@ -554,11 +560,12 @@ export function ComplianceOverviewPanel({
       <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Belső értékelési megállapítások; nem igazolt jogi kötelezettségek.</p>
       {loading ? <div className="mt-3 animate-pulse space-y-2" aria-busy="true"><div className="h-4 w-2/5 rounded bg-[var(--adm-surface)]" /><div className="h-3 w-4/5 rounded bg-[var(--adm-surface)]" /><ComplianceState state="loading" /></div> : null}
       {!loading && error ? <div className="mt-3"><ComplianceState state="unavailable" detail={error} /><button type="button" onClick={onRetry} className="mt-3 rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]">Újrapróbálás</button></div> : null}
+      {!loading && !error && focusFindingId && !findings.some(f => f.id === focusFindingId) ? <p role="status" className="mt-3 text-sm">A kért megállapítás már nem érhető el ebben az ügyfélmunkatérben.</p> : null}
       {!loading && !error && !findings.length ? <div className="mt-3"><ComplianceState state="empty" /></div> : null}
       {!loading && !error && findings.length ? (
         <div className="mt-4 space-y-4">
           <ComplianceAttentionSummary findings={findings} />
-          <div className="space-y-2">{groups.map((group) => <ComplianceRequirementGroup key={group.key} title={group.title} findings={group.findings} />)}</div>
+          <div className="space-y-2">{groups.map((group) => <ComplianceRequirementGroup key={group.key} title={group.title} findings={group.findings} focusFindingId={focusFindingId} />)}</div>
         </div>
       ) : null}
     </section>

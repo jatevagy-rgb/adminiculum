@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { GrowAssessmentSummaries } from './GrowAssessmentSummaries';
 import {
   AdminButton,
   AdminPanel,
@@ -15,6 +16,7 @@ import {
 } from "@/components/adminiculum/OperationalPrimitives";
 import { GrowDiagnosticWorkbench } from "@/components/clients/diagnostic-workbench/GrowDiagnosticWorkbench";
 import { GrowIntake } from "@/components/clients/GrowIntake";
+import { GrowOutcomeComparison } from "@/components/clients/GrowOutcomeComparison";
 import {
   domainTitleHu,
   evidenceStrengthLabelHu,
@@ -22,6 +24,7 @@ import {
   growApi,
   interventionLabelHu,
   outcomeBasisLabelHu,
+  sourceBasisLabelHu,
   reviewDecisionLabelHu,
   sufficiencyLabelHu,
   type BusinessProcessDTO,
@@ -38,7 +41,38 @@ import {
   type CompanyMilestone,
   type DevelopmentInitiative,
 } from "@/lib/clientCompanyApi";
-import { getCurrentUser } from "@/lib/api";
+import { readWorkbenchPanel, workbenchReadFailure, workbenchReadSucceeded, type WorkbenchReadState } from "./growWorkbenchState";
+import {
+  diagnosisStatusLabelHu,
+  externalSourceStatusLabelHu,
+  growthUnresolvedItemLabel,
+  operatingProfileStatusLabelHu,
+  getDiagnosticWorkbench,
+} from "@/lib/diagnosticWorkbenchApi";
+
+const INITIAL_READ_STATES = {
+  opportunities: "LOADING", evidence: "LOADING", outcomes: "LOADING",
+  processes: "LOADING", initiatives: "LOADING", milestones: "LOADING",
+  profile: "LOADING", diagnostics: "LOADING", sources: "LOADING",
+} satisfies Record<string, WorkbenchReadState>;
+type ReadStates = Record<keyof typeof INITIAL_READ_STATES, WorkbenchReadState>;
+
+function ReadPanel({ state, label, onRetry, children }: { state: WorkbenchReadState; label: string; onRetry?: () => void; children?: ReactNode }) {
+  if (workbenchReadSucceeded(state)) return <>{children}</>;
+  const detail = state === "LOADING" ? "Betöltés folyamatban." : state === "UNAUTHORIZED" ? "Nincs jogosultsága az adatok megtekintéséhez." : state === "UNAVAILABLE" ? "Az adatforrás jelenleg nem érhető el." : "Az adatok betöltése sikertelen.";
+  return <div data-read-state={state} aria-label={label}>{state === "LOADING" ? <CompactState title={label} detail={detail} /> : <SafePanelError detail={`${label}: ${detail}`} onRetry={onRetry} />}</div>;
+}
+
+// In-flight reads and mutations may finish after a context switch or unmount.
+function useCurrentContext(context: string) {
+  const scope = useMemo(() => ({ context }), [context]);
+  const committed = useRef<typeof scope | null>(null);
+  useLayoutEffect(() => {
+    committed.current = scope;
+    return () => { committed.current = null; };
+  }, [scope]);
+  return useCallback(() => committed.current === scope, [scope]);
+}
 
 export type GrowWorkbenchTab =
   | "attekintes"
@@ -80,7 +114,7 @@ function formatDate(value: string | null | undefined): string {
   return new Date(value).toLocaleDateString("hu-HU");
 }
 
-/** Real observation timestamp of a measured snapshot — never synthesized. */
+/** Recorded snapshot timestamp, never synthesized. */
 function formatObservedAt(value: string | null | undefined): string {
   if (!value) return "—";
   const date = new Date(value);
@@ -88,7 +122,8 @@ function formatObservedAt(value: string | null | undefined): string {
 }
 
 function diagnosisStatusPill(status: string): { label: string; tone: "green" | "amber" | "burgundy" | "neutral" } {
-  return DIAGNOSIS_STATUS_LABELS[status] ?? { label: status || "—", tone: "neutral" };
+  const tone = DIAGNOSIS_STATUS_LABELS[status]?.tone ?? "neutral";
+  return { label: diagnosisStatusLabelHu(status), tone };
 }
 
 /**
@@ -97,26 +132,35 @@ function diagnosisStatusPill(status: string): { label: string; tone: "green" | "
  * the canonical backend read models already exposed through `growApi`,
  * `clientCompanyApi` and the diagnostic workbench DTO.
  */
-export function GrowWorkbench({
-  clientId,
-  clientName,
-  activeTab,
-  requestedOpportunityId = null,
-}: {
+type GrowWorkbenchProps = {
   clientId: string;
   clientName: string;
   activeTab: GrowWorkbenchTab;
   requestedOpportunityId?: string | null;
-}) {
+  canManage?: boolean;
+  canPublish?: boolean;
+};
+
+export function GrowWorkbench(props: GrowWorkbenchProps) {
+  return <GrowWorkbenchContent key={`${props.clientId}:${Boolean(props.canManage)}:${Boolean(props.canPublish)}`} {...props} />;
+}
+
+function GrowWorkbenchContent({
+  clientId,
+  clientName,
+  activeTab,
+  requestedOpportunityId = null,
+  canManage = false,
+  canPublish = false,
+}: GrowWorkbenchProps) {
   const [opportunities, setOpportunities] = useState<GrowOpportunityItem[]>([]);
   const [evidence, setEvidence] = useState<GrowEvidenceItem[]>([]);
   const [outcomes, setOutcomes] = useState<OutcomeMeasurementDTO[]>([]);
   const [processes, setProcesses] = useState<BusinessProcessDTO[]>([]);
   const [initiatives, setInitiatives] = useState<DevelopmentInitiative[]>([]);
   const [milestones, setMilestones] = useState<CompanyMilestone[]>([]);
-  const [opportunitiesLoadFailed, setOpportunitiesLoadFailed] = useState(false);
-  const [canRunResearch, setCanRunResearch] = useState(false);
-  const [canRecordOutcome, setCanRecordOutcome] = useState(false);
+  const [readStates, setReadStates] = useState<ReadStates>(INITIAL_READ_STATES);
+  const opportunitiesLoadFailed = !workbenchReadSucceeded(readStates.opportunities);
   const [profileState, setProfileState] = useState<{
     status: string | null;
     summary: string | null;
@@ -147,111 +191,46 @@ export function GrowWorkbench({
     }>
   >([]);
   const [missingItems, setMissingItems] = useState<Array<{ code: string; message: string }>>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [sources, setSources] = useState<Array<{ id: string; sourceType: string; name: string; status: string; createdAt: string }>>([]);
 
+  const loadGeneration = useRef(0);
+  const isCurrentContext = useCurrentContext(clientId);
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setOpportunitiesLoadFailed(false);
-    try {
-      const [oppRes, evRes, outRes, processRes, initRes, milestoneRes, profileRes] = await Promise.all([
-        growApi.listOpportunities(clientId)
-          .then((result) => ({ result, failed: false }))
-          .catch(() => ({ result: { items: [] as GrowOpportunityItem[] }, failed: true })),
-        growApi.listEvidence(clientId).catch(() => ({ items: [] as GrowEvidenceItem[] })),
-        growApi.listOutcomes(clientId).catch(() => ({ items: [] as OutcomeMeasurementDTO[] })),
-        growApi.listProcesses(clientId).catch(() => [] as BusinessProcessDTO[]),
-        clientCompanyApi.listInitiatives(clientId).catch(() => ({ items: [] as DevelopmentInitiative[] })),
-        clientCompanyApi.listMilestones(clientId).catch(() => ({ items: [] as CompanyMilestone[] })),
-        clientCompanyApi.getProfile(clientId).catch(() => null),
-      ]);
-      setOpportunities(oppRes.result.items);
-      setOpportunitiesLoadFailed(oppRes.failed);
-      setEvidence(evRes.items);
-      setOutcomes(outRes.items);
-      setProcesses(processRes);
-      setInitiatives(initRes.items);
-      setMilestones(milestoneRes.items);
-      setProfileState(
-        profileRes
-          ? {
-              status: profileRes.status,
-              summary: profileRes.summary,
-              lastReviewedAt: profileRes.lastReviewedAt,
-              nextReviewAt: profileRes.nextReviewAt,
-            }
-          : null,
-      );
-
-      // Diagnostic worklist + missing-data signals come from the canonical
-      // diagnostic workbench read model (read-only, workforce-only).
-      try {
-        const { getDiagnosticWorkbench } = await import("@/lib/diagnosticWorkbenchApi");
-        const wb = await getDiagnosticWorkbench(clientId);
+    // A completed mutation from a previous client cannot start a fresh old-client read.
+    if (!isCurrentContext()) return;
+    const generation = ++loadGeneration.current;
+    const isCurrent = () => isCurrentContext() && generation === loadGeneration.current;
+    const panel = <T,>(key: keyof ReadStates, read: () => Promise<T>, empty: (value: T) => boolean, receive: (value: T) => void) =>
+      readWorkbenchPanel(read, empty, isCurrent, receive, (state) => setReadStates((previous) => ({ ...previous, [key]: state })));
+    await Promise.all([
+      panel("opportunities", () => growApi.listOpportunities(clientId), (res) => !res.items.length, (res) => setOpportunities(res.items)),
+      panel("evidence", () => growApi.listEvidence(clientId), (res) => !res.items.length, (res) => setEvidence(res.items)),
+      panel("outcomes", () => growApi.listOutcomes(clientId), (res) => !res.items.length, (res) => setOutcomes(res.items)),
+      panel("processes", () => growApi.listProcesses(clientId), (res) => !res.length, setProcesses),
+      panel("initiatives", () => clientCompanyApi.listInitiatives(clientId), (res) => !res.items.length, (res) => setInitiatives(res.items)),
+      panel("milestones", () => clientCompanyApi.listMilestones(clientId), (res) => !res.items.length, (res) => setMilestones(res.items)),
+      panel("profile", () => clientCompanyApi.getProfile(clientId), (res) => !res, setProfileState),
+      panel("diagnostics", () => getDiagnosticWorkbench(clientId), (wb) => !wb.problems.diagnoses.length && !wb.proposed.recommendations.length && !wb.missing.unresolvedItems.length, (wb) => {
         setDiagnoses(wb.problems.diagnoses);
         setRecommendations(wb.proposed.recommendations);
         setMissingItems(wb.missing.unresolvedItems);
-      } catch {
-        // Diagnostics are secondary to the overview; fail open to the other
-        // canonical data rather than blocking the whole workbench.
-        setDiagnoses([]);
-        setRecommendations([]);
-        setMissingItems([]);
-      }
-
-      growApi
-        .listSources(clientId)
-        .then((res) => setSources(res.items))
-        .catch(() => setSources([]));
-    } catch {
-      setError("A Grow felület adatai jelenleg nem tölthetők be.");
-    } finally {
-      setLoading(false);
-    }
-  }, [clientId]);
+      }),
+      panel("sources", () => growApi.listSources(clientId), (res) => !res.items.length, (res) => setSources(res.items)),
+    ]);
+  }, [clientId, isCurrentContext]);
 
   useEffect(() => {
     void load();
+    return () => { ++loadGeneration.current; };
   }, [load]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void getCurrentUser()
-      .then((user) => {
-        if (cancelled) return;
-        const role = String(user?.role || "");
-        setCanRunResearch(["ADMIN", "PARTNER", "LAWYER"].includes(role));
-        // Outcome recording mirrors the backend requireManager gate (ADMIN/PARTNER).
-        setCanRecordOutcome(["ADMIN", "PARTNER"].includes(role));
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setCanRunResearch(false);
-          setCanRecordOutcome(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (loading) {
-    return (
-      <CompactState
-        title="A Grow munkaasztal adatai betöltés alatt…"
-        detail="A diagnosztikák, döntések, kezdeményezések és eredmények betöltése folyamatban."
-      />
-    );
-  }
-
-  if (error) {
-    return <SafePanelError onRetry={() => void load()} detail={error} />;
-  }
 
   return (
     <div className="space-y-5" data-testid="grow-workbench">
+      <nav aria-label="Részletes Grow munkafolyamat" className="flex flex-wrap gap-4 text-sm underline">
+        {canManage ? <Link href={`/clients/${clientId}/grow?view=journey&destination=home`}>Kutatás előkészítése</Link> : null}
+        <Link href={`/clients/${clientId}/grow?view=journey&destination=${activeTab === "kezdemenyezesek" ? "progress" : activeTab === "eredmenyek" ? "results" : "feed"}`}>Részletes munkafolyamat</Link>
+        {canPublish ? <Link href={`/clients/${clientId}/grow?view=journey&destination=feed`}>Ügyfélközlés előkészítése</Link> : null}
+      </nav>
       {activeTab === "attekintes" ? (
         <GrowOverviewTab
           clientId={clientId}
@@ -265,47 +244,67 @@ export function GrowWorkbench({
           recommendations={recommendations}
           missingItems={missingItems}
           evidence={evidence}
-          canRunResearch={canRunResearch}
-          onRunResearch={() => void load()}
+          canRunResearch={canManage}
+          opportunitiesLoadFailed={opportunitiesLoadFailed}
+          readStates={readStates}
+          onRetry={() => void load()}
         />
       ) : null}
 
       {activeTab === "diagnosztika" ? <GrowDiagnosticWorkbench clientId={clientId} clientName={clientName} /> : null}
 
-      {activeTab === "bizonyitekok" ? <GrowEvidenceTab evidence={evidence} /> : null}
+      {activeTab === "bizonyitekok" ? <ReadPanel state={readStates.evidence} label="Bizonyítékok" onRetry={() => void load()}><GrowEvidenceTab evidence={evidence} /></ReadPanel> : null}
 
       {activeTab === "dontesek" ? (
+        <>
+        <ReadPanel state={readStates.diagnostics} label="Kapcsolt diagnosztika" onRetry={() => void load()} />
         <GrowDecisionsTab
+          key={requestedOpportunityId ?? "all"}
           clientId={clientId}
           opportunities={opportunities}
-          recommendations={recommendations}
+          recommendations={workbenchReadSucceeded(readStates.diagnostics) ? recommendations : []}
           requestedOpportunityId={requestedOpportunityId}
           opportunitiesLoadFailed={opportunitiesLoadFailed}
+          canStartInitiative={canManage}
+          canPublish={canPublish}
+          readState={readStates.opportunities}
+          onRetry={() => void load()}
           onChanged={() => void load()}
         />
+        </>
       ) : null}
 
       {activeTab === "kezdemenyezesek" ? (
+        <ReadPanel state={readStates.initiatives} label="Kezdeményezések" onRetry={() => void load()}>
         <GrowInitiativesTab
+          clientId={clientId}
+          readStates={readStates}
+          onRetry={() => void load()}
           initiatives={initiatives}
           milestones={milestones}
           opportunities={opportunities}
           outcomes={outcomes}
         />
+        </ReadPanel>
       ) : null}
 
       {activeTab === "eredmenyek" ? (
+        <>
+        <ReadPanel state={readStates.processes} label="Folyamatok" onRetry={() => void load()} />
+        <ReadPanel state={readStates.outcomes} label="Eredmények" onRetry={() => void load()}>
         <GrowOutcomesTab
           clientId={clientId}
           outcomes={outcomes}
           processes={processes}
-          canRecordOutcome={canRecordOutcome}
+          canRecordOutcome={canManage && workbenchReadSucceeded(readStates.processes)}
           onRecorded={() => void load()}
         />
+        </ReadPanel>
+        </>
       ) : null}
 
       {activeTab === "adatforrasok" ? (
-        <GrowDataSourcesTab clientId={clientId} sources={sources} onSubmitted={() => void load()} />
+        <GrowDataSourcesTab clientId={clientId} sources={sources} canManage={canManage} readState={readStates.sources} onSubmitted={() => void load()} />
       ) : null}
     </div>
   );
@@ -326,7 +325,9 @@ function GrowOverviewTab({
   missingItems,
   evidence,
   canRunResearch,
-  onRunResearch,
+  opportunitiesLoadFailed,
+  readStates,
+  onRetry,
 }: {
   clientId: string;
   clientName: string;
@@ -340,7 +341,9 @@ function GrowOverviewTab({
   missingItems: Array<{ code: string; message: string }>;
   evidence: GrowEvidenceItem[];
   canRunResearch: boolean;
-  onRunResearch: () => void;
+  opportunitiesLoadFailed: boolean;
+  readStates: ReadStates;
+  onRetry: () => void;
 }) {
   const pendingReview = opportunities.filter((o) => o.status === "PENDING_REVIEW");
   const needsMoreDataDiagnoses = diagnoses.filter((d) => d.status === "NEEDS_MORE_DATA").length;
@@ -357,16 +360,16 @@ function GrowOverviewTab({
   const unverifiedEvidence = evidence.filter((e) => e.verificationStatus !== "VERIFIED").length;
 
   const summaryItems: Array<{ label: string; value: string; tone: "neutral" | "amber" | "green" | "blue" }> = [
-    { label: "Nyitott diagnózis", value: String(openDiagnoses), tone: "neutral" },
-    { label: "Több adatot igénylő", value: String(needsMoreDataDiagnoses), tone: needsMoreDataDiagnoses > 0 ? "amber" : "neutral" },
-    { label: "Emberi döntésre vár", value: String(pendingReview.length), tone: pendingReview.length > 0 ? "amber" : "neutral" },
-    { label: "Aktív kezdeményezés", value: String(activeInitiativesCount), tone: "green" },
+    { label: "Nyitott diagnózis", value: workbenchReadSucceeded(readStates.diagnostics) ? String(openDiagnoses) : "—", tone: "neutral" },
+    { label: "Több adatot igénylő", value: workbenchReadSucceeded(readStates.diagnostics) ? String(needsMoreDataDiagnoses) : "—", tone: needsMoreDataDiagnoses > 0 ? "amber" : "neutral" },
+    { label: "Emberi döntésre vár", value: opportunitiesLoadFailed ? "—" : String(pendingReview.length), tone: pendingReview.length > 0 ? "amber" : "neutral" },
+    { label: "Aktív kezdeményezés", value: workbenchReadSucceeded(readStates.initiatives) ? String(activeInitiativesCount) : "—", tone: "green" },
     {
       label: "Következő mérföldkő",
-      value: nextMilestone ? formatDate(nextMilestone.targetDate ?? nextMilestone.milestoneDate) : "—",
+      value: workbenchReadSucceeded(readStates.milestones) && nextMilestone ? formatDate(nextMilestone.targetDate ?? nextMilestone.milestoneDate) : "—",
       tone: "neutral",
     },
-    { label: "Rögzített eredmény", value: String(achievedOutcomes.length), tone: "green" },
+    { label: "Rögzített eredmény", value: workbenchReadSucceeded(readStates.outcomes) ? String(achievedOutcomes.length) : "—", tone: "green" },
   ];
 
   return (
@@ -374,29 +377,25 @@ function GrowOverviewTab({
       <OperationalPageHeader
         title={clientName}
         subtitle={
-          profileState?.summary ||
+          (workbenchReadSucceeded(readStates.profile) && profileState?.summary) ||
           "Működési fejlesztési áttekintés — diagnosztika, döntés és végrehajtás."
         }
         primaryAction={
-          canRunResearch ? (
-            <AdminButton size="sm" variant="primary" onClick={onRunResearch} data-testid="grow-run-research">
-              Új kutatási futás
-            </AdminButton>
-          ) : (
-            <Link href={`/clients/${clientId}/grow?tab=diagnosztika`}>
-              <AdminButton size="sm" variant="neutral">Diagnosztika megnyitása</AdminButton>
-            </Link>
-          )
+          <Link href={`/clients/${clientId}/grow?tab=${!opportunitiesLoadFailed && pendingReview.length > 0 ? "dontesek" : "diagnosztika"}`}>
+            <AdminButton size="sm" variant="primary">{!opportunitiesLoadFailed && pendingReview.length > 0 ? `Döntések megnyitása (${pendingReview.length})` : "Diagnosztika megnyitása"}</AdminButton>
+          </Link>
         }
       />
 
+      <ReadPanel state={readStates.profile} label="Működési profil" onRetry={onRetry}>
       {profileState?.lastReviewedAt || profileState?.status ? (
         <p className="text-[11px] text-[var(--adm-text-muted)]" data-testid="grow-profile-state">
-          Működési profil állapota: {profileState.status ?? "nincs beállítva"}
+          Működési profil állapota: {profileState.status ? operatingProfileStatusLabelHu(profileState.status) : "nincs beállítva"}
           {profileState.lastReviewedAt ? ` · utolsó felülvizsgálat: ${formatDate(profileState.lastReviewedAt)}` : ""}
           {profileState.nextReviewAt ? ` · következő esedékes: ${formatDate(profileState.nextReviewAt)}` : ""}
         </p>
       ) : null}
+      </ReadPanel>
 
       {/* Summary strip — truthful backend counts, no synthetic maturity score */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" data-testid="grow-summary-strip">
@@ -408,13 +407,15 @@ function GrowOverviewTab({
         ))}
       </div>
 
-      {unverifiedEvidence > 0 || missingItems.length > 0 ? (
+      <ReadPanel state={readStates.evidence} label="Bizonyítékok" onRetry={onRetry} />
+      <ReadPanel state={readStates.milestones} label="Mérföldkövek" onRetry={onRetry} />
+      {(workbenchReadSucceeded(readStates.evidence) && unverifiedEvidence > 0) || (workbenchReadSucceeded(readStates.diagnostics) && missingItems.length > 0) ? (
         <CompactState
           title="Hiányzó vagy ellenőrizetlen adat"
           detail={
             [
-              unverifiedEvidence > 0 ? `${unverifiedEvidence} nem hitelesített bizonyíték` : null,
-              ...missingItems.map((m) => m.message),
+              workbenchReadSucceeded(readStates.evidence) && unverifiedEvidence > 0 ? `${unverifiedEvidence} nem hitelesített bizonyíték` : null,
+              ...(workbenchReadSucceeded(readStates.diagnostics) ? missingItems.map((m) => growthUnresolvedItemLabel(m)) : []),
             ]
               .filter(Boolean)
               .slice(0, 4)
@@ -423,16 +424,15 @@ function GrowOverviewTab({
         />
       ) : null}
 
-      <GrowDiagnosticWorklist
-        diagnoses={diagnoses}
-        recommendations={recommendations}
-        opportunities={opportunities}
-        initiatives={initiatives}
-        clientId={clientId}
-      />
-      <GrowDecisionQueue clientId={clientId} pending={pendingReview} recommendations={recommendations} />
-      <GrowActiveInitiatives initiatives={inFlightInitiatives} milestones={milestones} />
-      <GrowRecentResults outcomes={outcomes} />
+      <p className="text-sm text-[var(--adm-text-muted)]">Megfigyelés: amit láttunk · Diagnózis: amit a bizonyíték jelez · Lehetőség: javítható terület · Döntés: emberi jóváhagyás · Kezdeményezés: végrehajtás · Eredmény: mért vagy becsült változás.</p>
+      <ReadPanel state={readStates.opportunities} label="Döntések" onRetry={onRetry}><GrowDecisionQueue clientId={clientId} pending={pendingReview} recommendations={workbenchReadSucceeded(readStates.diagnostics) ? recommendations : []} /></ReadPanel>
+      <details className="rounded-lg border border-[var(--adm-border)] p-3">
+        <summary className="cursor-pointer font-semibold">Diagnosztikai részletek és előzmények</summary>
+        <ReadPanel state={readStates.diagnostics} label="Diagnosztika" onRetry={onRetry}><GrowDiagnosticWorklist diagnoses={diagnoses} recommendations={recommendations} opportunities={workbenchReadSucceeded(readStates.opportunities) ? opportunities : []} initiatives={workbenchReadSucceeded(readStates.initiatives) ? initiatives : []} clientId={clientId} /></ReadPanel>
+        {canRunResearch ? <Link href={`/clients/${clientId}/grow?view=journey&destination=home`} className="inline-flex min-h-10 items-center text-sm underline">Új kutatási futás előkészítése</Link> : null}
+      </details>
+      <ReadPanel state={readStates.initiatives} label="Kezdeményezések" onRetry={onRetry}><GrowActiveInitiatives initiatives={inFlightInitiatives} milestones={workbenchReadSucceeded(readStates.milestones) ? milestones : []} /></ReadPanel>
+      <ReadPanel state={readStates.outcomes} label="Eredmények" onRetry={onRetry}><GrowRecentResults outcomes={outcomes} /></ReadPanel>
     </div>
   );
 }
@@ -534,7 +534,7 @@ function GrowDiagnosticWorklist({
                     {d.status === "NEEDS_MORE_DATA" ? (
                       <span className="text-[11px] font-semibold text-[var(--adm-terracotta-700)]">Több adat szükséges</span>
                     ) : rec?.status === "PENDING_REVIEW" ? (
-                      <Link href={`/clients/${clientId}/grow?tab=dontesek`} className="text-[11px] font-semibold text-[var(--adm-green-800)] hover:underline">
+                      <Link href={`/clients/${clientId}/grow?tab=dontesek&opportunity=${encodeURIComponent(rec.id)}`} className="text-[11px] font-semibold text-[var(--adm-green-800)] hover:underline">
                         Döntés megnyitása →
                       </Link>
                     ) : (
@@ -580,6 +580,7 @@ function GrowDecisionQueue({
               <li key={o.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-[var(--adm-text)]">{o.title}</p>
+                  <OpportunityOrigin item={o} />
                   <p className="text-[11px] text-[var(--adm-text-muted)]">
                     {domainTitleHu(o.domainKey)}
                     {o.businessProcess ? ` · ${o.businessProcess.name}` : ""}
@@ -741,6 +742,7 @@ function GrowEvidenceTab({ evidence }: { evidence: GrowEvidenceItem[] }) {
                   <AdminStatusPill tone={item.strength === "STRONG" ? "green" : item.strength === "MODERATE" ? "amber" : "neutral"}>
                     {evidenceStrengthLabelHu(item.strength)}
                   </AdminStatusPill>
+                  <span className="text-[11px] text-[var(--adm-text-muted)]">{sourceBasisLabelHu(item.sourceBasis)}</span>
                 </div>
               </div>
             </AdminPanel>
@@ -759,6 +761,10 @@ function GrowDecisionsTab({
   recommendations,
   requestedOpportunityId,
   opportunitiesLoadFailed,
+  canStartInitiative,
+  canPublish,
+  readState,
+  onRetry,
   onChanged,
 }: {
   clientId: string;
@@ -766,6 +772,10 @@ function GrowDecisionsTab({
   recommendations: Array<{ id: string; title: string; direction: string; status: string; sufficiency: string; diagnosisId: string | null; domain: { key: string; name: string } | null; businessProcess: { id: string; name: string } | null }>;
   requestedOpportunityId: string | null;
   opportunitiesLoadFailed: boolean;
+  canStartInitiative: boolean;
+  canPublish: boolean;
+  readState: WorkbenchReadState;
+  onRetry: () => void;
   onChanged: () => void;
 }) {
   const pending = opportunities.filter((o) => o.status === "PENDING_REVIEW");
@@ -787,16 +797,17 @@ function GrowDecisionsTab({
         subtitle="A rendszer javasol — az ember dönt. Elfogadás után jön létre a fejlesztési lehetőség, külön lépésben."
       />
 
-      {requestedOpportunityId && opportunitiesLoadFailed ? (
+      {requestedOpportunityId && opportunitiesLoadFailed && readState !== "LOADING" ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900" role="alert" data-testid="grow-opportunity-check-failed">
           A kért lehetőség elérhetőségét most nem sikerült ellenőrizni. Próbálja újra később.
         </p>
-      ) : requestedOpportunityId && !requestedOpportunity ? (
+      ) : requestedOpportunityId && workbenchReadSucceeded(readState) && !opportunitiesLoadFailed && !requestedOpportunity ? (
         <p className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status" data-testid="grow-opportunity-unavailable">
           A kért lehetőség nem érhető el ennél az ügyfélnél. Lehet, hogy már nem hozzáférhető vagy nem ehhez az ügyfélhez tartozik.
         </p>
       ) : null}
 
+      <ReadPanel state={readState} label="Döntések" onRetry={onRetry}>
       <AdminPanel data-testid="grow-decisions-pending">
         <AdminSectionHeader
           title="Emberi döntésre vár"
@@ -807,7 +818,7 @@ function GrowDecisionsTab({
         ) : (
           <ul className="divide-y divide-[var(--adm-border)]">
             {pending.map((o) => (
-              <GrowDecisionRow key={o.id} clientId={clientId} item={o} rec={recommendations.find((r) => r.id === o.id)} isDeepLinkTarget={o.id === requestedOpportunityId} onChanged={onChanged} />
+              <GrowDecisionRow key={o.id} clientId={clientId} item={o} rec={recommendations.find((r) => r.id === o.id)} isDeepLinkTarget={o.id === requestedOpportunityId} canManage={canStartInitiative} onChanged={onChanged} />
             ))}
           </ul>
         )}
@@ -821,12 +832,15 @@ function GrowDecisionsTab({
               <li key={o.id} id={`grow-opportunity-${encodeURIComponent(o.id)}`} tabIndex={-1} data-testid={`grow-decision-${o.id}`} className={`flex flex-wrap items-center justify-between gap-3 px-4 py-3 outline-none ${o.id === requestedOpportunityId ? "rounded-md ring-2 ring-[var(--adm-green-800)] ring-offset-2" : ""}`}>
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-[var(--adm-text)]">{o.title}</p>
+                  <OpportunityOrigin item={o} />
                   {o.id === requestedOpportunityId ? <p className="text-[11px] font-semibold text-[var(--adm-green-800)]">Kért lehetőség</p> : null}
                   <p className="text-[11px] text-[var(--adm-text-muted)]">
                     {reviewDecisionLabelHu(o.status)}
                     {o.opportunity?.developmentInitiativeId ? " · kezdeményezés indítva" : " · kezdeményezés még nem indult"}
                   </p>
                 </div>
+                <GrowInitiativeAction clientId={clientId} item={o} canStart={canStartInitiative} onChanged={onChanged} />
+                <Link className="text-sm underline" href={`/clients/${clientId}/grow?view=journey&destination=detail&opportunity=${encodeURIComponent(o.id)}`}>{canPublish ? "Részletek és ügyfélközlés" : "Lehetőség részletei"}</Link>
                 <AdminStatusPill tone="green">{reviewDecisionLabelHu(o.status)}</AdminStatusPill>
               </li>
             ))}
@@ -842,14 +856,17 @@ function GrowDecisionsTab({
               <li key={o.id} id={`grow-opportunity-${encodeURIComponent(o.id)}`} tabIndex={-1} data-testid={`grow-decision-${o.id}`} className={`flex flex-wrap items-center justify-between gap-3 px-4 py-3 outline-none ${o.id === requestedOpportunityId ? "rounded-md ring-2 ring-[var(--adm-green-800)] ring-offset-2" : ""}`}>
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] text-[var(--adm-text)]">{o.title}</p>
+                  <OpportunityOrigin item={o} />
                   {o.id === requestedOpportunityId ? <p className="text-[11px] font-semibold text-[var(--adm-green-800)]">Kért lehetőség</p> : null}
                 </div>
+                <Link className="text-sm underline" href={`/clients/${clientId}/grow?view=journey&destination=detail&opportunity=${encodeURIComponent(o.id)}`}>Részletek és további információ</Link>
                 <AdminStatusPill tone={o.status === "DECLINED" ? "burgundy" : "amber"}>{reviewDecisionLabelHu(o.status)}</AdminStatusPill>
               </li>
             ))}
           </ul>
         </AdminPanel>
       ) : null}
+      </ReadPanel>
     </div>
   );
 }
@@ -859,12 +876,14 @@ function GrowDecisionRow({
   item,
   rec,
   isDeepLinkTarget,
+  canManage,
   onChanged,
 }: {
   clientId: string;
   item: GrowOpportunityItem;
   rec: { id: string; title: string; direction: string; status: string; sufficiency: string; diagnosisId: string | null; domain: { key: string; name: string } | null; businessProcess: { id: string; name: string } | null } | undefined;
   isDeepLinkTarget: boolean;
+  canManage: boolean;
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -872,13 +891,16 @@ function GrowDecisionRow({
   const [message, setMessage] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [showControls, setShowControls] = useState(false);
+  const isCurrent = useCurrentContext(`${clientId}:${item.id}:${canManage}`);
 
   const decide = async (decision: "ACCEPT" | "DECLINE" | "REQUEST_MORE_INFO") => {
+    if (!canManage || busy || !isCurrent()) return;
     setBusy(decision);
     setLocalError(null);
     setMessage(null);
     try {
       await growApi.reviewOpportunity(clientId, item.id, decision, note || undefined);
+      if (!isCurrent()) return;
       setMessage(
         decision === "ACCEPT"
           ? "Elfogadva — fejlesztési lehetőség létrejött."
@@ -888,9 +910,9 @@ function GrowDecisionRow({
       );
       onChanged();
     } catch {
-      setLocalError("A döntés rögzítése nem sikerült.");
+      if (isCurrent()) setLocalError("A döntés rögzítése nem sikerült.");
     } finally {
-      setBusy(null);
+      if (isCurrent()) setBusy(null);
     }
   };
 
@@ -918,7 +940,8 @@ function GrowDecisionRow({
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        {showControls || isDeepLinkTarget ? (
+        <Link className="text-sm underline" href={`/clients/${clientId}/grow?view=journey&destination=detail&opportunity=${encodeURIComponent(item.id)}`}>Bizonyítékok, felülvizsgálat és további információ</Link>
+        {canManage ? showControls || isDeepLinkTarget ? (
           <>
             <input
               value={note}
@@ -940,7 +963,7 @@ function GrowDecisionRow({
           <AdminButton size="sm" variant="neutral" onClick={() => setShowControls(true)} data-testid={`grow-decide-open-${item.id}`}>
             Döntés megnyitása
           </AdminButton>
-        )}
+        ) : null}
       </div>
 
       {message ? <p className="mt-2 text-[11px] font-semibold text-[var(--adm-green-800)]" role="status">{message}</p> : null}
@@ -952,11 +975,17 @@ function GrowDecisionRow({
 /* ------------------------------- Kezdeményezések --------------------------- */
 
 function GrowInitiativesTab({
+  clientId,
+  readStates,
+  onRetry,
   initiatives,
   milestones,
   opportunities,
   outcomes,
 }: {
+  clientId: string;
+  readStates: ReadStates;
+  onRetry: () => void;
   initiatives: DevelopmentInitiative[];
   milestones: CompanyMilestone[];
   opportunities: GrowOpportunityItem[];
@@ -968,6 +997,7 @@ function GrowInitiativesTab({
         title="Kezdeményezések"
         subtitle="Felelős, célállapot, mérföldkövek és kapcsolt lehetőség. Nincs fiktív aktivitás-idővonal."
       />
+      <ReadPanel state={readStates.opportunities} label="Kapcsolt lehetőségek" onRetry={onRetry} />
       {initiatives.length === 0 ? (
         <CompactState title="Még nincs fejlesztési kezdeményezés." detail="Elfogadott lehetőségből indítható, külön lépésben." />
       ) : (
@@ -979,12 +1009,12 @@ function GrowInitiativesTab({
             const linkedOpportunity = opportunities.find((o) => o.opportunity?.developmentInitiativeId === i.id);
             const ownOutcomes = outcomes.filter((o) => o.initiative?.id === i.id);
             return (
-              <AdminPanel key={i.id} className="p-4" data-testid={`grow-initiative-${i.id}`}>
+              <AdminPanel key={i.id} id={`grow-initiative-${encodeURIComponent(i.id)}`} className="scroll-mt-24 p-4" data-testid={`grow-initiative-${i.id}`}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="text-[14px] font-semibold text-[var(--adm-text)]">{i.title}</p>
                     <p className="mt-0.5 text-[11px] text-[var(--adm-text-muted)]">
-                      {linkedOpportunity ? `Lehetőség: ${linkedOpportunity.title}` : "Nincs közvetlenül kapcsolt lehetőség"}
+                      {!workbenchReadSucceeded(readStates.opportunities) ? "A kapcsolt lehetőség jelenleg nem ellenőrizhető." : linkedOpportunity ? `Lehetőség: ${linkedOpportunity.title}` : "Nincs közvetlenül kapcsolt lehetőség"}
                     </p>
                   </div>
                   <AdminStatusPill tone={i.status === "ACTIVE" ? "green" : i.status === "ON_HOLD" ? "amber" : i.status === "COMPLETED" ? "green" : "neutral"}>
@@ -992,6 +1022,7 @@ function GrowInitiativesTab({
                   </AdminStatusPill>
                 </div>
 
+                <Link className="text-sm underline" href={`/clients/${clientId}/grow?view=journey&destination=progress`}>Kezdeményezés részletes követése</Link>
                 <dl className="mt-3 grid grid-cols-1 gap-x-4 gap-y-1 text-[12px] sm:grid-cols-2">
                   <div className="flex justify-between gap-2 border-b border-[var(--adm-border)] py-1">
                     <dt className="text-[var(--adm-text-muted)]">Felelős</dt>
@@ -1013,6 +1044,7 @@ function GrowInitiativesTab({
 
                 <div className="mt-3">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Mérföldkövek</p>
+                  <ReadPanel state={readStates.milestones} label="Mérföldkövek" onRetry={onRetry}>
                   {ownMilestones.length === 0 ? (
                     <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Nincsenek rögzített mérföldkövek.</p>
                   ) : (
@@ -1028,11 +1060,13 @@ function GrowInitiativesTab({
                       ))}
                     </ul>
                   )}
+                  </ReadPanel>
                 </div>
 
+                <ReadPanel state={readStates.outcomes} label="Kapcsolt eredmények" onRetry={onRetry}>
                 {ownOutcomes.length > 0 ? (
                   <div className="mt-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Mért eredmények</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Rögzített eredmények</p>
                     <ul className="mt-1 space-y-1">
                       {ownOutcomes.map((o) => (
                         <li key={o.id} className="flex items-center gap-2 text-[12px]">
@@ -1043,6 +1077,7 @@ function GrowInitiativesTab({
                     </ul>
                   </div>
                 ) : null}
+                </ReadPanel>
               </AdminPanel>
             );
           })}
@@ -1132,18 +1167,24 @@ function GrowRecordOutcomeForm({
 }) {
   const [options, setOptions] = useState<GrowOpportunityItem[]>([]);
   const [optionsLoading, setOptionsLoading] = useState(true);
-  const [optionsError, setOptionsError] = useState<string | null>(null);
+  const [optionsError, setOptionsError] = useState<WorkbenchReadState | null>(null);
   const [opportunityId, setOpportunityId] = useState("");
   const [processId, setProcessId] = useState("");
   const [snapshots, setSnapshots] = useState<ProcessObservationSnapshotDTO[]>([]);
   const [snapshotsLoading, setSnapshotsLoading] = useState(false);
-  const [snapshotsError, setSnapshotsError] = useState<string | null>(null);
+  const [snapshotsError, setSnapshotsError] = useState<WorkbenchReadState | null>(null);
   const [beforeSnapshotId, setBeforeSnapshotId] = useState("");
   const [afterSnapshotId, setAfterSnapshotId] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const isCurrent = useCurrentContext(`${clientId}:${opportunityId}:${processId}:${beforeSnapshotId}:${afterSnapshotId}`);
+  useEffect(() => {
+    setBusy(false);
+    setError(null);
+    setMessage(null);
+  }, [clientId, opportunityId, processId, beforeSnapshotId, afterSnapshotId]);
 
   // An outcome may only attach to an accepted opportunity (the human decision
   // already created the canonical ImprovementOpportunity).
@@ -1156,10 +1197,10 @@ function GrowRecordOutcomeForm({
       .then((res) => {
         if (!cancelled) setOptions(res.items.filter((o) => Boolean(o.opportunity)));
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!cancelled) {
           setOptions([]);
-          setOptionsError("A rögzíthető fejlesztési lehetőségek nem tölthetők be.");
+          setOptionsError(workbenchReadFailure(error));
         }
       })
       .finally(() => {
@@ -1182,6 +1223,9 @@ function GrowRecordOutcomeForm({
     if (!processId) {
       setSnapshots([]);
       setSnapshotsError(null);
+      setSnapshotsLoading(false);
+      setBeforeSnapshotId("");
+      setAfterSnapshotId("");
       return;
     }
     let cancelled = false;
@@ -1194,10 +1238,10 @@ function GrowRecordOutcomeForm({
       .then((res) => {
         if (!cancelled) setSnapshots(res.items);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!cancelled) {
           setSnapshots([]);
-          setSnapshotsError("A folyamat mérési pillanatképei nem tölthetők be.");
+          setSnapshotsError(workbenchReadFailure(error));
         }
       })
       .finally(() => {
@@ -1214,10 +1258,11 @@ function GrowRecordOutcomeForm({
     ? snapshots.filter((s) => s.id !== beforeSnapshot.id && s.observedAt >= beforeSnapshot.observedAt)
     : snapshots.filter((s) => s.id !== beforeSnapshotId);
 
-  const canSubmit = Boolean(selectedOpportunity?.opportunity?.id) && Boolean(processId) && Boolean(beforeSnapshotId);
+  const canSubmit = Boolean(selectedOpportunity?.opportunity?.id) && Boolean(processId) && Boolean(beforeSnapshot) && !optionsLoading && !optionsError && !snapshotsLoading && !snapshotsError;
 
   const submit = async () => {
     if (!selectedOpportunity?.opportunity?.id || !processId || !beforeSnapshotId) return;
+    if (!canSubmit || busy || !isCurrent()) return;
     setBusy(true);
     setError(null);
     setMessage(null);
@@ -1228,13 +1273,14 @@ function GrowRecordOutcomeForm({
         afterSnapshotId: afterSnapshotId || undefined,
         note: note.trim() || undefined,
       });
+      if (!isCurrent()) return;
       setMessage("Eredmény rögzítve.");
       onRecorded();
     } catch {
       // A server rejection must never read as success.
-      setError("Az eredmény rögzítése nem sikerült.");
+      if (isCurrent()) setError("Az eredmény rögzítése nem sikerült.");
     } finally {
-      setBusy(false);
+      if (isCurrent()) setBusy(false);
     }
   };
 
@@ -1242,13 +1288,13 @@ function GrowRecordOutcomeForm({
     <AdminPanel data-testid="grow-record-outcome-form">
       <AdminSectionHeader
         title="Eredmény rögzítése"
-        subtitle="Kizárólag elfogadott fejlesztési lehetőséghez, valós mérési pillanatképekből. A rendszer a mérésekből számol — az űrlap nem számol ROI-t."
+        subtitle="Kizárólag elfogadott fejlesztési lehetőséghez, rögzített folyamatpillanatképekből. A rendszer megőrzi a bemenetek forrásalapját; az űrlap nem számol ROI-t."
       />
 
       {optionsLoading ? (
         <p className="px-4 py-3 text-[12px] text-[var(--adm-text-muted)]">A lehetőségek betöltése…</p>
       ) : optionsError ? (
-        <p className="px-4 py-3 text-[12px] text-[var(--adm-terracotta-700)]" role="alert">{optionsError}</p>
+        <ReadPanel state={optionsError} label="Rögzíthető fejlesztési lehetőségek" />
       ) : options.length === 0 ? (
         <CompactState
           title="Nincs rögzíthető fejlesztési lehetőség."
@@ -1289,32 +1335,32 @@ function GrowRecordOutcomeForm({
               </label>
 
               {snapshotsLoading ? (
-                <p className="text-[12px] text-[var(--adm-text-muted)]">A mérési pillanatképek betöltése…</p>
+                <p className="text-[12px] text-[var(--adm-text-muted)]">A folyamatpillanatképek betöltése…</p>
               ) : snapshotsError ? (
-                <p className="text-[12px] text-[var(--adm-terracotta-700)]" role="alert">{snapshotsError}</p>
+                <ReadPanel state={snapshotsError} label="Folyamat-pillanatképek" />
               ) : processId && snapshots.length === 0 ? (
                 <p className="text-[12px] text-[var(--adm-text-muted)]">
-                  Ehhez a folyamathoz még nincs mért pillanatkép. Előbb rögzítsen folyamat-megfigyelést a folyamat adatlapján.
+                  Ehhez a folyamathoz még nincs folyamatpillanatkép. Előbb rögzítsen folyamat-megfigyelést a folyamat adatlapján.
                 </p>
               ) : (
                 <>
                   <label className="block">
-                    <span className="text-[11px] font-semibold text-[var(--adm-text-muted)]">Kiinduló (előtte) mérés</span>
+                    <span className="text-[11px] font-semibold text-[var(--adm-text-muted)]">Kiinduló (előtte) pillanatkép</span>
                     <select
                       value={beforeSnapshotId}
                       onChange={(e) => { setBeforeSnapshotId(e.target.value); setAfterSnapshotId(""); }}
                       className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]"
                       data-testid="grow-record-outcome-before"
                     >
-                      <option value="">Válasszon kiinduló mérést…</option>
+                      <option value="">Válasszon kiinduló pillanatképet…</option>
                       {snapshots.map((s) => (
-                        <option key={s.id} value={s.id}>{formatObservedAt(s.observedAt)}</option>
+                        <option key={s.id} value={s.id}>{formatObservedAt(s.observedAt)} · {sourceBasisLabelHu(s.sourceBasis)}</option>
                       ))}
                     </select>
                   </label>
 
                   <label className="block">
-                    <span className="text-[11px] font-semibold text-[var(--adm-text-muted)]">Utána mérés (opcionális)</span>
+                    <span className="text-[11px] font-semibold text-[var(--adm-text-muted)]">Utána pillanatkép (opcionális)</span>
                     <select
                       value={afterSnapshotId}
                       onChange={(e) => setAfterSnapshotId(e.target.value)}
@@ -1322,13 +1368,13 @@ function GrowRecordOutcomeForm({
                       className="adm-board-field mt-1 w-full px-3 py-2 text-[12px] disabled:opacity-60"
                       data-testid="grow-record-outcome-after"
                     >
-                      <option value="">Nincs utána mérés</option>
+                      <option value="">Nincs utána pillanatkép</option>
                       {afterOptions.map((s) => (
-                        <option key={s.id} value={s.id}>{formatObservedAt(s.observedAt)}</option>
+                        <option key={s.id} value={s.id}>{formatObservedAt(s.observedAt)} · {sourceBasisLabelHu(s.sourceBasis)}</option>
                       ))}
                     </select>
                     <span className="mt-1 block text-[11px] text-[var(--adm-text-muted)]">
-                      Utána mérés nélkül az eredmény nem mért, hanem becsült alapon rögzül — ezt a lista egyértelműen jelzi.
+                      Az utána pillanatkép önmagában nem teszi mértté az eredményt. A becsült bemenetből számított változás becslés marad, nem igazolt megvalósult haszon.
                     </span>
                   </label>
                 </>
@@ -1391,7 +1437,7 @@ function OutcomeGroup({
         <ul className="divide-y divide-[var(--adm-border)]">
           {outcomes.map((o) => (
             <li key={o.id} className="px-4 py-3" data-testid={`grow-outcome-${o.basis}`}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-[var(--adm-text)]">
                     {o.opportunityTitle ?? o.businessProcess?.name ?? "Eredmény"}
@@ -1402,12 +1448,13 @@ function OutcomeGroup({
                   </p>
                   {o.note ? <p className="mt-1 text-[11px] text-[var(--adm-text)]">{o.note}</p> : null}
                 </div>
-                <div className="flex shrink-0 flex-col items-end gap-1 text-[11px] text-[var(--adm-text-muted)]">
+                <div className="flex max-w-full flex-col items-start gap-1 break-words text-[11px] text-[var(--adm-text-muted)] sm:items-end">
                   <AdminStatusPill tone={tone}>{outcomeBasisLabelHu(o.basis)}</AdminStatusPill>
                   {o.synthetic ? <span>Szintetikus tesztadat — nem valós eredmény</span> : null}
                   <span>Rögzítette: {o.recordedBy?.name ?? "—"} · {formatDate(o.createdAt)}</span>
                 </div>
               </div>
+              <GrowOutcomeComparison outcome={o} />
             </li>
           ))}
         </ul>
@@ -1421,10 +1468,14 @@ function OutcomeGroup({
 function GrowDataSourcesTab({
   clientId,
   sources,
+  canManage,
+  readState,
   onSubmitted,
 }: {
   clientId: string;
   sources: Array<{ id: string; sourceType: string; name: string; status: string; createdAt: string }>;
+  canManage: boolean;
+  readState: WorkbenchReadState;
   onSubmitted: () => void;
 }) {
   return (
@@ -1436,6 +1487,7 @@ function GrowDataSourcesTab({
 
       <AdminPanel>
         <AdminSectionHeader title="Külső források" subtitle="Csatlakoztatott megfigyelési és felmérési források." />
+        <ReadPanel state={readState} label="Külső források" onRetry={onSubmitted}>
         {sources.length === 0 ? (
           <p className="px-4 py-3 text-[12px] text-[var(--adm-text-muted)]">Még nincs csatlakoztatott külső forrás.</p>
         ) : (
@@ -1444,19 +1496,42 @@ function GrowDataSourcesTab({
               <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-[12px]">
                 <span className="font-semibold text-[var(--adm-text)]">{s.name}</span>
                 <span className="text-[var(--adm-text-muted)]">
-                  {s.sourceType} · {s.status} · {formatDate(s.createdAt)}
+                  {s.sourceType} · {externalSourceStatusLabelHu(s.status)} · {formatDate(s.createdAt)}
                 </span>
               </li>
             ))}
           </ul>
         )}
+        </ReadPanel>
       </AdminPanel>
 
-      <GrowIntake clientId={clientId} onSubmitted={onSubmitted} />
+      <GrowAssessmentSummaries key={clientId} clientId={clientId} />
+      {canManage ? <GrowIntake clientId={clientId} onSubmitted={onSubmitted} /> : null}
 
       <p className="text-[11px] text-[var(--adm-text-muted)]">
         A kérdőíves felmérések és a „Mondd el, hol fáj” strukturált bejelentés bemeneti csatornák: megfigyelésként rögzülnek, és önmagukban nem hoznak létre diagnózist, döntést vagy feladatot.
       </p>
     </div>
   );
+}
+
+function OpportunityOrigin({ item }: { item: GrowOpportunityItem }) {
+  return <p className="text-xs text-[var(--adm-text-muted)]">{formatDate(item.createdAt)} · Kutatási kör: <span title={item.runId}>{item.runId.slice(0, 8)}</span> · {item.businessProcess?.name || domainTitleHu(item.domainKey)}</p>;
+}
+
+function GrowInitiativeAction({ clientId, item, canStart, onChanged }: { clientId: string; item: GrowOpportunityItem; canStart: boolean; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const isCurrent = useCurrentContext(`${clientId}:${item.id}:${canStart}`);
+  const linkedId = item.opportunity?.developmentInitiativeId;
+  if (linkedId) return <Link className="inline-flex min-h-10 items-center text-sm underline" href={`/clients/${clientId}/grow?tab=kezdemenyezesek#grow-initiative-${encodeURIComponent(linkedId)}`}>Kezdeményezés megnyitása</Link>;
+  if (!item.opportunity?.id || !canStart) return <span className="text-xs text-[var(--adm-text-muted)]">A kezdeményezést vezető indíthatja.</span>;
+  const start = async () => {
+    if (busy || !canStart || !isCurrent()) return;
+    setBusy(true); setError(null);
+    try { await growApi.startInitiative(clientId, item.opportunity!.id); if (isCurrent()) onChanged(); }
+    catch { if (isCurrent()) setError("Az indítás nem sikerült. Frissítse a döntéseket a jelenlegi állapot ellenőrzéséhez."); }
+    finally { if (isCurrent()) setBusy(false); }
+  };
+  return <div><AdminButton size="sm" variant="primary" disabled={busy} onClick={() => void start()}>{busy ? "Indítás…" : "Kezdeményezés indítása"}</AdminButton>{error ? <p role="alert" className="text-sm text-[var(--adm-terracotta-700)]">{error}</p> : null}</div>;
 }

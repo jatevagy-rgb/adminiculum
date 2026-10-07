@@ -110,6 +110,8 @@ export interface InternalClientRequestDTO extends InternalInteractionRow {
 
 /** C4D — single-origin Compliance provenance carried on a customer request. */
 export interface ComplianceRequestContext {
+  applicabilityId?: string;
+  factKey?: string;
   requirementVersionId?: string | null;
   clientControlId?: string | null;
   findingId?: string | null;

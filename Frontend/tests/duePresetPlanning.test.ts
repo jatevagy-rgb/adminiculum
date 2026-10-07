@@ -42,8 +42,8 @@ describe("due preset helpers", () => {
   it("custom absolute date remains a secondary option", () => {
     const custom = due.resolveCustomDueAt("2027-05-05", "14:30");
     assert.ok(custom);
-    assert.equal(custom.getHours(), 14);
-    assert.equal(custom.getMinutes(), 30);
+    // User-entered wall time is Europe/Budapest, independent of the test host TZ.
+    assert.equal(custom.toISOString(), "2027-05-05T12:30:00.000Z");
     assert.equal(due.resolveCustomDueAt("", "10:00"), null);
   });
 

@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { sourceBasisLabelHu } from "@/lib/growApi";
 import type { DiagnosticWorkbenchDto, ProcessMetricCode } from "@/lib/diagnosticWorkbenchApi";
 import {
   PROVENANCE_LABELS_HU,
   PROCESS_METRIC_LABELS_HU,
+  discoveryRunStatusLabelHu,
   formatProcessMetricValue,
 } from "@/lib/diagnosticWorkbenchApi";
 
@@ -13,10 +15,9 @@ interface ObservationPanelProps {
 }
 
 export function ObservationPanel({ observed }: ObservationPanelProps) {
-  const [activeTab, setActiveTab] = useState<"declared" | "measured">("declared");
+  const [activeTab, setActiveTab] = useState<"declared" | "snapshots">("declared");
 
   const declaredProv = PROVENANCE_LABELS_HU.DECLARED_OBSERVATION;
-  const measuredProv = PROVENANCE_LABELS_HU.MEASURED_SNAPSHOT;
 
   const hasObservations = observed.observations && observed.observations.length > 0;
   const hasSnapshots = observed.processSnapshots && observed.processSnapshots.length > 0;
@@ -38,7 +39,7 @@ export function ObservationPanel({ observed }: ObservationPanelProps) {
           </p>
         </div>
 
-        {/* Sub-tabs for Declared vs Measured */}
+        {/* Source basis is shown per snapshot, not inferred from its existence. */}
         <div className="flex items-center gap-1 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-1 text-xs">
           <button
             type="button"
@@ -53,14 +54,14 @@ export function ObservationPanel({ observed }: ObservationPanelProps) {
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab("measured")}
+            onClick={() => setActiveTab("snapshots")}
             className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
-              activeTab === "measured"
+              activeTab === "snapshots"
                 ? "bg-white text-[var(--adm-text)] shadow-xs"
                 : "text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]"
             }`}
           >
-            Mért pillanatképek ({observed.processSnapshots?.length ?? 0})
+            Folyamatpillanatképek ({observed.processSnapshots?.length ?? 0})
           </button>
         </div>
       </div>
@@ -121,7 +122,7 @@ export function ObservationPanel({ observed }: ObservationPanelProps) {
                       <div className="flex justify-between">
                         <span>Kutatási futás:</span>
                         <span className="font-medium text-[var(--adm-text)]">
-                          {obs.discoveryRun.status} ({new Date(obs.discoveryRun.startedAt).toLocaleDateString("hu-HU")})
+                          {discoveryRunStatusLabelHu(obs.discoveryRun.status)} ({new Date(obs.discoveryRun.startedAt).toLocaleDateString("hu-HU")})
                         </span>
                       </div>
                     ) : null}
@@ -134,19 +135,14 @@ export function ObservationPanel({ observed }: ObservationPanelProps) {
       ) : (
         <div className="space-y-4">
           <div className="flex items-center gap-2">
-            <span
-              className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${measuredProv.tone}`}
-            >
-              {measuredProv.label}
-            </span>
             <span className="text-xs text-[var(--adm-text-muted)]">
-              Determinisztikusan számított folyamatmetrikák a folyamatlépésekből (nem azonos a becsült lépésidőkkel).
+              A folyamatlépésekből számított értékek megőrzik a bemenetek forrásalapját. Becsült vagy alapértelmezett időkből számított érték nem empirikus mérés.
             </span>
           </div>
 
           {!hasSnapshots ? (
             <div className="rounded-lg border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-6 text-center text-sm text-[var(--adm-text-muted)]">
-              Még nincs mért folyamatadat.
+              Még nincs folyamatpillanatkép.
             </div>
           ) : (
             <div className="space-y-4">
@@ -160,6 +156,9 @@ export function ObservationPanel({ observed }: ObservationPanelProps) {
                       <h3 className="text-xs font-semibold text-[var(--adm-text)]">
                         {snap.businessProcess.name}
                       </h3>
+                      <p data-testid="snapshot-source-basis" className="text-xs text-amber-900 mt-1">
+                        {sourceBasisLabelHu(snap.sourceBasis)}
+                      </p>
                       <div className="flex flex-wrap gap-2 text-[10px] text-[var(--adm-text-muted)] mt-0.5">
                         <span>Verzió: {snap.metricVersion}</span>
                         <span>·</span>
@@ -201,6 +200,9 @@ export function ObservationPanel({ observed }: ObservationPanelProps) {
                           </span>
                           <span className="mt-1 block text-xs font-bold text-[var(--adm-text)]">
                             {formatted}
+                          </span>
+                          <span className="block text-[10px] text-[var(--adm-text-muted)]">
+                            {sourceBasisLabelHu(snap.metricSourceBasis?.find((basis) => basis.code === metric.code)?.sourceBasis ?? snap.sourceBasis)}
                           </span>
                         </div>
                       );

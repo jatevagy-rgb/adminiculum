@@ -19,10 +19,11 @@
  * below it on the same route.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, getCaseWorkspace, type CaseWorkspace } from "@/lib/api";
 import { AdminBadge, AdminButton, AdminPanel, AdminSectionHeader } from "@/components/adminiculum/ui";
 import { CompactState, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
+import { formatDeadline } from "@/lib/businessDateTime";
 import { Modal } from "@/components/ui/Modal";
 import { FormField, Select, Textarea } from "@/components/ui/Form";
 import {
@@ -68,9 +69,7 @@ const STALE_REVIEW_MESSAGE =
   "Az ellenőrzés már nem aktuális. Futtasd újra az ellenőrzést, majd hagyd jóvá újra a kiválasztott elemeket.";
 
 function formatDateTime(value: string | null | undefined): string {
-  if (!value) return "—";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("hu-HU");
+  return formatDeadline(value);
 }
 
 function sameTerms(a: ManualSensitiveTerm[], b: ManualSensitiveTerm[]): boolean {
@@ -115,6 +114,9 @@ function sourceTitle(source: CaseContextSourceDTO, communications: CaseWorkspace
 }
 
 export function CaseContextV2({ caseId }: { caseId: string }) {
+  return <CaseContextV2Content key={caseId} caseId={caseId} />;
+}
+function CaseContextV2Content({ caseId }: { caseId: string }) {
   const [sources, setSources] = useState<CaseContextSourceDTO[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(true);
   const [sourcesError, setSourcesError] = useState<string | null>(null);
@@ -140,35 +142,44 @@ export function CaseContextV2({ caseId }: { caseId: string }) {
   const [applyError, setApplyError] = useState<SourceError | null>(null);
   const [zeroApprovalOpen, setZeroApprovalOpen] = useState(false);
 
+  const sourceGeneration = useRef(0);
+  const communicationGeneration = useRef(0);
   const loadSources = useCallback(async () => {
+    const request = ++sourceGeneration.current;
     setSourcesLoading(true);
     setSourcesError(null);
     try {
-      setSources(await listCaseContextSources(caseId));
+      const items = await listCaseContextSources(caseId);
+      if (request === sourceGeneration.current) setSources(items);
     } catch {
-      setSourcesError("A mentett kontextusforrások most nem tölthetők be.");
+      if (request === sourceGeneration.current) setSourcesError("A mentett kontextusforrások most nem tölthetők be.");
     } finally {
-      setSourcesLoading(false);
+      if (request === sourceGeneration.current) setSourcesLoading(false);
     }
   }, [caseId]);
 
   const loadCommunications = useCallback(async () => {
+    const request = ++communicationGeneration.current;
     setCommunicationsLoading(true);
     setCommunicationsError(false);
     try {
       const workspace = await getCaseWorkspace(caseId);
+      if (request !== communicationGeneration.current) return;
+      if (workspace.warnings?.some((warning) => warning.section === "communications")) throw new Error("Communication projection unavailable");
       setCommunications(workspace.communications ?? []);
     } catch {
+      if (request !== communicationGeneration.current) return;
       setCommunications([]);
       setCommunicationsError(true);
     } finally {
-      setCommunicationsLoading(false);
+      if (request === communicationGeneration.current) setCommunicationsLoading(false);
     }
   }, [caseId]);
 
   useEffect(() => {
     void loadSources();
     void loadCommunications();
+    return () => { ++sourceGeneration.current; ++communicationGeneration.current; };
   }, [loadSources, loadCommunications]);
 
   useEffect(() => {

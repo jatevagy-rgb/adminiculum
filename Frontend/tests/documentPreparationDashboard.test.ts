@@ -48,7 +48,7 @@ describe("Document preparation — selection rules", () => {
     assert.match(source, /\}, \[selectedDocumentId, loadDocument\]\);/);
     // All four signals are fetched for the selected id in one coordinated load.
     assert.match(source, /getDocumentWorkContext\(documentId\)/);
-    assert.match(source, /listDocumentLegalAnalyses\(documentId, \{ caseId, documentSourceType: "DOCUMENT" \}\)/);
+    assert.doesNotMatch(source, /listDocumentLegalAnalyses/);
     assert.match(source, /getAnonymousDocumentsBySource\(documentId\)/);
     // A late response for a previous selection can never commit.
     assert.match(source, /if \(requestRef\.current !== requestId\) return;/);
@@ -101,7 +101,7 @@ describe("Document preparation — Kockázati mátrix tile", () => {
     ]);
     assert.equal(summary.hasMatrix, false);
     assert.equal(summary.latestUpdatedAt, null);
-    assert.match(dashboard(), /Még nincs kockázati mátrix\./);
+    assert.doesNotMatch(dashboard(), /Még nincs kockázati mátrix\./);
   });
 
   it("8. riskMatrixDetected=true is the recorded state with the latest timestamp", () => {
@@ -112,7 +112,7 @@ describe("Document preparation — Kockázati mátrix tile", () => {
     ]);
     assert.equal(summary.hasMatrix, true);
     assert.equal(summary.latestUpdatedAt, "2026-05-01T00:00:00.000Z");
-    assert.match(dashboard(), /Kockázati elemzés rögzítve/);
+    assert.doesNotMatch(dashboard(), /Kockázati elemzés rögzítve/);
   });
 
   it("16. never fabricates a risk level or count", () => {
@@ -226,7 +226,7 @@ describe("Document preparation — placement and preservation", () => {
     assert.match(source, /<DocumentPreparationDashboard/);
     assert.match(source, /documents=\{ws\.documents\}/);
     // Full-width block placed after the two-column cockpit grid.
-    const marker = source.indexOf("{/* ---- 4. Document preparation");
+    const marker = source.indexOf('<DocumentPreparationDashboard');
     const cockpit = source.indexOf('title="Aktív munka"');
     assert.ok(marker > -1 && cockpit > -1 && cockpit < marker, "preparation surface must sit below the operational cockpit");
     const reader = read("src/app/cases/[caseId]/documents/page.tsx");
@@ -246,12 +246,12 @@ describe("Document preparation — placement and preservation", () => {
 
   it("17. existing case task/deadline/communication behavior is preserved", () => {
     const source = overview();
-    for (const title of ['title="Aktív munka"', 'title="Határidők"', 'title="Kommunikáció"', 'title="Dokumentumok"']) {
+    for (const title of ['title="Aktív munka"', 'title="Határidők"', '<WordWideCommunicationLeaf', 'title="Dokumentumok"']) {
       assert.ok(source.includes(title), `${title} must remain in the cockpit`);
     }
     assert.match(source, /CaseTimeBillingSummary/);
     assert.match(source, /data-testid="case-workspace-quick-actions"/);
-    assert.doesNotMatch(source, /reviewSummary/);
+    assert.match(source, /reviewSummary\?\.currentVersionId/);
   });
 
   it("18. desktop uses a clean 2x2 tile layout", () => {
@@ -333,34 +333,13 @@ describe("Document preparation — data contract & truthfulness repair", () => {
     }
   });
 
-  it("dashboard consumes the summary contract and derives risk state from it", () => {
-    const source = dashboard();
-    assert.match(source, /type LegalAnalysisSummaryRecord/);
-    assert.doesNotMatch(source, /type LegalAnalysisRecord\b/);
-    assert.match(source, /const \[analyses, setAnalyses\] = useState<LegalAnalysisSummaryRecord\[\]>\(\[\]\)/);
-    assert.match(source, /summarizeRiskMatrix\(analyses\)/);
-  });
-
-  it("1/2. persisted riskMatrixDetected true/false render the truthful states", () => {
-    assert.match(dashboard(), /Kockázati elemzés rögzítve/);
-    assert.match(dashboard(), /Még nincs kockázati mátrix\./);
-    assert.equal(
-      summarizeRiskMatrix([{ riskMatrixDetected: true, updatedAt: "2026-01-01T00:00:00.000Z" }]).hasMatrix,
-      true,
-    );
-    assert.equal(summarizeRiskMatrix([{ riskMatrixDetected: false }]).hasMatrix, false);
-  });
-
-  it("3. legal-analysis request failure is an unavailable state, never the empty state", () => {
-    const source = dashboard();
-    assert.match(source, /analysesError \? \(/);
-    assert.match(source, /preparation-risk-unavailable/);
-    assert.match(source, /A kockázati elemzés állapota most nem tölthető be\./);
-    assert.match(source, /preparation-risk-retry/);
-    // The error branch is evaluated before the empty/recorded branches.
-    const errorIndex = source.indexOf("preparation-risk-unavailable");
-    const emptyIndex = source.indexOf("preparation-risk-empty");
-    assert.ok(errorIndex > -1 && emptyIndex > -1 && errorIndex < emptyIndex);
+  it("matrix summary belongs to the canonical editor, never inferred from unrelated analysis flags", () => {
+    assert.doesNotMatch(dashboard(), /summarizeRiskMatrix|riskMatrixDetected|setAnalyses|listDocumentLegalAnalyses/);
+    assert.match(dashboard(), /onOpenRiskMatrix\?\.\(selectedDocumentId\)/);
+    const matrix = read("src/components/cases/word-workflow/tools/WordRiskMatrixPanel.tsx");
+    assert.match(matrix, /data-testid="risk-matrix-summary" data-analysis-id=\{activeAnalysisId/);
+    assert.match(matrix, /saveError && targetScope !== scope \? 'A mentett mátrix most nem ellenőrizhető.'/);
+    assert.match(matrix, /rows.length/);
   });
 
   it("4. anonymous-doc request failure is an unavailable state, never the empty state", () => {
@@ -384,7 +363,7 @@ describe("Document preparation — data contract & truthfulness repair", () => {
     assert.doesNotMatch(source, /getAnonymousDocumentsBySource\(documentId\)\.catch\(/);
     // Separate settled results feed separate truthful states.
     assert.match(source, /Promise\.allSettled\(/);
-    assert.match(source, /analysesResult\.status === "fulfilled"/);
+    assert.match(source, /cardResult\.status === "fulfilled"/);
     assert.match(source, /anonymousResult\.status === "fulfilled"/);
   });
 

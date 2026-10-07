@@ -220,8 +220,12 @@ const flush = () =>
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 
-const q = (selector: string) => container.querySelector(`[data-testid="${selector}"]`);
-const qAll = (selectorPrefix: string) => container.querySelectorAll(`[data-testid^="${selectorPrefix}"]`);
+type TestControl = HTMLElement & HTMLInputElement & HTMLTextAreaElement & HTMLButtonElement;
+const q = (selector: string): TestControl => {
+  const element = document.querySelector<TestControl>(`[data-testid="${selector}"]`);
+  return element!;
+};
+const qAll = (selectorPrefix: string) => document.querySelectorAll(`[data-testid^="${selectorPrefix}"]`);
 
 const click = (selector: string) => {
   const element = q(selector);
@@ -430,7 +434,7 @@ test("5. detect renders candidates and approval starts explicitly empty", async 
   assert.equal(q("ccv2-candidate-checkbox-cand-1").checked, false, "candidate 1 starts unapproved");
   assert.equal(q("ccv2-candidate-checkbox-cand-2").checked, false, "candidate 2 starts unapproved");
   assert.match(q("ccv2-approved-count").textContent, /0 \/ 2/, "approval count is 0 of 2");
-  assert.equal(container.querySelectorAll('[role="tab"]').length, 0, "no incomplete tab semantics");
+  assert.equal(document.querySelectorAll('[role="tab"]').length, 0, "no incomplete tab semantics");
 });
 
 test("6. candidate row leads with originalText; detector internals stay hidden", async () => {
@@ -678,14 +682,14 @@ test("18. communication fetch failure shows an error state, not an empty state",
 test("19. paste textarea and communication select carry explicit labels", async () => {
   await freshRender();
   await openPasteModal();
-  assert.ok(container.querySelector('label[for="ccv2-paste-textarea"]'), "paste textarea has an associated label");
+  assert.ok(document.querySelector('label[for="ccv2-paste-textarea"]'), "paste textarea has an associated label");
 
   click("ccv2-source-mode-paste");
   await flush();
-  assert.equal(container.querySelector('label[for="ccv2-paste-textarea"]'), null, "closed modal removes its controls");
+  assert.equal(document.querySelector('label[for="ccv2-paste-textarea"]'), null, "closed modal removes its controls");
   click("ccv2-source-mode-communication");
   await flush();
-  assert.ok(container.querySelector('label[for="ccv2-communication-select"]'), "communication select has an associated label");
+  assert.ok(document.querySelector('label[for="ccv2-communication-select"]'), "communication select has an associated label");
 });
 
 test("20. zero approved result keeps raw source immutable and lists the applied count honestly", async () => {

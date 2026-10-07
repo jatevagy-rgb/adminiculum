@@ -36,10 +36,15 @@ function getUserId(req: Request): string | undefined {
 }
 
 function gateHandoffListRead(
-  _req: Request,
+  req: Request,
   res: Response,
   next: NextFunction
 ): void {
+  // Complete history must distinguish unavailable persistence from no records.
+  if (req.query.includeArchived === 'true') {
+    requireHandoffFoundation(req, res, next);
+    return;
+  }
   if (!isHandoffFoundationEnabled()) {
     res.json([]);
     return;
@@ -67,7 +72,9 @@ function sendServiceError(res: Response, error: unknown): void {
 router.get('/cases/:caseId/handoff-packages', authenticate, gateHandoffListRead, requireHandoffCaseAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
-    const packages = await handoffPackagesService.listHandoffPackages(caseId);
+    const packages = await handoffPackagesService.listHandoffPackages(caseId, {
+      includeArchived: req.query.includeArchived === 'true',
+    });
     res.json(packages);
   } catch (error) {
     console.error('listHandoffPackages error:', error instanceof Error ? error.message : 'Unknown error');
@@ -76,41 +83,14 @@ router.get('/cases/:caseId/handoff-packages', authenticate, gateHandoffListRead,
 });
 
 // POST /api/v1/cases/:caseId/handoff-packages
-router.post('/cases/:caseId/handoff-packages', authenticate, requireHandoffFoundation, requireHandoffCaseAccess, async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { caseId } = req.params as { caseId: string };
-    const {
-      sourceDocumentId,
-      anonymizedDocumentId,
-      generatedContractId,
-      legalAnalysisId,
-      reviewNotesId,
-      preparerSummary,
-      packageType,
-    } = req.body || {};
-
-    if (!caseId) {
-      res.status(400).json({ status: 400, code: 'CASE_ID_REQUIRED', message: 'caseId is required' });
-      return;
-    }
-
-    const pkg = await handoffPackagesService.createHandoffPackage({
-      caseId,
-      sourceDocumentId,
-      anonymizedDocumentId,
-      generatedContractId,
-      legalAnalysisId,
-      reviewNotesId,
-      preparerSummary,
-      packageType,
-      userId: getUserId(req),
-    });
-
-    res.status(201).json(pkg);
-  } catch (error) {
-    console.error('createHandoffPackage error:', error instanceof Error ? error.message : 'Unknown error');
-    sendServiceError(res, error);
-  }
+router.post('/cases/:caseId/handoff-packages', authenticate, requireHandoffCaseAccess, (req: Request, res: Response): void => {
+  const { caseId } = req.params as { caseId: string };
+  res.status(410).json({
+    status: 410,
+    code: 'HANDOFF_PACKAGE_CREATION_RETIRED',
+    message: 'New handoff packages are retired. Select an existing case task and use its submission workflow. Existing packages remain available for continuation.',
+    caseTasksUrl: `/cases/${encodeURIComponent(caseId)}#ck-tasks`,
+  });
 });
 
 // GET /api/v1/handoff-packages/:id

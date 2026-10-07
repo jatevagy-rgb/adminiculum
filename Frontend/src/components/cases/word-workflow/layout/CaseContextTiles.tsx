@@ -5,6 +5,7 @@ import { DurableCaseTiles } from "./DurableCaseTiles";
 import { CaseClientOwner } from "./CaseClientOwner";
 import type { CaseWorkspace } from "@/lib/api";
 import { getCaseStatusLabel } from "@/lib/caseLabels";
+import { formatDeadline } from "@/lib/businessDateTime";
 
 // Presentation references only. Shared text remains in the canonical case fields.
 // User-created content and user-scoped ordering require a persistence contract.
@@ -49,7 +50,7 @@ export function PersistedDeadline({ dueAt }: { dueAt: string | null }) {
   if (!dueAt) return <span>Nincs rögzített határidő</span>;
   if (!Number.isFinite(Date.parse(dueAt))) return <span>A határidő nem értelmezhető.</span>;
   return <span data-testid="persisted-deadline" className="inline-flex flex-wrap gap-x-2">
-    <time dateTime={dueAt}>{new Date(dueAt).toLocaleString("hu-HU", { dateStyle: "short", timeStyle: "short" })}</time>
+    <time dateTime={dueAt}>{formatDeadline(dueAt)}</time>
     {now !== null ? <span className="text-[var(--adm-text-muted)]">· {deadlineRemaining(dueAt, now)}</span> : null}
   </span>;
 }

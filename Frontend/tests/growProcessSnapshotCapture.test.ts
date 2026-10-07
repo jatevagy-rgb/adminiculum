@@ -28,7 +28,7 @@ test("growApi reuses the canonical POST /processes/:processId/observations endpo
 
 test("capture action is wired into the internal process detail surface with the existing process id", () => {
   const src = read(COMPANY_WORKSPACE);
-  assert.match(src, /import \{ growApi \} from "@\/lib\/growApi";/);
+  assert.match(src, /import \{ growApi, sourceBasisLabelHu \} from "@\/lib\/growApi";/);
   assert.match(src, /function ProcessSnapshotCapture\(\{/);
   assert.match(src, /await growApi\.captureProcessObservation\(clientId, processId\);/);
   assert.match(src, /<ProcessSnapshotCapture[\s\S]*?processId=\{process\.id\}/);
@@ -39,7 +39,7 @@ test("capture is the thinnest interaction: no form, no invented input, no metric
   const src = read(COMPANY_WORKSPACE);
   const api = read(GROW_API);
   // Server stays authoritative for snapshot structure, metrics and timestamps.
-  assert.match(src, /A mérés a rögzített folyamatlépésekből determinisztikusan számított pillanatképet rögzít\./);
+  assert.match(src, /A rögzítés a folyamatlépésekből számított pillanatképet készít; a becsült bemenet becslés marad\./);
   // No client-side metric formula or backend metric calculator is imported/used.
   assert.doesNotMatch(api, /calculateProcessMetrics/);
   assert.doesNotMatch(src, /calculateProcessMetrics|TOTAL_ACTIVE_MINUTES\s*=|TOTAL_WAITING_MINUTES\s*=/);
@@ -49,9 +49,9 @@ test("capture is the thinnest interaction: no form, no invented input, no metric
 
 test("successful capture refreshes the latest snapshot and confirms; failure does not fake success", () => {
   const src = read(COMPANY_WORKSPACE);
-  assert.match(src, /setMessage\("Mérés rögzítve\."\);/);
+  assert.match(src, /setMessage\("Folyamatpillanatkép rögzítve\."\);/);
   assert.match(src, /onCaptured\(\);/);
-  assert.match(src, /setCaptureError\("A mérés rögzítése nem sikerült\."\);/);
+  assert.match(src, /setCaptureError\("A folyamatpillanatkép rögzítése nem sikerült\."\);/);
   // Soft re-read keeps the confirmation visible and refreshes the data room.
   assert.match(src, /refreshDataRoom/);
   assert.match(src, /setRoom\(await clientWorkspaceApi\.getDataRoom\(clientId\)\);/);

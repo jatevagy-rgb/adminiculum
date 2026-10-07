@@ -24,6 +24,9 @@
 import type { InterventionCode } from '../research/interventions';
 import { interventionLabelHu } from '../research/interventions';
 import type { SurveyCategoryKey } from '../research/observationSignals';
+import { createVersionedRegistry } from './versionedRegistry';
+import { V2_ASSESSMENT_PACKS, GROW_ASSESSMENT_V2_SCHEMA } from './v2Definitions';
+export { GROW_ASSESSMENT_V2_SCHEMA };
 
 /** Canonical declared assessment schema marker persisted in the observation payload. */
 export const GROW_ASSESSMENT_SCHEMA = 'GROW_ASSESSMENT_V1';
@@ -36,7 +39,7 @@ export type AssessmentAnswer = (typeof ASSESSMENT_ANSWER_VALUES)[number];
 const ANSWER_SET: ReadonlySet<string> = new Set(ASSESSMENT_ANSWER_VALUES);
 
 export interface AssessmentQuestionOption {
-  value: AssessmentAnswer;
+  value: string;
   labelHu: string;
 }
 
@@ -47,17 +50,21 @@ export interface AssessmentQuestion {
   helpTextHu?: string;
   type: 'CHOICE';
   options: readonly AssessmentQuestionOption[];
+  when?: AssessmentCondition;
 }
 
 export interface AssessmentFindingTrigger {
   questionKey: string;
-  answers: readonly AssessmentAnswer[];
+  answers: readonly string[];
 }
+
+export interface AssessmentCondition { mode: 'ALL' | 'ANY'; triggers: readonly AssessmentFindingTrigger[] }
 
 export interface AssessmentFindingRule {
   findingKey: string;
   titleHu: string;
   summaryHu: string;
+  nextCheckHu?: string;
   dimensionKey: string;
   /** ALL triggers must match when 'ALL', otherwise any single trigger matches. */
   mode?: 'ANY' | 'ALL';
@@ -517,14 +524,15 @@ export const ASSESSMENT_PACKS: readonly AssessmentPack[] = Object.freeze([
   SYSTEMS_DATA_FLOW,
 ]);
 
-const PACK_BY_KEY = new Map<string, AssessmentPack>(ASSESSMENT_PACKS.map((p) => [p.packKey, p]));
+const VERSIONED_REGISTRY = createVersionedRegistry([...ASSESSMENT_PACKS, ...V2_ASSESSMENT_PACKS]);
+export const { getCurrentAssessmentPack, getAssessmentPackVersion, listCurrentAssessmentPacks } = VERSIONED_REGISTRY;
 
 export function listAssessmentPacks(): readonly AssessmentPack[] {
   return ASSESSMENT_PACKS;
 }
 
 export function getAssessmentPack(packKey: string): AssessmentPack | undefined {
-  return PACK_BY_KEY.get(String(packKey ?? ''));
+  return getCurrentAssessmentPack(String(packKey ?? ''));
 }
 
 export function assessmentQuestionKeys(pack: AssessmentPack): string[] {
@@ -544,6 +552,8 @@ export interface AssessmentFindingResult {
   suggestedInterventionCodes: InterventionCode[];
   supportingCorpusKeys: string[];
   triggeringQuestionKeys: string[];
+  nextCheckHu?: string;
+  defersAutomation?: boolean;
 }
 
 export interface AssessmentDirectionResult {
@@ -567,6 +577,23 @@ export interface AssessmentEvaluation {
 export interface AssessmentAnswerInput {
   questionKey: string;
   answer: string;
+}
+
+/** Conditional questions reference earlier questions only. Inactive answers
+ * cannot activate descendants. This same metadata drives the shared portal UI. */
+export function activeAssessmentQuestions(pack: AssessmentPack, answers: readonly AssessmentAnswerInput[]): AssessmentQuestion[] {
+  const byKey = new Map(answers.map(a => [a.questionKey, a.answer]));
+  const active = new Set<string>();
+  return pack.questions.filter(q => {
+    const matches = q.when?.triggers.map(t => active.has(t.questionKey) && t.answers.includes(byKey.get(t.questionKey) ?? ''));
+    const visible = !q.when || (q.when.mode === 'ALL' ? matches!.every(Boolean) : matches!.some(Boolean));
+    if (visible) active.add(q.questionKey);
+    return visible;
+  });
+}
+
+export function isAssessmentSchema(schema: unknown): boolean {
+  return schema === GROW_ASSESSMENT_SCHEMA || schema === GROW_ASSESSMENT_V2_SCHEMA;
 }
 
 function ruleTriggeringQuestions(
@@ -593,10 +620,11 @@ export function evaluateAssessmentAnswers(
   packVersion: number,
   answers: readonly AssessmentAnswerInput[],
 ): AssessmentEvaluation | null {
-  const pack = getAssessmentPack(packKey);
+  const pack = getAssessmentPackVersion(packKey, Number(packVersion));
   if (!pack) return null;
   if (Number(packVersion) !== pack.version) return null;
-  if (!Array.isArray(answers) || answers.length !== pack.questions.length) return null;
+  try { answers = validateAssessmentSubmission(packKey, packVersion, answers).answers; } catch { return null; }
+  const activeQuestions = activeAssessmentQuestions(pack, answers);
 
   const answerByKey = new Map<string, string>();
   for (const item of answers) {
@@ -605,12 +633,11 @@ export function evaluateAssessmentAnswers(
     if (!pack.questions.some((q) => q.questionKey === key)) return null;
     if (answerByKey.has(key)) return null;
     const normalized = item.answer.trim().toUpperCase();
-    if (!ANSWER_SET.has(normalized)) return null;
     const question = pack.questions.find((q) => q.questionKey === key)!;
     if (!question.options.some((o) => o.value === normalized)) return null;
     answerByKey.set(key, normalized);
   }
-  if (answerByKey.size !== pack.questions.length) return null;
+  if (answerByKey.size !== activeQuestions.length) return null;
 
   // Collect findings. First rule for a findingKey wins; subsequent rules with
   // the same key union their supporting intervention codes deterministically.
@@ -638,6 +665,8 @@ export function evaluateAssessmentAnswers(
       suggestedInterventionCodes: [...rule.suggestedInterventionCodes],
       supportingCorpusKeys: [...rule.supportingCorpusKeys],
       triggeringQuestionKeys: triggers,
+      ...(rule.nextCheckHu ? { nextCheckHu: rule.nextCheckHu } : {}),
+      ...(rule.defersAutomation && pack.version >= 2 ? { defersAutomation: true } : {}),
     };
     byKey.set(rule.findingKey, result);
     findings.push(result);
@@ -673,7 +702,7 @@ export function evaluateAssessmentAnswers(
 
   const unknownDimensions: string[] = [];
   const notApplicableDimensions: string[] = [];
-  for (const question of pack.questions) {
+  for (const question of activeQuestions) {
     if (answerByKey.get(question.questionKey) === 'UNKNOWN' && !unknownDimensions.includes(question.dimensionKey)) {
       unknownDimensions.push(question.dimensionKey);
     }
@@ -689,8 +718,8 @@ export function evaluateAssessmentAnswers(
     directions,
     unknownDimensions,
     notApplicableDimensions,
-    answeredCount: pack.questions.length,
-    questionCount: pack.questions.length,
+    answeredCount: activeQuestions.length,
+    questionCount: activeQuestions.length,
   };
 }
 
@@ -727,12 +756,12 @@ export function validateAssessmentSubmission(
   packVersion: unknown,
   rawAnswers: unknown,
 ): ValidatedAssessmentSubmission {
-  const pack = getAssessmentPack(packKey);
-  if (!pack) {
+  if (!getCurrentAssessmentPack(packKey)) {
     throw new AssessmentValidationError(400, 'ASSESSMENT_UNKNOWN_PACK', 'Ismeretlen felmérés.');
   }
   const version = Number(packVersion);
-  if (!Number.isInteger(version) || version !== pack.version) {
+  const pack = getAssessmentPackVersion(packKey, version);
+  if (!Number.isInteger(version) || !pack) {
     throw new AssessmentValidationError(400, 'ASSESSMENT_UNKNOWN_VERSION', 'Nem támogatott felmérés-verzió.');
   }
   if (!Array.isArray(rawAnswers)) {
@@ -741,7 +770,7 @@ export function validateAssessmentSubmission(
   if (rawAnswers.length > ASSESSMENT_MAX_ANSWERS) {
     throw new AssessmentValidationError(400, 'ASSESSMENT_PAYLOAD_TOO_LARGE', 'A beküldött válaszok száma túl nagy.');
   }
-  if (rawAnswers.length !== pack.questions.length) {
+  if (pack.version === 1 && rawAnswers.length !== pack.questions.length) {
     throw new AssessmentValidationError(400, 'ASSESSMENT_INCOMPLETE', 'A felmérés befejezéséhez minden kérdést meg kell válaszolni.');
   }
 
@@ -766,7 +795,7 @@ export function validateAssessmentSubmission(
       throw new AssessmentValidationError(400, 'ASSESSMENT_INVALID_ANSWER', 'Érvénytelen válasz.');
     }
     const normalized = answer.trim().toUpperCase();
-    if (!ANSWER_SET.has(normalized)) {
+    if ((pack.version === 1 && !ANSWER_SET.has(normalized)) || (pack.version >= 2 && normalized !== answer)) {
       throw new AssessmentValidationError(400, 'ASSESSMENT_INVALID_ANSWER', 'Érvénytelen válasz.');
     }
     const question = pack.questions.find((q) => q.questionKey === questionKey)!;
@@ -778,6 +807,13 @@ export function validateAssessmentSubmission(
 
   // Canonical deterministic order (pack question order) so identical answer sets
   // always produce an identical canonical payload/digest.
-  const ordered = pack.questions.map((q) => answers.find((a) => a.questionKey === q.questionKey)!);
+  const activeQuestions = activeAssessmentQuestions(pack, answers);
+  if (answers.some(a => !activeQuestions.some(q => q.questionKey === a.questionKey))) {
+    throw new AssessmentValidationError(400, 'ASSESSMENT_INACTIVE_QUESTION', 'Ehhez a válaszúthoz nem tartozó kérdés szerepel a beküldésben.');
+  }
+  if (answers.length !== activeQuestions.length) {
+    throw new AssessmentValidationError(400, 'ASSESSMENT_INCOMPLETE', 'A felmérés befejezéséhez minden megjelenő kérdést meg kell válaszolni.');
+  }
+  const ordered = activeQuestions.map((q) => answers.find((a) => a.questionKey === q.questionKey)!);
   return { pack, answers: ordered };
 }

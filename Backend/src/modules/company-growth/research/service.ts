@@ -35,15 +35,17 @@ import {
   assertClientReadAccess,
   safeText,
 } from '../../client-interaction/base';
-import { DOMAIN_KEYS, ensureCorpusSeeded, findCorpusEvidenceForDomains, registerInternalEvidence, toEvidenceDTO } from './corpus';
+import { DOMAIN_KEYS, ensureCorpusSeeded, findCorpusEvidenceForDomains, registerInternalEvidence, toEvidenceDTO, projectEvidenceSourceBasis, projectSnapshotEvidenceSummary, EvidenceDTO } from './corpus';
 import { computeRoiEstimate, InputValueOrigin, RoiEstimate, RoiProvenanceType, ROI_ENGINE_VERSION } from './roiEngine';
-import { deriveProcessSignals, selectInterventions } from './interventions';
+import { deriveProcessSignals, selectInterventions, INTERVENTIONS } from './interventions';
+import { projectSnapshotSourceBasis, SourceBasis } from '../observation/sourceBasis';
 import {
   GROW_ASSESSMENT_SCHEMA,
   GROW_PAIN_INTAKE_KIND,
   observationsToGrowSignals,
   supersedeAssessmentObservations,
   type GrowSignal,
+  type GrowAssessmentFinding,
   type NormalizableObservation,
 } from './observationSignals';
 import { createInitiative } from '../../client-company/service';
@@ -79,6 +81,7 @@ export function decideSufficiency(input: {
   disputedEvidenceCount: number;
   measured: boolean;
   declared: boolean;
+  sourceBasis?: SourceBasis | null;
 }): { decision: SufficiencyDecision; reasons: string[] } {
   const knownDomain = (DOMAIN_KEYS as readonly string[]).includes(input.domainKey);
   if (!knownDomain) {
@@ -100,7 +103,7 @@ export function decideSufficiency(input: {
     };
   }
   if (input.verifiedEvidenceCount === 0) {
-    if (input.measured || input.declared) {
+    if (input.measured || input.declared || input.sourceBasis === 'ESTIMATED' || input.sourceBasis === 'DERIVED') {
       return {
         decision: 'NEEDS_MORE_DATA',
         reasons: ['Nincs ellenőrzött külső szakirodalmi bizonyíték ehhez a területhez.'],
@@ -108,13 +111,17 @@ export function decideSufficiency(input: {
     }
     return { decision: 'INSUFFICIENT_EVIDENCE', reasons: ['A diagnózis jelzés belső bizonyíték nélkül áll.'] };
   }
-  if (input.measured || input.declared) {
+  if (input.measured || input.declared || input.sourceBasis === 'ESTIMATED' || input.sourceBasis === 'DERIVED') {
     return {
       decision: 'SUPPORTED',
       reasons: [
         input.measured
           ? 'Ellenőrzött szakirodalmi bizonyíték + ügyfél-mérési pillanatkép támasztja alá.'
-          : 'Ellenőrzött szakirodalmi bizonyíték + deklarált megfigyelés támasztja alá.',
+          : input.sourceBasis === 'ESTIMATED'
+            ? 'Ellenőrzött szakirodalmi bizonyíték + becsült folyamatadat támasztja alá; nem tényleges mérés.'
+            : input.sourceBasis === 'DERIVED'
+              ? 'Ellenőrzött szakirodalmi bizonyíték + rögzített folyamatadatból levezetett jelzés támasztja alá.'
+              : 'Ellenőrzött szakirodalmi bizonyíték + deklarált megfigyelés támasztja alá.',
       ],
     };
   }
@@ -245,12 +252,15 @@ interface DiagnosisRuleOutcome {
     observationIds: string[];
     businessProcessId: string | null;
     severity: 'HIGH' | 'MEDIUM' | 'LOW';
+    sourceBasis?: SourceBasis | null;
+    assessmentFindings?: GrowAssessmentFinding[];
+    safetyObservationIds?: string[];
   };
 }
 
 function diagnoseProcess(
   process: { id: string; ownerPersonId: string | null },
-  latestSnapshot: { id: string; metrics: unknown } | null,
+  latestSnapshot: { id: string; metrics: unknown; provenance: unknown } | null,
 ): DiagnosisRuleOutcome[] {
   const out: DiagnosisRuleOutcome[] = [];
   const refs = (severity: 'HIGH' | 'MEDIUM' | 'LOW') => ({
@@ -278,25 +288,32 @@ function diagnoseProcess(
   const systemSwitches = numMetric(m, 'SYSTEM_SWITCH_COUNT');
   const systemCount = numMetric(m, 'SYSTEM_COUNT');
   const unassigned = numMetric(m, 'UNASSIGNED_STEP_COUNT');
-  const ownerPresent = m.get('PROCESS_OWNER_PRESENT') === true;
+  const ownerPresent = m.get('PROCESS_OWNER_PRESENT');
   const personChanges = numMetric(m, 'RESPONSIBLE_PERSON_CHANGE_COUNT');
   const totalActive = numMetric(m, 'TOTAL_ACTIVE_MINUTES');
   const handoffs = numMetric(m, 'HANDOFF_STEP_COUNT');
+  const projection = projectSnapshotSourceBasis(latestSnapshot.provenance, latestSnapshot.metrics);
+  const add = (domainKey: string, severity: DiagnosisRuleOutcome['severity'], codes: string[]) => {
+    const bases = projection.metricSourceBasis.filter(metric => codes.includes(metric.code)).map(metric => metric.sourceBasis);
+    const sourceBasis = bases.includes('ESTIMATED') ? 'ESTIMATED'
+      : bases.length && bases.every(basis => basis === 'DERIVED') ? 'DERIVED' : null;
+    out.push({ domainKey, measured: false, declared: false, severity, sourceRefs: { ...refs(severity), sourceBasis } });
+  };
 
   if ((waitingShare != null && waitingShare >= 0.4) || (approvalSteps != null && approvalSteps >= 3)) {
-    out.push({ domainKey: 'APPROVAL_DELAY', measured: true, declared: false, severity: 'HIGH', sourceRefs: refs('HIGH') });
+    add('APPROVAL_DELAY', 'HIGH', waitingShare != null && waitingShare >= 0.4 ? ['WAITING_SHARE'] : ['APPROVAL_STEP_COUNT']);
   }
   if (dataEntry != null && dataEntry >= 3) {
-    out.push({ domainKey: 'DUPLICATE_DATA_ENTRY', measured: true, declared: false, severity: 'MEDIUM', sourceRefs: refs('MEDIUM') });
+    add('DUPLICATE_DATA_ENTRY', 'MEDIUM', ['DATA_ENTRY_STEP_COUNT']);
   }
   if ((systemSwitches != null && systemSwitches >= 3) || (systemCount != null && systemCount >= 4)) {
-    out.push({ domainKey: 'SYSTEM_SWITCHING', measured: true, declared: false, severity: 'MEDIUM', sourceRefs: refs('MEDIUM') });
+    add('SYSTEM_SWITCHING', 'MEDIUM', systemSwitches != null && systemSwitches >= 3 ? ['SYSTEM_SWITCH_COUNT'] : ['SYSTEM_COUNT']);
   }
-  if (!ownerPresent || (unassigned != null && unassigned >= 2) || (personChanges != null && personChanges >= 4)) {
-    out.push({ domainKey: 'UNCLEAR_OWNERSHIP', measured: true, declared: false, severity: 'MEDIUM', sourceRefs: refs('MEDIUM') });
+  if (ownerPresent === false || (unassigned != null && unassigned >= 2) || (personChanges != null && personChanges >= 4)) {
+    add('UNCLEAR_OWNERSHIP', 'MEDIUM', ownerPresent === false ? ['PROCESS_OWNER_PRESENT'] : unassigned != null && unassigned >= 2 ? ['UNASSIGNED_STEP_COUNT'] : ['RESPONSIBLE_PERSON_CHANGE_COUNT']);
   }
   if (totalActive != null && totalActive >= 240 && (handoffs ?? 0) >= 3) {
-    out.push({ domainKey: 'MANUAL_ADMIN_LOAD', measured: true, declared: false, severity: 'HIGH', sourceRefs: refs('HIGH') });
+    add('MANUAL_ADMIN_LOAD', 'HIGH', ['TOTAL_ACTIVE_MINUTES', 'HANDOFF_STEP_COUNT']);
   }
 
   return out;
@@ -394,7 +411,7 @@ async function loadLatestAssessmentObservations(
     FROM "observations"
     WHERE "clientId" = ${clientId}
       AND "observationType"::text = 'DECLARED_SURVEY'
-      AND "rawPayload"->>'schema' = ${GROW_ASSESSMENT_SCHEMA}
+      AND "rawPayload"->>'schema' IN (${GROW_ASSESSMENT_SCHEMA}, 'GROW_ASSESSMENT_V2')
     ORDER BY
       "rawPayload"->>'packKey',
       COALESCE("rawPayload"->'provenance'->>'workspaceId', ''),
@@ -502,6 +519,7 @@ async function executeRun(
   // is the existing unscoped bucket (surveys submitted without a process).
   type SurveyHit = { observationIds: string[]; businessProcessId: string | null };
   const surveyHitsByDomain = new Map<string, Map<string | null, SurveyHit>>();
+  const scopedSignals: GrowSignal[] = [];
   for (const signal of declaredSignals) {
     let businessProcessId: string | null;
     if (!signal.businessProcessId) {
@@ -522,6 +540,23 @@ async function executeRun(
       businessProcessId = signal.businessProcessId;
     }
 
+    scopedSignals.push({ ...signal, businessProcessId });
+    // V2 findings are propositions, not category-level negative evidence. Keep
+    // each identity separate from metric diagnoses and from other findings.
+    if (signal.provenance.assessmentFinding) {
+      outcomes.push({
+        domainKey: signal.domainKey,
+        measured: false,
+        declared: true,
+        severity: 'MEDIUM',
+        sourceRefs: {
+          snapshotIds: [], observationIds: [signal.observationId], businessProcessId,
+          severity: 'MEDIUM', sourceBasis: 'DECLARED',
+          assessmentFindings: [signal.provenance.assessmentFinding],
+        },
+      });
+      continue;
+    }
     let byProcess = surveyHitsByDomain.get(signal.domainKey);
     if (!byProcess) {
       byProcess = new Map<string | null, SurveyHit>();
@@ -536,7 +571,7 @@ async function executeRun(
     const latest = latestByProcess.get(process.id) ?? null;
     const diags = diagnoseProcess(
       { id: process.id, ownerPersonId: process.ownerPersonId },
-      latest ? { id: latest.id, metrics: latest.metrics } : null,
+      latest ? { id: latest.id, metrics: latest.metrics, provenance: latest.provenance } : null,
     );
     for (const d of diags) {
       const byProcess = surveyHitsByDomain.get(d.domainKey);
@@ -561,7 +596,7 @@ async function executeRun(
   // Declared-only outcomes: one per (domain, process) bucket that did not
   // converge with a measured diagnosis of the SAME process. A distinct process
   // is never suppressed by another process's outcome.
-  const domainsWithMeasured = new Set(outcomes.map((o) => o.domainKey));
+  const domainsWithMeasured = new Set(outcomes.filter(o => !o.sourceRefs.assessmentFindings).map((o) => o.domainKey));
   for (const [domain, byProcess] of surveyHitsByDomain) {
     for (const [businessProcessId, hit] of byProcess) {
       if (businessProcessId === null) {
@@ -569,7 +604,7 @@ async function executeRun(
         // has no measured diagnosis at all.
         if (domainsWithMeasured.has(domain)) continue;
       } else if (
-        outcomes.some((o) => o.domainKey === domain && o.sourceRefs.businessProcessId === businessProcessId)
+        outcomes.some((o) => !o.sourceRefs.assessmentFindings && o.domainKey === domain && o.sourceRefs.businessProcessId === businessProcessId)
       ) {
         continue;
       }
@@ -583,6 +618,7 @@ async function executeRun(
           observationIds: [...hit.observationIds],
           businessProcessId,
           severity: 'MEDIUM',
+          sourceBasis: 'DECLARED',
         },
       });
     }
@@ -592,15 +628,32 @@ async function executeRun(
   let recommendationCount = 0;
 
   for (const outcome of outcomes) {
-    const labels = DOMAIN_LABELS_HU[outcome.domainKey] ?? DOMAIN_LABELS_HU.GENERAL_FLOW;
+    const finding = outcome.sourceRefs.assessmentFindings?.[0];
+    const safetySignals = scopedSignals.filter(signal =>
+      outcome.sourceRefs.observationIds.includes(signal.observationId)
+      || ((finding || signal.provenance.assessmentFinding)
+        && (signal.businessProcessId === null || signal.businessProcessId === outcome.sourceRefs.businessProcessId)));
+    // Cite safeguards separately from the proposition: a deferral is not
+    // corroborating evidence for a metric diagnosis and cannot lift its gate.
+    const safetyObservationIds = [...new Set(safetySignals.filter(signal => signal.provenance.defersAutomation
+      || signal.provenance.categoryKey === 'REWORK' || signal.provenance.categoryKey === 'UNCLEAR_OWNERSHIP')
+      .map(signal => signal.observationId))];
+    if (safetyObservationIds.length) {
+      outcome.sourceRefs.safetyObservationIds = safetyObservationIds;
+      outcome.sourceRefs.observationIds = [...new Set([...outcome.sourceRefs.observationIds, ...safetyObservationIds])];
+    }
+    const labels = finding
+      ? { title: finding.titleHu, problem: finding.summaryHu, direction: finding.nextCheckHu ?? finding.summaryHu }
+      : DOMAIN_LABELS_HU[outcome.domainKey] ?? DOMAIN_LABELS_HU.GENERAL_FLOW;
     const domain = await db.problemDomain.upsert({
       where: { clientId_key: { clientId, key: outcome.domainKey } },
-      create: { clientId, key: outcome.domainKey, name: labels.title, description: labels.problem },
+      create: { clientId, key: outcome.domainKey, name: (DOMAIN_LABELS_HU[outcome.domainKey] ?? labels).title, description: (DOMAIN_LABELS_HU[outcome.domainKey] ?? labels).problem },
       update: {},
     });
 
-    const verifiedCorpus = await findCorpusEvidenceForDomains([outcome.domainKey], { verifiedOnly: true }, db);
-    const allCorpus = await findCorpusEvidenceForDomains([outcome.domainKey], {}, db);
+    const relevantEvidence = (evidence: { corpusKey: string | null }) => !finding || finding.supportingCorpusKeys.includes(evidence.corpusKey ?? '');
+    const verifiedCorpus = (await findCorpusEvidenceForDomains([outcome.domainKey], { verifiedOnly: true }, db)).filter(relevantEvidence);
+    const allCorpus = (await findCorpusEvidenceForDomains([outcome.domainKey], {}, db)).filter(relevantEvidence);
 
     // Register internal signals as client-internal evidence so they are citable
     // in the evidence drawer with provenance.
@@ -627,10 +680,10 @@ async function executeRun(
         {
           clientId,
           corpusKey: `snap:${snapId}`,
-          kind: 'INTERNAL_MEASUREMENT',
-          title: 'Folyamat-mérési pillanatkép',
+          kind: outcome.measured ? 'INTERNAL_MEASUREMENT' : 'INTERNAL_OBSERVATION',
+          title: outcome.measured ? 'Folyamat-mérési pillanatkép' : 'Folyamatadat-pillanatkép (nem tényleges mérés)',
           locator: `snapshot:${snapId}`,
-          strength: 'STRONG',
+          strength: outcome.measured ? 'STRONG' : 'MODERATE',
           domainKeys: [outcome.domainKey],
         },
         db,
@@ -639,17 +692,18 @@ async function executeRun(
     }
 
     // Evidence sufficiency gate — 6/6 states, only SUPPORTED is actionable.
-    const disputedCorpus = await findCorpusEvidenceForDomains(
+    const disputedCorpus = (await findCorpusEvidenceForDomains(
       [outcome.domainKey],
       { verificationStatuses: ['DISPUTED'] },
       db,
-    );
+    )).filter(relevantEvidence);
     const gate = decideSufficiency({
       domainKey: outcome.domainKey,
       verifiedEvidenceCount: verifiedCorpus.length,
       disputedEvidenceCount: disputedCorpus.length,
       measured: outcome.measured,
       declared: outcome.declared,
+      sourceBasis: outcome.sourceRefs.sourceBasis,
     });
     const decision = gate.decision;
     const reasons = gate.reasons;
@@ -657,7 +711,9 @@ async function executeRun(
     // Canonical intervention selection (backend-owned taxonomy + guardrails).
     const metrics = outcome.sourceRefs.snapshotIds
       .map((id) => metricsBySnapshot.get(id))
-      .find((m): m is Record<string, number | boolean | null> => Boolean(m)) ?? {};
+      .find((m): m is Record<string, number | boolean | null> => Boolean(m))
+      ?? (finding && outcome.sourceRefs.businessProcessId
+        ? metricsBySnapshot.get(latestByProcess.get(outcome.sourceRefs.businessProcessId)?.id ?? '') : undefined) ?? {};
     // Process-scoped categories: only those belonging to observations attached
     // to THIS outcome. Process B's survey can never change process A's
     // interventions.
@@ -666,13 +722,26 @@ async function executeRun(
       const categories = categoriesByObservation.get(obsId);
       if (categories) for (const category of categories) outcomeSurveyCategories.add(category);
     }
+    for (const signal of safetySignals) {
+      if (signal.provenance.categoryKey) outcomeSurveyCategories.add(signal.provenance.categoryKey);
+    }
     const signals = deriveProcessSignals({
       metrics,
+      hasSnapshot: outcome.sourceRefs.snapshotIds.length > 0 || Boolean(finding && outcome.sourceRefs.businessProcessId && latestByProcess.has(outcome.sourceRefs.businessProcessId)),
       surveyCategories: [...outcomeSurveyCategories],
       measured: outcome.measured,
       declared: outcome.declared,
     });
-    const interventionCodes = selectInterventions({
+    // A V2 deferral stays attached to its exact observations/process. It must
+    // survive normalization before the canonical intervention selector runs.
+    const deferAutomation = declaredSignals.some(s => s.provenance.defersAutomation && outcome.sourceRefs.observationIds.includes(s.observationId))
+      || safetySignals.some(signal => signal.provenance.defersAutomation);
+    const interventionCodes = finding ? finding.suggestedInterventionCodes.filter(code => {
+      const definition = INTERVENTIONS.find(intervention => intervention.code === code);
+      return definition && !(code === 'AUTOMATE_REPETITIVE_STEP' && (deferAutomation || signals.includes('UNASSIGNED_STEPS')))
+        && !definition.contraindications.some(signal => signals.includes(signal));
+    }) : selectInterventions({
+      deferAutomation,
       domainKey: outcome.domainKey,
       signals,
       measured: outcome.measured,
@@ -707,7 +776,7 @@ async function executeRun(
     // Only gate-passing diagnoses produce a recommendation candidate;
     // INSUFFICIENT_EVIDENCE stays a diagnosis row but never reaches the feed.
     if (decision === 'SUPPORTED' || decision === 'NEEDS_MORE_DATA') {
-      const kind = outcome.severity === 'HIGH' && outcome.measured ? 'DEVELOPMENT' : 'QUICK_FIX';
+      const kind = outcome.severity === 'HIGH' && outcome.sourceRefs.snapshotIds.length > 0 ? 'DEVELOPMENT' : 'QUICK_FIX';
       const rec = await db.recommendationCandidate.create({
         data: {
           clientId,
@@ -748,6 +817,17 @@ function strongestEvidence(evidences: { verificationStatus: string; strength: st
   return 'WEAK';
 }
 
+function diagnosisSourceBasis(refs: unknown, evidence: EvidenceDTO[]): SourceBasis | null {
+  const sourceRefs = refs && typeof refs === 'object' && !Array.isArray(refs) ? refs as Record<string, unknown> : {};
+  // New diagnoses carry the basis of the triggering metrics, which may be
+  // structural even when the snapshot also contains estimated durations.
+  if (sourceRefs.sourceBasis === 'ESTIMATED' || sourceRefs.sourceBasis === 'DERIVED') return sourceRefs.sourceBasis;
+  const snapshots = evidence.filter(item => item.locator?.startsWith('snapshot:'));
+  if (snapshots.some(item => item.sourceBasis === 'ESTIMATED')) return 'ESTIMATED';
+  if (snapshots.length) return snapshots.every(item => item.sourceBasis === 'DERIVED') ? 'DERIVED' : null;
+  return Array.isArray(sourceRefs.observationIds) && sourceRefs.observationIds.length ? 'DECLARED' : null;
+}
+
 export async function listGrowOpportunities(
   actor: InternalActor,
   clientId: string,
@@ -764,12 +844,15 @@ export async function listGrowOpportunities(
     },
     orderBy: { createdAt: 'desc' },
   });
+  const evidence = await projectEvidenceSourceBasis(recs.flatMap(r => r.evidenceLinks.map(l => toEvidenceDTO(l.evidence))), clientId, db);
+  const evidenceById = new Map(evidence.map(item => [item.id, item]));
   return recs.map((r) => ({
     id: r.id,
     runId: r.runId,
     status: r.status,
     kind: r.kind,
     sufficiency: r.sufficiency,
+    sourceBasis: diagnosisSourceBasis(r.diagnosis?.sourceRefs, r.evidenceLinks.map(l => evidenceById.get(l.evidence.id)!)),
     actionable: r.sufficiency === 'SUPPORTED',
     interventionCodes: r.interventionCodes,
     title: r.title,
@@ -780,7 +863,7 @@ export async function listGrowOpportunities(
     businessProcess: r.diagnosis?.businessProcess
       ? { id: r.diagnosis.businessProcess.id, name: r.diagnosis.businessProcess.name }
       : null,
-    evidenceStrength: strongestEvidence(r.evidenceLinks.map((l) => l.evidence)),
+    evidenceStrength: strongestEvidence(r.evidenceLinks.map((l) => evidenceById.get(l.evidence.id)!)),
     opportunity: r.improvementOpportunity
       ? { id: r.improvementOpportunity.id, status: r.improvementOpportunity.status, developmentInitiativeId: r.improvementOpportunity.developmentInitiativeId }
       : null,
@@ -806,6 +889,11 @@ export async function getOpportunityDetail(
   });
   if (!r) throw new InteractionError(404, 'RECOMMENDATION_NOT_FOUND', 'Recommendation not found for this client.');
 
+  const evidence = await projectEvidenceSourceBasis(r.evidenceLinks.map(l => toEvidenceDTO(l.evidence)), clientId, db);
+  const refs = r.diagnosis?.sourceRefs;
+  const sourceRefs = refs && typeof refs === 'object' && !Array.isArray(refs) ? refs : null;
+  const sourceBasis = diagnosisSourceBasis(sourceRefs, evidence);
+
   return {
     id: r.id,
     runId: r.runId,
@@ -822,15 +910,20 @@ export async function getOpportunityDetail(
       ? {
           id: r.diagnosis.id,
           title: r.diagnosis.title,
-          summary: r.diagnosis.summary,
+          summary: projectSnapshotEvidenceSummary(r.diagnosis.summary, evidence),
           domainTitle: r.diagnosis.problemDomain?.name ?? null,
           businessProcess: r.diagnosis.businessProcess
             ? { id: r.diagnosis.businessProcess.id, name: r.diagnosis.businessProcess.name }
             : null,
-          sourceRefs: r.diagnosis.sourceRefs,
+          sourceRefs: sourceRefs ? {
+            ...sourceRefs, sourceBasis,
+            ...(Array.isArray(sourceRefs.reasons) ? {
+              reasons: sourceRefs.reasons.map(reason => typeof reason === 'string' ? projectSnapshotEvidenceSummary(reason, evidence) : reason),
+            } : {}),
+          } : r.diagnosis.sourceRefs,
         }
       : null,
-    evidence: r.evidenceLinks.map((l) => toEvidenceDTO(l.evidence)),
+    evidence,
     review: r.reviewedById
       ? { byId: r.reviewedById, byName: r.reviewedBy?.name ?? null, at: r.reviewedAt?.toISOString() ?? null, note: r.reviewNote }
       : null,
@@ -865,7 +958,7 @@ export async function listGrowHome(
   const supported = opportunities.filter((o) => o.sufficiency === 'SUPPORTED');
   const evidenceBacked = opportunities.filter((o) => o.evidenceStrength === 'STRONG' || o.evidenceStrength === 'MODERATE');
   const measurementBacked = opportunities.filter((o) =>
-    (o as { diagnosis?: unknown }) && o.impactTags.length > 0 && o.evidenceStrength === 'STRONG',
+    o.sourceBasis === 'MEASURED',
   );
 
   return {

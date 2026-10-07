@@ -54,7 +54,8 @@ export async function settle(rounds = 8): Promise<void> {
 }
 
 const fakeWindow = {
-  location: { hash: '' },
+  location: { hash: '', search: '' },
+  history: { replaceState() {} },
   innerHeight: 800,
   addEventListener() {},
   removeEventListener() {},
@@ -198,9 +199,11 @@ export function createRaceHarness(
     module: { exports: moduleExports },
     console,
     URLSearchParams,
+    crypto: globalThis.crypto,
     process: { env: { NODE_ENV: 'test' } },
     window: fakeWindow,
     document: fakeDocument,
+    HTMLElement: class HTMLElement {},
     alert: (message: string) => {
       throw new Error(message);
     },
@@ -216,6 +219,11 @@ export function createRaceHarness(
       if (key === 'next/image') return imports[key] || { default: 'img' };
       if (key === '@/lib/routeGeneration') {
         return imports[key] || loadModule('src/lib/routeGeneration.ts');
+      }
+      // Dependency-free presentation mapping: load the real module so harness
+      // tests exercise the same human labels the production pages render.
+      if (key === '@/lib/caseLabels') {
+        return imports[key] || loadModule('src/lib/caseLabels.ts');
       }
       return imports[key] || {};
     },
@@ -247,6 +255,10 @@ export function createRaceHarness(
     },
     pendingEffects() {
       return effects.length;
+    },
+    unmount() {
+      effects.splice(0);
+      for (const slot of slots) slot?.cleanup?.();
     },
     // Model an ABANDONED render: React rendered the component speculatively and
     // discarded it, so the effects it queued never run. Clears the pending effect

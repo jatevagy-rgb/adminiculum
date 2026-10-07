@@ -1,3 +1,4 @@
+import { latestRelevantFactChange, snapshotMissingFactKeys, snapshotFreshness, complianceFactLabel, approvedSourceUrl } from "./snapshotPresentation";
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { InternalActor, assertClientReadAccess } from '../client-interaction/base';
 import { getCompanyProfileQuestionForDefinition } from '../client-workspace/companyProfileQuestionRegistry';
@@ -29,6 +30,7 @@ export interface ComplianceWorkspaceMissingFact {
 }
 
 export interface ComplianceWorkspaceCitation {
+  sourceUrl: string | null;
   supportRole: string;
   sourceTitle: string | null;
   canonicalCitation: string | null;
@@ -55,6 +57,7 @@ export interface ComplianceWorkspaceArea {
   scopeType: string | null;
   subjectLabel: string | null;
   evaluationAt: string;
+  evaluationFreshness: "RECORDED" | "STALE" | "UNAVAILABLE";
   sourceSupportState: string;
   specialistRequirement: string;
   activeFindingId: string | null;
@@ -127,12 +130,6 @@ function profileLabel(definition: { key: string; questionKey?: string | null; va
  * have stopped earlier for review/source-support reasons. Returns null when
  * the snapshot does not carry a usable list (nothing may be guessed).
  */
-function snapshotMissingFactKeys(snapshotJson: unknown): string[] | null {
-  if (!snapshotJson || typeof snapshotJson !== 'object') return null;
-  const keys = (snapshotJson as { missingFactKeys?: unknown }).missingFactKeys;
-  if (!Array.isArray(keys)) return null;
-  return keys.filter((key): key is string => typeof key === 'string');
-}
 
 export async function getComplianceWorkspace(
   actor: InternalActor,
@@ -146,7 +143,7 @@ export async function getComplianceWorkspace(
   // current state — an APPROVED requirement version inside its effective
   // window and its current APPROVED, non-superseded rule version.
   const now = new Date();
-  const [profile, snapshots, openFindings, openProposals] = await Promise.all([
+  const [profile, snapshots, openFindings, openProposals, factChange] = await Promise.all([
     prisma.clientOperatingProfile.findUnique({
       where: { clientId },
       select: { complianceEnrollmentStatus: true },
@@ -190,8 +187,9 @@ export async function getComplianceWorkspace(
                 paragraph: true,
                 legalSourceVersion: {
                   select: {
-                    versionLabel: true,
-                    legalSource: { select: { canonicalCitation: true, title: true } },
+                    versionLabel: true, status: true, reviewStatus: true,
+                    captures: { where: { captureStatus: 'REVIEWED', ambiguityStatus: 'NONE' }, orderBy: { capturedAt: 'desc' }, take: 1, select: { sourceUri: true } },
+                    legalSource: { select: { canonicalCitation: true, title: true, status: true } },
                   },
                 },
               },
@@ -215,6 +213,7 @@ export async function getComplianceWorkspace(
     }),
     prisma.assessmentFinding.count({ where: { clientId, status: { not: 'RESOLVED' } } }),
     prisma.complianceProposal.count({ where: { clientId, status: 'PROPOSED' } }),
+    prisma.clientFact.findMany({ where: { clientId }, select: { updatedAt: true, scopeType: true, factSubjectId: true, factDefinition: { select: { key: true } } } }),
   ]);
 
   // Latest snapshot wins per (requirementVersion, ruleVersion, scope, subject):
@@ -269,7 +268,7 @@ export async function getComplianceWorkspace(
       const question = definition ? getCompanyProfileQuestionForDefinition(definition) : null;
       return {
         factKey,
-        label: profileLabel(definition),
+        label: complianceFactLabel(factKey, profileLabel(definition)),
         profileAnswerable: Boolean(question),
       };
     });
@@ -287,6 +286,7 @@ export async function getComplianceWorkspace(
       scopeType: row.scopeType ? String(row.scopeType) : null,
       subjectLabel: row.factSubjectId ? subjectLabelById.get(row.factSubjectId) ?? null : null,
       evaluationAt: toIso(row.evaluationAt) || '',
+      evaluationFreshness: snapshotFreshness(row.snapshotJson, row.evaluationAt, latestRelevantFactChange(factChange, [...dependencies.keys()], row.scopeType, row.factSubjectId)),
       sourceSupportState: String(row.sourceSupportState),
       specialistRequirement: String(row.specialistRequirement),
       activeFindingId: row.findings.find((finding) => finding.status !== 'RESOLVED')?.id ?? null,
@@ -300,6 +300,7 @@ export async function getComplianceWorkspace(
       }),
       missingFacts,
       citations: (row.requirementVersion?.citations ?? []).map((citation) => ({
+        sourceUrl: approvedSourceUrl(citation.legalSourceVersion),
         supportRole: String(citation.supportRole),
         sourceTitle: citation.legalSourceVersion?.legalSource?.title ?? null,
         canonicalCitation: citation.legalSourceVersion?.legalSource?.canonicalCitation ?? null,

@@ -212,6 +212,8 @@ export function deriveProcessSignals(input: {
   surveyCategories?: string[];
   measured: boolean;
   declared: boolean;
+  /** Snapshot availability is distinct from a claim of measured values. */
+  hasSnapshot?: boolean;
 }): ProcessSignal[] {
   const m = input.metrics ?? {};
   const num = (code: string): number | null => {
@@ -244,7 +246,7 @@ export function deriveProcessSignals(input: {
 
   if (categories.has('REWORK')) signals.add('REWORK_PRESENT');
   if (categories.has('UNCLEAR_OWNERSHIP')) signals.add('UNCLEAR_PROCESS_OWNERSHIP');
-  if (categories.has('GENERAL_CONCERN') && !input.measured) signals.add('PROCESS_VARIABILITY');
+  if (categories.has('GENERAL_CONCERN') && !input.measured && !input.hasSnapshot) signals.add('PROCESS_VARIABILITY');
 
   return [...signals];
 }
@@ -257,13 +259,16 @@ export function selectInterventions(input: {
   domainKey: string;
   signals: ProcessSignal[];
   measured: boolean;
+  /** Assessment-bound review requirement, not a claim of process variability. */
+  deferAutomation?: boolean;
 }): InterventionCode[] {
   const signals = new Set(input.signals);
   const selected: InterventionCode[] = [];
   for (const def of INTERVENTIONS) {
     if (!def.allowedDomains.includes(input.domainKey)) continue;
+    if (input.deferAutomation && def.code === 'AUTOMATE_REPETITIVE_STEP') continue;
     if ((def.requiredSignals ?? []).some((s) => !signals.has(s))) continue;
-    if (def.requiredAnySignals && def.requiredAnySignals.length && !def.requiredAnySignals.some((s) => signals.has(s))) continue;
+    if (def.requiredAnySignals && def.requiredAnySignals.length && !def.requiredAnySignals.some((s) => signals.has(s)) && !(input.deferAutomation && def.code === 'REDESIGN_BEFORE_AUTOMATING')) continue;
     if (def.contraindications.some((s) => signals.has(s))) continue;
     selected.push(def.code);
   }

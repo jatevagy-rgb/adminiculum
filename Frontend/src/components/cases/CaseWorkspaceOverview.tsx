@@ -14,8 +14,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation";
 import { getCaseResponsibility, getCaseWorkspace, startTask, type CaseResponsibilityResponse, type CaseWorkspace } from "@/lib/api";
 import { getCaseComments, createCaseComment, type CaseCommentDto } from "@/lib/api";
+import { ApiError, linkCommunicationToCase } from "@/lib/api";
+import { linkThreadErrorMessage } from "@/lib/communicationLinkErrors";
 import { listTaskLifecycleItems, type TaskLifecycleListItem } from "@/lib/taskLifecycleApi";
-import { getCaseStatusLabel } from "@/lib/caseLabels";
+import { getCaseMatterTypeLabel, getCaseStatusLabel } from "@/lib/caseLabels";
 import { taskStatusLabel } from "@/lib/taskWorkflowPresentation";
 import { attentionPresentation, type AttentionCategory } from "@/lib/attentionCategory";
 import { CompactState, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
@@ -37,12 +39,12 @@ import { WordWideCommunicationLeaf } from "@/components/cases/word-workflow/tool
 import { WordRiskMatrixPanel } from "@/components/cases/word-workflow/tools/WordRiskMatrixPanel";
 import { WordCompactPromptCollection } from "@/components/cases/word-workflow/tools/WordCompactPromptCollection";
 import { DocumentAIFlow } from "@/components/cases/word-workflow/documents/DocumentAIFlow";
-import { CaseInsightTiles } from "@/components/cases/CaseInsightTiles";
+import { CaseCommunicationPickerDrawer } from "@/components/cases/intake/CaseCommunicationPickerDrawer";
 import {
   TaskFormModal, DocumentUploadModal, CaseCommentModal, DocumentCommentsModal,
 } from "@/components/cases/CaseWorkspaceActions";
 import {
-  ACCENT, KpiCard, CockpitSection, ActionableEmpty, DeadlineRow, TaskCard,
+  ACCENT, CockpitSection, ActionableEmpty, DeadlineRow, TaskCard,
   StartingContextPanel,
   fmtDate, fmtDateTime, type Accent,
 } from "@/components/cases/CaseCockpitPanels";
@@ -70,6 +72,10 @@ const URGENCY_STYLE: Record<string, { label: string; accent: Accent }> = {
 };
 
 export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
+  return <CaseWorkspaceOverviewContent key={caseId} caseId={caseId} />;
+}
+
+function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
   const router = useRouter();
   const [ws, setWs] = useState<CaseWorkspace | null>(null);
   const [responsibility, setResponsibility] = useState<CaseResponsibilityResponse | null>(null);
@@ -93,10 +99,17 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
   // Explicit risk-matrix target: the user selects a concrete document of THIS
   // case before the matrix panel accepts a save. No first-document fallback.
   const [riskDocId, setRiskDocId] = useState<string | null>(null);
+  // Case-thread linking: reuses the existing intake communication picker in
+  // single-select mode. The link is staged and only committed on confirm.
+  const [commPickerOpen, setCommPickerOpen] = useState(false);
+  const [commLinkBusy, setCommLinkBusy] = useState(false);
+  const [commLinkError, setCommLinkError] = useState<string | null>(null);
+  const loadGeneration = useRef(0);
   const secondaryDetailsRef = useRef<HTMLDetailsElement | null>(null);
 
 
   const load = useCallback(async ({ background = false }: { background?: boolean } = {}) => {
+    const generation = ++loadGeneration.current;
     if (!background) setLoading(true);
     setError(null);
     try {
@@ -105,15 +118,17 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
         getCaseResponsibility(caseId).catch(() => null),
         listTaskLifecycleItems(),
       ]);
+      if (generation !== loadGeneration.current) return;
+      if (workspace.case.id !== caseId) throw new Error("Mismatched case workspace");
       setWs(workspace);
       setResponsibility(caseResponsibility);
       setLifecycleTasks(lifecycle.filter((task) => task.case.id === caseId));
     }
     catch {
-      if (!background) setError("Az ügy-munkatér most nem tölthető be.");
+      if (generation === loadGeneration.current) setError("Az ügy-munkatér most nem tölthető be.");
     }
     finally {
-      if (!background) setLoading(false);
+      if (generation === loadGeneration.current && !background) setLoading(false);
     }
   }, [caseId]);
 
@@ -127,7 +142,29 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
     finally { setRefreshing(false); }
   }, [load]);
 
-  useEffect(() => { void load(); }, [load]);
+  const confirmLinkThread = useCallback(async (ids: string[]) => {
+    if (ids.length !== 1) return;
+    const communicationId = ids[0];
+    setCommLinkBusy(true);
+    setCommLinkError(null);
+    try {
+      const result = await linkCommunicationToCase(communicationId, caseId);
+      if (result.success) {
+        setCommPickerOpen(false);
+        await refresh();
+      } else {
+        setCommLinkError("A beszélgetés hozzárendelése nem sikerült. Próbáld újra.");
+      }
+    } catch (e) {
+      const status = e instanceof ApiError ? e.status : undefined;
+      const code = e instanceof ApiError ? e.code : undefined;
+      setCommLinkError(linkThreadErrorMessage({ status, code }));
+    } finally {
+      setCommLinkBusy(false);
+    }
+  }, [caseId, refresh]);
+
+  useEffect(() => { void load(); return () => { ++loadGeneration.current; }; }, [load]);
 
   // The risk-matrix selection is always case-scoped: switching cases clears it,
   // and a refreshed workspace that no longer contains the selected document
@@ -140,13 +177,11 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
   useEffect(() => {
     const openSecondaryDetailsForHash = () => {
       const targetId = window.location.hash.slice(1);
-      if (!['ck-starting-context', 'ck-work-package', 'ck-notes', 'ck-activity', 'ck-time'].includes(targetId)) return;
-      // The initial mount can be the loading state, before <details> exists.
-      // This effect re-runs once the workspace is rendered, so deep links are
-      // restored only after their target can be opened and scrolled to.
-      if (!secondaryDetailsRef.current) return;
-      secondaryDetailsRef.current.setAttribute('open', '');
-      window.requestAnimationFrame(() => document.getElementById(targetId)?.scrollIntoView({ block: 'start' }));
+      const target = document.getElementById(targetId);
+      if (!target) return;
+      let parent: HTMLElement | null = target;
+      while (parent) { if (parent.tagName === 'DETAILS') parent.setAttribute('open', ''); parent = parent.parentElement; }
+      window.requestAnimationFrame(() => target.scrollIntoView({ block: 'start' }));
     };
     openSecondaryDetailsForHash();
     window.addEventListener('hashchange', openSecondaryDetailsForHash);
@@ -160,7 +195,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
       await startTask(task.id);
       await refresh();
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "A státuszváltás nem sikerült.");
+      setActionError("A státuszváltás nem sikerült. Frissítsd az ügyet, majd próbáld újra.");
     } finally { setRowBusy(null); }
   }, [rowBusy, refresh]);
 
@@ -180,18 +215,22 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
   );
   const urgency = URGENCY_STYLE[cp.urgency] || URGENCY_STYLE.STEADY;
   const reviewer = responsibility?.collaborators.find((collaborator) => collaborator.role.toUpperCase() === "REVIEWER")?.user.name || null;
-  const priorityLabel = { URGENT: "Sürgős", HIGH: "Magas", MEDIUM: "Közepes", LOW: "Alacsony" }[c.priority.toUpperCase()] || c.priority;
+  const priorityLabel = { URGENT: "Sürgős", HIGH: "Magas", MEDIUM: "Közepes", LOW: "Alacsony" }[c.priority.toUpperCase()] || "Nem meghatározott";
   const clientRoleLabel = {
     CLIENT: "Ügyfél",
     COUNTERPARTY: "Ellenérdekű fél",
     OPPOSING_COUNSEL: "Ellenérdekű képviselő",
     BENEFICIARY: "Kedvezményezett",
-  }[c.clientRole?.toUpperCase() || ""] || c.clientRole;
-  const groupTasks = (ids: string[]) => ids.map((id) => tasksById.get(id)).filter(Boolean) as WorkspaceTask[];
+  }[c.clientRole?.toUpperCase() || ""] || "Nem meghatározott";
+  const reviewIds = new Set(ws.tasks.filter((task) => ['IN_REVIEW', 'UNDER_REVIEW', 'SUBMITTED'].includes(task.status.toUpperCase())).map((task) => task.id));
+  const groupTasks = (ids: string[]) => ids.map((id) => tasksById.get(id)).filter((task): task is WorkspaceTask => Boolean(task && !reviewIds.has(task.id)));
   const immediate = groupTasks(cp.taskGroups.immediate);
   const today = groupTasks(cp.taskGroups.today);
   const later = groupTasks(cp.taskGroups.later);
-  const replyNeeded = new Set(cp.replyNeeded);
+  const reviewTasks = ws.tasks.filter((task) => reviewIds.has(task.id));
+  const nextTask = tasksById.get(cp.nextStep?.objectId || '') || immediate[0] || today[0] || later[0] || reviewTasks[0] || null;
+  const activeDocument = nextTask?.documentId ? ws.documents.find((doc) => doc.id === nextTask.documentId) : null;
+
   const allDeadlines = [
     ...cp.deadlineGroups.today, ...cp.deadlineGroups.tomorrow,
     ...cp.deadlineGroups.thisWeek, ...cp.deadlineGroups.later,
@@ -286,15 +325,15 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
                 {urgency.label}
               </span>
             </div>
-            <h2 title={c.title} className="mt-1 line-clamp-3 font-sans break-words text-[22px] font-semibold leading-tight text-[var(--adm-text)]">{c.title}</h2>
+            <p className="mt-1 text-sm font-semibold text-[var(--adm-green-800)]">Aktuális munka és következő lépés</p>
             <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-[var(--adm-text-muted)]">
               <span className="font-semibold text-[var(--adm-text)]">{c.client?.name || "Nincs ügyfél"}</span>
-              <span aria-hidden="true">·</span><span>{c.matterType || "Ügytípus nincs"}</span>
+              <span aria-hidden="true">·</span><span>{c.matterType ? getCaseMatterTypeLabel(c.matterType) : "Ügytípus nincs"}</span>
               <span aria-hidden="true">·</span><span>{getCaseStatusLabel(c.status)}</span>
             </p>
             <dl data-testid="case-summary-fields" className="mt-2.5 grid grid-cols-2 gap-x-5 gap-y-2 text-[11px] sm:grid-cols-3 xl:grid-cols-6">
               <div><dt className="text-[9px] font-bold uppercase tracking-wide text-[var(--adm-text-muted)]">Prioritás</dt><dd className="font-semibold">{priorityLabel}</dd></div>
-              <div><dt className="text-[9px] font-bold uppercase tracking-wide text-[var(--adm-text-muted)]">Felelős</dt><dd className="truncate font-semibold">{cp.responsible?.name || "Nincs kijelölve"}</dd></div>
+              <div><dt className="text-[9px] font-bold uppercase tracking-wide text-[var(--adm-text-muted)]">Felelős ügyvéd</dt><dd className="truncate font-semibold">{cp.responsible?.name || "Nincs kijelölve"}</dd></div>
               <div><dt className="text-[9px] font-bold uppercase tracking-wide text-[var(--adm-text-muted)]">Ellenőrző</dt><dd className="truncate font-semibold">{reviewer || "Nincs adat"}</dd></div>
               <div><dt className="text-[9px] font-bold uppercase tracking-wide text-[var(--adm-text-muted)]">Határidő</dt><dd className="font-semibold">{fmtDate(c.deadline)}</dd></div>
               <div><dt className="text-[9px] font-bold uppercase tracking-wide text-[var(--adm-text-muted)]">Ügyfél szerepe</dt><dd className="truncate font-semibold">{clientRoleLabel || "Nincs adat"}</dd></div>
@@ -318,27 +357,21 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
         </div>
       </section>
 
-      {/* ---- 2. Functional KPI row ----------------------------------------- */}
-      <div className="rounded-lg bg-white p-3 text-sm"><span className="mr-2 font-semibold">Következő határidő</span><PersistedDeadline dueAt={cp.kpi.deadlines.nextDueAt || c.deadline} /></div>
-      <section aria-label="Operatív mutatók" data-testid="kpi-row" className="grid grid-cols-2 gap-2 xl:grid-cols-4">
-        <KpiCard targetId="ck-tasks" label="Nyitott feladatok" accent={cp.kpi.openTasks.urgentCount > 0 ? "terracotta" : "petrol"}
-          emphasised={cp.kpi.openTasks.urgentCount > 0} value={cp.kpi.openTasks.count} secondary={cp.kpi.openTasks.secondary} />
-        <KpiCard targetId="ck-deadlines" label="Közelgő határidők" accent="terracotta"
-          emphasised={cp.deadlineGroups.today.length > 0} value={cp.kpi.deadlines.count} secondary={cp.kpi.deadlines.secondary} />
-        <KpiCard targetId="ck-comms" label="Kommunikáció" accent="terracotta"
-          emphasised={cp.kpi.communication.replyNeededCount > 0} value={cp.kpi.communication.count} secondary={cp.kpi.communication.secondary} />
-        <KpiCard targetId="ck-tasks" label="Review tételek" accent="navy"
-          emphasised={cp.kpi.review.count > 0} value={cp.kpi.review.count} secondary={cp.kpi.review.secondary} />
-      </section>
-
       <CaseContextTiles caseRecord={c} />
+      {nextTask ? <section aria-label="Következő feladat" className="rounded-xl border-l-4 border-[var(--adm-green-800)] bg-white p-4">
+        <p className="text-xs font-semibold text-[var(--adm-text-muted)]">{reviewIds.has(nextTask.id) ? 'Ellenőrzésre vár' : 'Most ezen dolgozunk'}</p>
+        <Link href={`/tasks?taskId=${encodeURIComponent(nextTask.id)}`} className="mt-1 text-lg font-semibold text-[var(--adm-green-800)]">{nextTask.title}</Link>
+        <p className="text-sm">{nextTask.assignee?.name || 'Még nincs feladatfelelős'} · <PersistedDeadline dueAt={nextTask.dueDate} /></p>
+        {activeDocument ? <Link className="mt-2 text-sm underline" href={`/cases/${caseId}/documents?documentId=${encodeURIComponent(activeDocument.id)}${activeDocument.reviewSummary?.currentVersionId ? `&versionId=${encodeURIComponent(activeDocument.reviewSummary.currentVersionId)}` : ''}`}>
+          Kapcsolt dokumentum: {activeDocument.fileName}{activeDocument.version ? ` · aktuális v${activeDocument.version}` : ' · verzió nem ismert'}
+        </Link> : <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Ehhez a feladathoz nincs rögzített dokumentumkapcsolat.</p>}
+      </section> : null}
 
       <section aria-label="Műveletek" data-testid="case-workspace-quick-actions" className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5">
         <span className="mr-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Műveletek</span>
         <AdminButton variant="primary" size="xs" onClick={() => setModal({ type: "task-create" })}>Új feladat</AdminButton>
         <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "doc-upload" })}>Dokumentum feltöltése</AdminButton>
         <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "case-comment" })}>Megjegyzés hozzáadása</AdminButton>
-        <AdminButton variant="neutral" size="xs" onClick={() => setAiPromptOpen(true)}>AI előkészítés</AdminButton>
         <AdminButton variant="neutral" size="xs" onClick={() => { setTimeDialogResumeTask(null); setTimeDialogInitialTaskId(undefined); setTimeDialogOpen(true); }}>Munkaidő rögzítése</AdminButton>
       </section>
 
@@ -373,6 +406,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
                     {later.map((t) => taskRow(t, "neutral"))}
                   </div>
                 ) : null}
+                {reviewTasks.length > 0 ? <div data-testid="task-group-review"><p className="px-3 pt-2 text-xs font-semibold text-[var(--adm-green-800)]">Ellenőrzés és jóváhagyás</p>{reviewTasks.map((task) => taskRow(task, 'navy'))}</div> : null}
               </div>
             )}
           </CockpitSection>
@@ -400,55 +434,17 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
           </CockpitSection>
         </div>
 
+
+      </div>
+
+      {/* ---- 5. Wide communication reader (WORD_WF04) ----------------------- */}
+      <section id="ck-comms" aria-label="Kommunikációs lánc" className="scroll-mt-24 space-y-3">
+        <span id="ck-wide-comms" />
+        <WordWideCommunicationLeaf key={caseId} caseId={caseId} replyNeededIds={cp.replyNeeded} communicationSignals={ws.communications} clientId={c.client?.id ?? null} readOnly={false} refreshKey={notesRefreshKey} onAddThread={() => setCommPickerOpen(true)} />
+      </section>
+
         {/* -------- Right: correspondence and documents -------- */}
         <div className="min-w-0 space-y-4">
-          <CockpitSection id="ck-comms" title="Kommunikáció" accent="terracotta" count={cp.kpi.communication.count}
-            action={<Link href={`/cases/${caseId}/communications`} className="text-[11px] font-semibold text-[var(--adm-green-800)] hover:underline">Napló →</Link>}>
-            {warn("communications") ? (
-              <ActionableEmpty message="A kommunikáció most nem érhető el." actionLabel="Újratöltés" onAction={() => void refresh()} />
-            ) : ws.communications.length === 0 ? (
-              <ActionableEmpty message="Ehhez az ügyhöz még nincs kommunikáció." actionLabel="E-mail thread hozzárendelése" href={`/cases/${caseId}/communications`} />
-            ) : (
-              <ul className="divide-y divide-[rgba(22,32,26,0.06)]">
-                {ws.communications.slice(0, 6).map((m) => {
-                  const needsReply = replyNeeded.has(m.id);
-                  return (
-                    <li key={m.id} className="px-3 py-2.5">
-                      <div className="flex flex-wrap items-baseline justify-between gap-2">
-                        <span className="min-w-0 truncate text-[12.5px] font-semibold text-[var(--adm-text)]">{m.subject || "Nincs tárgy"}</span>
-                        <span className="flex shrink-0 items-center gap-1.5">
-                          {needsReply ? (
-                            <span data-testid="reply-needed" className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${ACCENT.terracotta.soft} ${ACCENT.terracotta.text}`}>Válaszra vár</span>
-                          ) : null}
-                          <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${m.internal ? `${ACCENT.green.soft} ${ACCENT.green.text}` : `${ACCENT.terracotta.soft} ${ACCENT.terracotta.text}`}`}>
-                            {m.internal ? "Belső" : "Külső"}
-                          </span>
-                        </span>
-                      </div>
-                      <p className="mt-0.5 text-[11px] text-[var(--adm-text-muted)]">
-                        {m.sender || "Nincs forrásadat"} · {m.type} · {fmtDateTime(m.timestamp)}
-                      </p>
-                      {m.contentPreview ? <p className="mt-0.5 line-clamp-2 text-[11px] leading-5 text-[var(--adm-text-muted)]">{m.contentPreview}</p> : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </CockpitSection>
-
-      {/* ---- 4. Document preparation (full width, below the operational cockpit) ---- */}
-      <DocumentPreparationDashboard
-        caseId={caseId}
-        documents={ws.documents}
-        activeDocuments={cp.activeDocuments}
-        activity={ws.activity}
-        clientId={c.client?.id ?? null}
-        clientName={c.client?.name ?? null}
-        clientRole={c.clientRole}
-        onOpenDocument={(docId) => router.push(`/cases/${caseId}/documents?documentId=${encodeURIComponent(docId)}`)}
-        onRefresh={() => void refresh()}
-      />
-
           <CaseWorkspaceDocumentsSection
             documents={ws.documents}
             activeDocuments={cp.activeDocuments}
@@ -461,33 +457,16 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
             onOpenDocument={(docId) => router.push(`/cases/${caseId}/documents?documentId=${encodeURIComponent(docId)}`)}
           />
         </div>
-      </div>
-
-      {/* ---- 4b. Document AI workflow (WORD_WF03) --------------------------- */}
-      <section id="ck-ai-flow" className="scroll-mt-24 space-y-3">
-        <DocumentAIFlow
-          caseId={caseId}
-          clientId={c.client?.id ?? null}
-          clientName={c.client?.name ?? undefined}
-          clientRole={c.clientRole ?? undefined}
-          readOnly={false}
-          onChanged={() => void load({ background: true })}
-        />
-      </section>
-
-      {/* ---- 5. Wide communication reader (WORD_WF04) ----------------------- */}
-      <section id="ck-wide-comms" aria-label="Kommunikációs lánc" className="scroll-mt-24 space-y-3">
-        <WordWideCommunicationLeaf caseId={caseId} clientId={c.client?.id ?? null} readOnly={false} onChanged={() => void load({ background: true })} />
-      </section>
 
       {/* ---- 6. Explicit-document risk matrix (WORD_WF04) -------------------- */}
-      <section id="ck-risk-matrix" aria-label="Kockázati mátrix" data-testid="case-risk-matrix-section" className="scroll-mt-24 space-y-3 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+      <details id="ck-risk-matrix" aria-label="Kockázati mátrix" data-testid="case-risk-matrix-section" className="scroll-mt-24 space-y-3 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+        <summary className="min-h-10 cursor-pointer text-sm font-semibold text-[var(--adm-green-800)]">Kockázati mátrix · dokumentumhoz kötött munkairat</summary>
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <h3 className="text-sm font-semibold text-[var(--adm-text)]">Kockázati mátrix</h3>
-            <p className="mt-0.5 text-[11px] text-[var(--adm-text-muted)]">A mentéshez ki kell választani egy, ehhez az ügyhöz tartozó dokumentumot; a mátrix sosem ír más ügyre vagy dokumentumra.</p>
+            <p className="mt-0.5 text-[11px] text-[var(--adm-text-muted)]">Válaszd ki, melyik dokumentum kockázatait tekinted át.</p>
           </div>
-          <label className="block min-w-[220px]">
+          <label className="block w-full sm:w-auto">
             <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text-muted)]">Céldokumentum</span>
             <select
               data-testid="risk-matrix-document-select"
@@ -509,6 +488,18 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
           readOnly={false}
           onChanged={() => void load({ background: true })}
         />
+      </details>
+
+      {/* ---- 4b. Document AI workflow (WORD_WF03) --------------------------- */}
+      <section id="ck-ai-flow" className="scroll-mt-24 space-y-3">
+        <DocumentAIFlow
+          caseId={caseId}
+          clientId={c.client?.id ?? null}
+          clientName={c.client?.name ?? undefined}
+          clientRole={c.clientRole ?? undefined}
+          readOnly={false}
+          onChanged={() => void load({ background: true })}
+        />
       </section>
 
       <section id="ck-prompts" aria-label="Prompteszközök" className="space-y-3">
@@ -516,6 +507,9 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
           <p className="text-[11px] leading-relaxed text-[var(--adm-text-muted)]">
             A vágólapra másolt prompt szerkezeti váz: anonimizált háttérszöveg csak igazolt ügykontextus-forrásból kerül bele. Ilyen forrás hiányában a prompt semleges sablonként másolódik, bizalmas ügyadat nélkül.
           </p>
+          <details className="rounded-lg border border-[var(--adm-border)] bg-white p-3">
+            <summary className="min-h-10 cursor-pointer font-semibold">Részletes AI-előkészítés és mentett eredmények</summary>
+            <AdminButton variant="neutral" onClick={() => { setAiPromptInitialDraftId(null); setAiPromptOpen(true); }}>Csoportos előkészítés és promptelőnézet</AdminButton>
           <AIResultsTile
             caseId={caseId}
             documents={ws.documents}
@@ -523,29 +517,32 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
             onOpen={(draftId) => { setAiPromptInitialDraftId(draftId); setAiPromptOpen(true); }}
             onOpenPreparation={() => { setAiPromptInitialDraftId(null); setAiPromptOpen(true); }}
           />
+          </details>
 
       </section>
       <details ref={secondaryDetailsRef} id="case-secondary-details" data-testid="case-secondary-details" className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
-        <summary className="cursor-pointer font-serif text-lg font-semibold text-[var(--adm-text)]">Ügy részletei és további eszközök</summary>
-        <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Kontekstus, munkacsomag, belső jegyzetek, aktivitás és munkaidő.</p>
+        <summary className="cursor-pointer font-sans text-lg font-semibold text-[var(--adm-text)]">Ügy részletei és további eszközök</summary>
+        <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Induló helyzet, munkacsomag, speciális előkészítés és munkaidő.</p>
         <div className="mt-4 space-y-4">
-      <nav aria-label="Ügy munkatér szakaszai" data-testid="case-workspace-section-nav" className="flex flex-wrap gap-x-3 gap-y-1 px-1 text-[11px] font-semibold text-[var(--adm-green-800)]">
-        <a href="#ck-tasks" className="hover:underline">Aktív munka</a>
-        <a href="#ck-deadlines" className="hover:underline">Határidők</a>
-        <a href="#ck-comms" className="hover:underline">Kommunikáció</a>
-        <a href="#ck-wide-comms" className="hover:underline">Kommunikációs lánc</a>
-        <a href="#ck-risk-matrix" className="hover:underline">Kockázati mátrix</a>
-        <a href="#ck-ai-flow" className="hover:underline">AI-dokumentumfolyam</a>
-        <a href="#ck-notes-primary" className="hover:underline">Megjegyzések</a>
-        <a href="#ck-documents" className="hover:underline">Dokumentumok</a>
-        <a href="#case-secondary-details" onClick={() => secondaryDetailsRef.current?.setAttribute('open', '')} className="hover:underline">További részletek</a>
-      </nav>
-          <CaseInsightTiles workspace={ws} caseId={caseId} />
+          <details className="rounded-lg border border-[var(--adm-border)] bg-white p-3"><summary className="min-h-10 cursor-pointer font-semibold">Speciális dokumentum-előkészítés</summary>
+      <DocumentPreparationDashboard
+        caseId={caseId}
+        documents={ws.documents}
+        activeDocuments={cp.activeDocuments}
+        activity={ws.activity}
+        clientId={c.client?.id ?? null}
+        clientName={c.client?.name ?? null}
+        clientRole={c.clientRole}
+        onOpenDocument={(docId) => router.push(`/cases/${caseId}/documents?documentId=${encodeURIComponent(docId)}`)}
+        onRefresh={() => void refresh()}
+        onOpenRiskMatrix={(documentId) => { setRiskDocId(documentId); const panel = document.getElementById("ck-risk-matrix"); panel?.setAttribute("open", ""); panel?.scrollIntoView({ block: "start" }); }}
+      />
+          </details>
           <div id="ck-starting-context" className="scroll-mt-24">
             <StartingContextPanel
               context={c.startingContext}
               description={c.description}
-              onAddContext={() => setModal({ type: "case-comment" })}
+              onAddContext={() => router.push(`/cases/${caseId}/context`)}
             />
           </div>
 
@@ -557,22 +554,6 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <CockpitSection id="ck-notes" title="Jegyzetek" accent="green" count={ws.comments.length}
-              action={<AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "case-comment" })}>+ Megjegyzés</AdminButton>}>
-              {ws.comments.length === 0 ? (
-                <ActionableEmpty message="Nincs belső megjegyzés." actionLabel="Első megjegyzés létrehozása" onAction={() => setModal({ type: "case-comment" })} />
-              ) : (
-                <ul className="divide-y divide-[rgba(22,32,26,0.06)]">
-                  {ws.comments.slice(0, 4).map((n) => (
-                    <li key={n.id} className="px-3 py-2">
-                      <p className="line-clamp-2 text-[12px] text-[var(--adm-text)]">{n.content}</p>
-                      <p className="mt-0.5 text-[10px] text-[var(--adm-text-muted)]">{n.author?.name || "Rendszer"} · {fmtDate(n.createdAt)}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CockpitSection>
-
             <CockpitSection id="ck-time" title="Munkaidő" accent="neutral">
               <CaseTimeBillingSummary
                 caseId={caseId}
@@ -587,32 +568,15 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
       </details>
 
       <section aria-label="Ügytörténet" className="space-y-4">
-      <CaseHistoryPanel key={caseId} caseId={caseId} clientId={c.client?.id ?? null} readOnly />
       {/* ---- 2b. Primary internal notes ------------------------------------ */}
+      <span id="ck-notes" />
       <CaseWorkspaceNotesSection
         caseId={caseId}
         refreshKey={notesRefreshKey}
         onCreateNote={() => setModal({ type: "case-comment" })}
       />
 
-            <CockpitSection id="ck-activity" title="Aktivitás" accent="petrol">
-              {ws.activity.length === 0 ? (
-                <ActionableEmpty message="Még nincs rögzített aktivitás." actionLabel="Első feladat létrehozása" onAction={() => setModal({ type: "task-create" })} />
-              ) : (
-                <ul data-testid="activity-feed" className="divide-y divide-[rgba(22,32,26,0.06)]">
-                  {ws.activity.slice(0, 6).map((a) => (
-                    <li key={a.id} className="px-3 py-2">
-                      <p className="text-[12px] leading-5 text-[var(--adm-text)]">
-                        <span className="font-semibold">{a.actor || "Rendszer"}</span>{" "}
-                        <span className="text-[var(--adm-text-muted)]">{a.actionLabel}</span>{" "}
-                        <span className="font-medium">{a.objectLabel}</span>
-                      </p>
-                      <p className="mt-0.5 text-[10px] text-[var(--adm-text-soft)]">{fmtDateTime(a.occurredAt)}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CockpitSection>
+      <div id="ck-activity"><CaseHistoryPanel key={caseId} caseId={caseId} clientId={c.client?.id ?? null} readOnly /></div>
 
       </section>
 
@@ -651,6 +615,20 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
             setTimeDialogInitialTaskId(undefined);
             if (resume) setSelectedLifecycleTask(resume);
           }}
+        />
+      ) : null}
+
+      {commPickerOpen ? (
+        <CaseCommunicationPickerDrawer
+          open={commPickerOpen}
+          clientId={c.client?.id ?? ""}
+          selectedIds={[]}
+          primaryId=""
+          singleSelect
+          busy={commLinkBusy}
+          error={commLinkError}
+          onCancel={() => { if (!commLinkBusy) setCommPickerOpen(false); }}
+          onConfirm={(ids) => void confirmLinkThread(ids)}
         />
       ) : null}
 
@@ -814,7 +792,7 @@ function CaseNoteThread({ caseId, note, replies, onReplyCreated }: {
       {replies.length > 0 ? (
         <div data-testid="case-note-replies" className="mt-1.5 space-y-1.5 border-l-2 border-[rgba(22,32,26,0.12)] pl-3">
           {replies.map((reply) => (
-            <div key={reply.id} data-testid="case-note-reply" className="rounded-md bg-[var(--adm-ivory-100)] px-2 py-1.5">
+            <div key={reply.id} data-testid="case-note-reply" className="rounded-md bg-[var(--adm-surface)] px-2 py-1.5">
               <p className="whitespace-pre-line text-[12px] leading-5 text-[var(--adm-text)]">{reply.content}</p>
               <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-[var(--adm-text-muted)]">
                 <span data-testid="case-note-reply-author" className="font-semibold text-[var(--adm-text)]">{reply.author?.displayName || "Rendszer"}</span>

@@ -15,7 +15,6 @@ export type LawyerHandoffDecision = 'APPROVED' | 'REJECTED_NEEDS_REVISION' | 'RE
 const VALID_STATUSES: LawyerHandoffStatus[] = [
   'DRAFT', 'PREPARED', 'SUBMITTED', 'IN_REVIEW', 'APPROVED', 'REJECTED', 'ARCHIVED',
 ];
-const VALID_PACKAGE_TYPES: LawyerHandoffPackageType[] = ['STANDARD', 'FINAL_APPROVAL'];
 const VALID_DECISIONS: LawyerHandoffDecision[] = ['APPROVED', 'REJECTED_NEEDS_REVISION', 'REJECTED_BLOCKING'];
 
 export interface LawyerHandoffPackageResult {
@@ -84,13 +83,6 @@ function assertStatus(value: string | undefined): LawyerHandoffStatus {
     throw new HandoffPackageServiceError(400, 'INVALID_STATUS', 'Invalid handoff package status');
   }
   return value as LawyerHandoffStatus;
-}
-
-function assertPackageType(value: string | undefined): LawyerHandoffPackageType {
-  if (!value || !VALID_PACKAGE_TYPES.includes(value as LawyerHandoffPackageType)) {
-    throw new HandoffPackageServiceError(400, 'INVALID_PACKAGE_TYPE', 'Invalid handoff package type');
-  }
-  return value as LawyerHandoffPackageType;
 }
 
 function assertDecision(value: string | undefined): LawyerHandoffDecision {
@@ -216,8 +208,8 @@ class HandoffPackagesService {
     return repo;
   }
 
-  async listHandoffPackages(caseId: string): Promise<LawyerHandoffPackageResult[]> {
-    const repo = this.getRepo();
+  async listHandoffPackages(caseId: string, options: { includeArchived?: boolean } = {}): Promise<LawyerHandoffPackageResult[]> {
+    const repo = options.includeArchived ? this.assertRepoAvailable() : this.getRepo();
     if (!repo) {
       return [];
     }
@@ -225,13 +217,20 @@ class HandoffPackagesService {
       const records = await repo.findMany({
         where: {
           caseId,
-          status: { not: 'ARCHIVED' },
+          ...(options.includeArchived ? {} : { status: { not: 'ARCHIVED' } }),
         },
         orderBy: { updatedAt: 'desc' },
       });
       return records.map(toResult);
     } catch (error) {
       if (this.isRepoUnavailableError(error)) {
+        if (options.includeArchived) {
+          throw new HandoffPackageServiceError(
+            501,
+            'HANDOFF_FEATURE_UNAVAILABLE',
+            'Handoff package history is not available in this environment.'
+          );
+        }
         return [];
       }
       throw error;
@@ -255,96 +254,12 @@ class HandoffPackagesService {
     return record ? toResult(record) : null;
   }
 
-  async createHandoffPackage(params: CreateHandoffPackageParams): Promise<LawyerHandoffPackageResult> {
-    const caseId = String(params.caseId || '').trim();
-    if (!caseId) {
-      throw new HandoffPackageServiceError(400, 'CASE_ID_REQUIRED', 'caseId is required');
-    }
-
-    assertAdjacentFoundationAvailable(
-      params.legalAnalysisId,
-      'ENABLE_LEGAL_ANALYSES',
-      'LEGAL_ANALYSIS_FEATURE_UNAVAILABLE',
-      'Legal analysis references are not available in this environment.'
+  async createHandoffPackage(_params: CreateHandoffPackageParams): Promise<LawyerHandoffPackageResult> {
+    throw new HandoffPackageServiceError(
+      410,
+      'HANDOFF_PACKAGE_CREATION_RETIRED',
+      'New handoff packages are retired. Select an existing case task and use its submission workflow.'
     );
-    assertAdjacentFoundationAvailable(
-      params.reviewNotesId,
-      'ENABLE_CONTRACT_REVIEW_NOTES',
-      'REVIEW_NOTES_FEATURE_UNAVAILABLE',
-      'Review note references are not available in this environment.'
-    );
-
-    const caseRecord = await prisma.case.findUnique({ where: { id: caseId }, select: { id: true } });
-    if (!caseRecord) {
-      throw new HandoffPackageServiceError(404, 'CASE_NOT_FOUND', 'Case not found');
-    }
-
-    if (params.sourceDocumentId) {
-      const doc = await prisma.document.findUnique({ where: { id: params.sourceDocumentId }, select: { id: true } });
-      if (!doc) {
-        throw new HandoffPackageServiceError(404, 'SOURCE_DOCUMENT_NOT_FOUND', 'Source document not found');
-      }
-    }
-
-    if (params.anonymizedDocumentId) {
-      const anonDoc = await prisma.anonymousDocument.findUnique({ where: { id: params.anonymizedDocumentId }, select: { id: true } });
-      if (!anonDoc) {
-        throw new HandoffPackageServiceError(404, 'ANONYMOUS_DOCUMENT_NOT_FOUND', 'Anonymous document not found');
-      }
-    }
-
-    if (params.generatedContractId) {
-      const contract = await prisma.contractGeneration.findUnique({ where: { id: params.generatedContractId }, select: { id: true } });
-      if (!contract) {
-        throw new HandoffPackageServiceError(404, 'GENERATED_CONTRACT_NOT_FOUND', 'Generated contract not found');
-      }
-    }
-
-    if (params.legalAnalysisId) {
-      const analysis = await prisma.legalAnalysis.findUnique({ where: { id: params.legalAnalysisId }, select: { id: true } });
-      if (!analysis) {
-        throw new HandoffPackageServiceError(404, 'LEGAL_ANALYSIS_NOT_FOUND', 'Legal analysis not found');
-      }
-    }
-
-    if (params.reviewNotesId) {
-      const reviewNotes = await prisma.contractReviewRecord.findUnique({ where: { id: params.reviewNotesId }, select: { id: true } });
-      if (!reviewNotes) {
-        throw new HandoffPackageServiceError(404, 'REVIEW_NOTES_NOT_FOUND', 'Review notes not found');
-      }
-    }
-
-    const packageType = params.packageType ? assertPackageType(params.packageType) : 'STANDARD';
-
-    const repo = this.assertRepoAvailable();
-    const record = await withCaseWorkGuard(prisma, caseId, (tx) => (tx as any).lawyerHandoffPackage.create({
-      data: {
-        caseId,
-        packageType,
-        sourceDocumentId: params.sourceDocumentId || null,
-        anonymizedDocumentId: params.anonymizedDocumentId || null,
-        generatedContractId: params.generatedContractId || null,
-        legalAnalysisId: params.legalAnalysisId || null,
-        reviewNotesId: params.reviewNotesId || null,
-        preparerSummary: params.preparerSummary || null,
-        preparedById: params.userId || null,
-        status: 'DRAFT',
-      },
-    }));
-
-    const result = toResult(record);
-    await createTimelineEvent({
-      action: 'CREATED',
-      packageId: result.id,
-      caseId: result.caseId,
-      userId: params.userId,
-      status: result.status,
-      sourceDocumentId: result.sourceDocumentId,
-      anonymizedDocumentId: result.anonymizedDocumentId,
-      generatedContractId: result.generatedContractId,
-      legalAnalysisId: result.legalAnalysisId,
-    });
-    return result;
   }
 
   async updateHandoffPackage(id: string, params: UpdateHandoffPackageParams): Promise<LawyerHandoffPackageResult> {

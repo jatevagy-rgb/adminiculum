@@ -1,10 +1,13 @@
 import { fetchApi } from "./api";
-import { interventionLabelHu } from "./growApi";
+import { interventionLabelHu, type GrowSourceBasis } from "./growApi";
 
 export type DiagnosticProvenanceClass =
   | "CANONICAL_STATE"
   | "DECLARED_OBSERVATION"
   | "MEASURED_SNAPSHOT"
+  | "ESTIMATED_SNAPSHOT"
+  | "DERIVED_SNAPSHOT"
+  | "PROCESS_SNAPSHOT"
   | "EVIDENCE_RECORD"
   | "RESEARCH_EVIDENCE"
   | "DERIVED_DIAGNOSIS"
@@ -111,7 +114,9 @@ export interface DiagnosticWorkbenchDto {
     }>;
     processSnapshots: Array<{
       id: string;
-      provenanceClass: "MEASURED_SNAPSHOT";
+      provenanceClass: "MEASURED_SNAPSHOT" | "ESTIMATED_SNAPSHOT" | "DERIVED_SNAPSHOT" | "PROCESS_SNAPSHOT";
+      sourceBasis?: GrowSourceBasis | null;
+      metricSourceBasis?: Array<{ code: string; sourceBasis: GrowSourceBasis | null; sourceFields: string[] }>;
       businessProcess: { id: string; name: string };
       metricVersion: string;
       observedAt: string;
@@ -187,6 +192,7 @@ export interface DiagnosticWorkbenchDto {
     research: Array<{
       id: string;
       provenanceClass: "RESEARCH_EVIDENCE";
+      sourceBasis?: GrowSourceBasis | null;
       kind: string;
       title: string;
       origin: string | null;
@@ -216,6 +222,18 @@ export const PROVENANCE_LABELS_HU: Record<DiagnosticProvenanceClass, { label: st
   MEASURED_SNAPSHOT: {
     label: "Mért folyamatpillanatkép",
     tone: "border-teal-200 bg-teal-50 text-teal-800",
+  },
+  ESTIMATED_SNAPSHOT: {
+    label: "Becslésen alapuló folyamatpillanatkép",
+    tone: "border-amber-200 bg-amber-50 text-amber-800",
+  },
+  DERIVED_SNAPSHOT: {
+    label: "Számított folyamatpillanatkép",
+    tone: "border-slate-200 bg-slate-50 text-slate-800",
+  },
+  PROCESS_SNAPSHOT: {
+    label: "Nem igazolt forrásalapú folyamatpillanatkép",
+    tone: "border-slate-200 bg-slate-50 text-slate-800",
   },
   DERIVED_DIAGNOSIS: {
     label: "Levezetett diagnózis",
@@ -281,6 +299,116 @@ export const VERIFICATION_STATUS_LABELS_HU: Record<string, string> = {
 export function verificationStatusLabelHu(status: string | null | undefined): string {
   if (!status) return "—";
   return VERIFICATION_STATUS_LABELS_HU[status] ?? status;
+}
+
+/** Truthful neutral fallback shared by the Grow diagnostic status mappings. */
+export const UNKNOWN_GROW_STATUS_LABEL = "Ismeretlen állapot";
+
+function growStatusLabelHu(map: Record<string, string>, status: string | null | undefined): string {
+  const key = String(status || "").trim().toUpperCase();
+  if (!key) return UNKNOWN_GROW_STATUS_LABEL;
+  return map[key] ?? UNKNOWN_GROW_STATUS_LABEL;
+}
+
+/** Canonical operating-profile lifecycle (a validated free string on the backend). */
+export const OPERATING_PROFILE_STATUS_LABELS_HU: Record<string, string> = {
+  ACTIVE: "Aktív",
+  INACTIVE: "Inaktív",
+  DRAFT: "Előkészítés",
+  ARCHIVED: "Archivált",
+};
+
+export function operatingProfileStatusLabelHu(status: string | null | undefined): string {
+  return growStatusLabelHu(OPERATING_PROFILE_STATUS_LABELS_HU, status);
+}
+
+/** Canonical business-process / business-system status. */
+export const BUSINESS_PROCESS_STATUS_LABELS_HU: Record<string, string> = {
+  ACTIVE: "Aktív",
+  INACTIVE: "Inaktív",
+  ARCHIVED: "Archivált",
+};
+
+export function businessProcessStatusLabelHu(status: string | null | undefined): string {
+  return growStatusLabelHu(BUSINESS_PROCESS_STATUS_LABELS_HU, status);
+}
+
+/** Canonical ExternalSourceStatus. */
+export const EXTERNAL_SOURCE_STATUS_LABELS_HU: Record<string, string> = {
+  ACTIVE: "Aktív",
+  PAUSED: "Szüneteltetve",
+  REVOKED: "Visszavonva",
+  ARCHIVED: "Archivált",
+};
+
+export function externalSourceStatusLabelHu(status: string | null | undefined): string {
+  return growStatusLabelHu(EXTERNAL_SOURCE_STATUS_LABELS_HU, status);
+}
+
+/** Canonical DiscoveryRunStatus. */
+export const DISCOVERY_RUN_STATUS_LABELS_HU: Record<string, string> = {
+  RUNNING: "Fut",
+  COMPLETED: "Befejezve",
+  FAILED: "Hibával lezárult",
+  PARTIAL: "Részleges",
+};
+
+export function discoveryRunStatusLabelHu(status: string | null | undefined): string {
+  return growStatusLabelHu(DISCOVERY_RUN_STATUS_LABELS_HU, status);
+}
+
+/** Canonical EvidenceReviewStatus for Grow evidence records. */
+export const EVIDENCE_REVIEW_STATUS_LABELS_HU: Record<string, string> = {
+  PROVIDED: "Rögzítve",
+  UNDER_REVIEW: "Felülvizsgálat alatt",
+  ACCEPTED: "Elfogadva",
+  REJECTED: "Elutasítva",
+};
+
+export function evidenceReviewStatusLabelHu(status: string | null | undefined): string {
+  return growStatusLabelHu(EVIDENCE_REVIEW_STATUS_LABELS_HU, status);
+}
+
+/** Canonical ComplianceEnrollmentStatus. */
+export const COMPLIANCE_ENROLLMENT_STATUS_LABELS_HU: Record<string, string> = {
+  ENROLLED: "Bekapcsolva",
+  NOT_ENROLLED: "Nincs bekapcsolva",
+};
+
+export function complianceEnrollmentStatusLabelHu(status: string | null | undefined): string {
+  return growStatusLabelHu(COMPLIANCE_ENROLLMENT_STATUS_LABELS_HU, status);
+}
+
+/** Canonical DiagnosisCandidateStatus. */
+export const DIAGNOSIS_STATUS_LABELS_HU: Record<string, string> = {
+  OPEN: "Nyitott",
+  CONFIRMED: "Megerősítve",
+  REJECTED: "Elutasítva",
+  NEEDS_MORE_DATA: "Több adat kell",
+};
+
+export function diagnosisStatusLabelHu(status: string | null | undefined): string {
+  return growStatusLabelHu(DIAGNOSIS_STATUS_LABELS_HU, status);
+}
+
+/**
+ * Human Hungarian wording for the bounded Grow diagnostic "missing" items. The
+ * backend persists an English `message`; ordinary presentation must not expose
+ * either the raw code or the English sentence, so the code drives the label and
+ * an unrecognized code degrades to a neutral Hungarian line.
+ */
+const GROW_UNRESOLVED_ITEM_LABELS: Record<string, string> = {
+  UNKNOWN_CANONICAL_FACT: "Legalább egy jelenlegi vállalati törzsadat kifejezetten ismeretlen.",
+  CONFLICTING_EVIDENCE: "Legalább egy diagnózis vagy javaslat ellentmondásos bizonyítékokon alapul.",
+  INSUFFICIENT_RECOMMENDATION_DATA: "Néhány javaslathoz további adat vagy szakértői felülvizsgálat szükséges.",
+};
+
+export const UNKNOWN_GROW_UNRESOLVED_ITEM_LABEL = "Tisztázandó adat.";
+
+export function growthUnresolvedItemLabel(item: { code?: string | null }): string {
+  const key = String(item?.code || "").trim().toUpperCase();
+  if (!key) return UNKNOWN_GROW_UNRESOLVED_ITEM_LABEL;
+  return GROW_UNRESOLVED_ITEM_LABELS[key] ?? UNKNOWN_GROW_UNRESOLVED_ITEM_LABEL;
 }
 
 export const SUFFICIENCY_LABELS_HU: Record<string, { label: string; tone: string }> = {

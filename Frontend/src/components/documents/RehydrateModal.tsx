@@ -1,4 +1,6 @@
 "use client";
+import { ViewportDialog } from "@/components/ui/ViewportDialog";
+
 
 import { useState } from "react";
 import { 
@@ -116,7 +118,7 @@ export function RehydrateModal({
       case "FAILED":
         return "bg-[#fef2f2] border-[#d4b8b8] text-[#8b3a3a]";
       default:
-        return "bg-[#f5f3ee] border-[#c3c8c1]/10 text-[#434843]";
+        return "bg-[var(--adm-surface)] border-[#c3c8c1]/10 text-[#434843]";
     }
   };
 
@@ -136,32 +138,13 @@ export function RehydrateModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-      <div className="bg-white w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl border border-[#e4e2dd]">
-        {/* Header */}
-        <div className="bg-[#06190d] px-6 py-4 flex justify-between items-center">
-          <div>
-            <h2 className="text-lg font-['Newsreader'] font-bold text-white">
-              AI-válasz importálása és visszaazonosítás
-            </h2>
-            <p className="text-xs text-white/60 mt-1">
-              {anonymousDocName || `Dokumentum: ${anonymousDocId.slice(0, 8)}...`}
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-white/60 hover:text-white transition-colors"
-          >
-            <span className="material-symbols-outlined">close</span>
-          </button>
-        </div>
-
+    <ViewportDialog title="AI-válasz importálása és visszaazonosítás" description={anonymousDocName || undefined} onClose={onClose} busy={isLoading}>
         {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+        <div className="space-y-4">
           {!result ? (
             <>
               {/* Instructions */}
-              <div className="mb-6 p-4 bg-[#f5f3ee] border border-[#c3c8c1]/10">
+              <div className="mb-6 p-4 bg-[var(--adm-surface)] border border-[#c3c8c1]/10">
                 <div className="flex items-start gap-3">
                   <span className="material-symbols-outlined text-[#434843]">info</span>
                   <div className="text-sm text-[#434843]">
@@ -250,7 +233,7 @@ export function RehydrateModal({
                   <label className="block text-xs font-bold uppercase tracking-widest text-[#434843] mb-3">
                     Visszaazonosított szöveg
                   </label>
-                  <div className="p-4 bg-[#f5f3ee] border border-[#c3c8c1]/10 text-xs text-[#434843] max-h-64 overflow-y-auto font-mono whitespace-pre-wrap">
+                  <div className="p-4 bg-[var(--adm-surface)] border border-[#c3c8c1]/10 text-xs text-[#434843] max-h-64 overflow-y-auto font-mono whitespace-pre-wrap">
                     {result.rehydratedContent}
                   </div>
                 </div>
@@ -306,7 +289,7 @@ export function RehydrateModal({
                   
                   <button
                     onClick={handleReset}
-                    className="flex-1 py-3 text-xs font-bold uppercase tracking-widest border border-[#c3c8c1]/20 text-[#434843] hover:bg-[#f5f3ee] min-w-[140px]"
+                    className="flex-1 py-3 text-xs font-bold uppercase tracking-widest border border-[#c3c8c1]/20 text-[#434843] hover:bg-[var(--adm-surface)] min-w-[140px]"
                   >
                     Új importálás
                   </button>
@@ -321,7 +304,7 @@ export function RehydrateModal({
                   </button>
                   <button
                     onClick={onClose}
-                    className="flex-1 py-3 text-xs font-bold uppercase tracking-widest border border-[#c3c8c1]/20 text-[#434843] hover:bg-[#f5f3ee]"
+                    className="flex-1 py-3 text-xs font-bold uppercase tracking-widest border border-[#c3c8c1]/20 text-[#434843] hover:bg-[var(--adm-surface)]"
                   >
                     Bezárás
                   </button>
@@ -336,7 +319,7 @@ export function RehydrateModal({
           <div className="px-6 py-4 border-t border-[#e4e2dd] flex justify-end gap-3">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-xs font-bold uppercase tracking-widest border border-[#c3c8c1]/20 text-[#434843] hover:bg-[#f5f3ee]"
+              className="px-4 py-2 text-xs font-bold uppercase tracking-widest border border-[#c3c8c1]/20 text-[#434843] hover:bg-[var(--adm-surface)]"
             >
               Mégse
             </button>
@@ -349,7 +332,6 @@ export function RehydrateModal({
             </button>
           </div>
         )}
-      </div>
-    </div>
+    </ViewportDialog>
   );
 }

@@ -2409,3 +2409,12 @@ select {
   font-weight: 600;
   letter-spacing: -0.01em;
 }
+
+/* Accepted workspace surfaces keep the neutral paper background across UI packs. */
+.app-shell[data-workspace-surface="clean"],
+.app-shell[data-workspace-surface="clean"] .app-shell-content,
+.app-shell[data-workspace-surface="clean"] .app-shell-main,
+.app-shell[data-workspace-surface="clean"] .app-shell-footer,
+.app-shell[data-workspace-surface="clean"] .adm-board-page {
+  background: #f8faf9;
+}

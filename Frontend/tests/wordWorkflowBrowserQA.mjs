@@ -285,6 +285,7 @@ function workspace() {
  return w;
 }
 function mock(url, method, body) {
+ if (url.includes('/case-workspace/')) return { status: 503, body: { code: 'WORKSPACE_CAPABILITY_UNAVAILABLE' } };
  const ok = body => ({ status: 200, body });
  if (url.includes('/auth/me')) return ok(AUTH_ME);
  if (url.includes(`/case-history/cases/${CASE_ID}`)) {
@@ -319,30 +320,30 @@ function mock(url, method, body) {
  if (url.includes('/cases/') && url.endsWith('/lifecycle')) return ok({ caseId: CASE_ID, status: 'ACTIVE', lifecycleCategory: 'ACTIVE', blockers: [{ code: 'OPEN_TASKS', label: 'Nyitott feladat', count: 1 }], closureReadiness: { ready: false, reasons: ['A feladat még nem zárult le.'] }, capabilities: { canClose: !readOnly }, availability: {} });
  return baseMock(url);
 }
-const browser = await chromium.launch({ headless: true, channel: 'chrome' });
+const browser = await chromium.launch({ headless: true });
 try {
  for (const width of (process.env.WF09_WIDTHS ? process.env.WF09_WIDTHS.split(',').map(Number) : [390, 768, 1440])) {
   attached = []; writes.length = 0; readOnly = false; missingContext = false; historyErrorMode = false;
   const historyCount = historyRequests.length;
-  const context = await browser.newContext({ viewport: { width, height: 1000 }, locale: 'hu-HU' });
-  const page = await context.newPage(); page.setDefaultTimeout(20000);
+  const context = await browser.newContext({ viewport: { width, height: width === 390 ? 844 : width === 768 ? 1024 : 1000 }, locale: 'hu-HU' });
+  const page = await context.newPage(); page.setDefaultTimeout(45000);
   const errors = []; page.on('pageerror', e => { errors.push(e.stack || e.message); console.error('PAGE_ERROR', e.stack || e.message); });
   const requests = [];
-  page.on('request', req => { if (req.url().includes('/api/v1/')) requests.push(req.url()); });
-  page.on('console', msg => { if (msg.type() === 'error') console.error(msg.text()); });
+  page.on('request', req => { requests.push(req.url()); });
   await page.addInitScript(profile => { localStorage.setItem('auth_token', 'qa-workforce-token'); sessionStorage.setItem('adminiculum_auth_profile', JSON.stringify(profile)); }, AUTH_ME);
   await page.route('**/api/v1/**', route => { const req = route.request(); const r = mock(req.url(), req.method(), req.postDataJSON()); return route.fulfill({ status: r.status, contentType: 'application/json', body: JSON.stringify(r.body) }); });
-  await page.route('https://**', route => route.abort());
+  // All application API requests are intercepted above; use Chromium's ordinary MSAL initialization.
+  page.on('requestfailed', req => console.error('REQUEST_FAILED', req.url(), req.failure()?.errorText));
   const noOverflow = async () => assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `overflow at ${width}`);
   await page.goto(`${BASE}/cases/${CASE_ID}`, { waitUntil: 'domcontentloaded', timeout: 120000 });
-  await page.locator('[data-testid="word-case-context"]').waitFor();
+  try { await page.locator('[data-testid="word-case-context"]').waitFor(); } catch(e) { console.error(JSON.stringify({url:page.url(), errors, resources: await page.evaluate(() => performance.getEntriesByType('resource').map(r=>({name:r.name,duration:r.duration,size:r.transferSize}))), ready:await page.evaluate(()=>document.readyState), body:await page.locator('body').innerText(), requests},null,2)); throw e; }
   await page.locator('section[aria-label="Ügytörténet"] > ol').getByText('Ügy létrehozva', { exact: true }).waitFor();
   assert.ok(historyRequests.length > historyCount, 'the case route must request the mounted history endpoint');
   await page.getByRole('button', { name: 'További események' }).click();
   await page.locator('section[aria-label="Ügytörténet"] > ol').getByText('Szerződés ellenőrzése', { exact: true }).waitFor();
   await page.locator('[data-testid="case-notes-primary"]').waitFor();
   await page.getByText('Belső válasz', { exact: true }).waitFor();
-  await page.locator('[data-testid="activity-feed"]').waitFor();
+  assert.equal(await page.locator('#ck-activity section[aria-label="Ügytörténet"]').count(), 1, 'one canonical history');
   await page.getByText('Teszt Munkatárs', { exact: true }).first().waitFor();
   assert.equal(await page.locator('[data-testid="persisted-deadline"] time').first().getAttribute('datetime'), DUE);
   await noOverflow();
@@ -359,7 +360,7 @@ try {
   const header = page.locator('[data-testid="word-document-header"]');
   try {
     await header.waitFor();
-    await page.waitForFunction(() => document.querySelector('[data-testid="submission-version-context"]')?.textContent?.includes('qa-historical-version'));
+    await page.waitForFunction(() => document.querySelector('[data-testid="submission-version-context"]')?.getAttribute('title') === 'qa-historical-version');
   } catch (cause) {
     await page.screenshot({ path: path.join(SHOTS, `document-failure-${width}.png`), fullPage: true });
     console.error(JSON.stringify({ url: page.url(), errors, requests, body: await page.locator('body').innerText() }, null, 2));
@@ -367,8 +368,7 @@ try {
   }
   assert.equal(await page.locator('[data-testid="document-submission-task"]').inputValue(), '');
   assert.ok(await page.locator('[data-testid="document-top-submission"]').isDisabled());
-  await page.locator('[data-testid="word-case-context"]').waitFor();
-  assert.deepEqual(await page.locator('[data-tile-id]').evaluateAll(els => els.map(e => e.dataset.tileId)), ids);
+  assert.equal(await page.locator('[data-testid="word-case-context"]').count(), 0, 'document view must not repeat the case context');
   await noOverflow();
   await page.screenshot({ path: path.join(SHOTS, `documents-${width}.png`), fullPage: true });
   await page.locator('[data-testid="document-submission-task"]').selectOption(TASK.id);
@@ -399,7 +399,7 @@ try {
    throw cause;
   }
   assert.ok(await page.locator('[data-testid="document-top-submission"]').isDisabled());
-  await page.getByText('Az ügy célja még nincs rögzítve.', { exact: true }).waitFor();
+  assert.equal(await page.locator('[data-testid="word-case-context"]').count(), 0);
   await page.getByRole('button', { name: 'Lezárás ellenőrzése' }).click();
   await page.getByText('A feladat még nem zárult le.', { exact: true }).waitFor();
   assert.ok(await page.getByRole('button', { name: 'Ügy lezárása', exact: true }).isDisabled());

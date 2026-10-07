@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { formatDeadline as businessDeadline } from "@/lib/businessDateTime";
 import { AdminStatusPill } from "@/components/adminiculum/ui";
 import { getCaseDisplayTitle, getCaseStatusLabel } from "@/lib/caseLabels";
 
@@ -20,14 +21,13 @@ type CaseWorkspaceNavProps = {
 const itemClass = (active: boolean) =>
   `border-b-2 px-1 py-2 text-[11px] font-semibold transition-colors ${
     active
-      ? "border-[var(--adm-ochre-500)] text-[var(--adm-green-800)]"
+      ? "border-[var(--adm-green-800)] text-[var(--adm-green-800)]"
       : "border-transparent text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]"
   }`;
 
 const formatDeadline = (deadline?: string | null) => {
   if (!deadline) return null;
-  const parsed = new Date(deadline);
-  return Number.isNaN(parsed.getTime()) ? deadline : parsed.toLocaleDateString("hu-HU");
+  return businessDeadline(deadline);
 };
 
 export function CaseWorkspaceNav({
@@ -63,11 +63,11 @@ export function CaseWorkspaceNav({
   const visibleDeadline = formatDeadline(deadline);
 
   return (
-    <section className="border-b border-[var(--adm-border)] bg-[rgba(251,249,244,0.96)] px-4 pt-3 lg:px-5">
+    <section className="border-b border-[var(--adm-border)] bg-white px-4 pt-3 lg:px-5">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="truncate font-serif text-[24px] font-medium leading-tight text-[var(--adm-text)]">
+            <h1 className="break-words font-sans text-[24px] font-medium leading-tight text-[var(--adm-text)]">
               {getCaseDisplayTitle({ title, clientName })}
             </h1>
             {status ? <AdminStatusPill tone={String(status).toUpperCase() === "OPEN" ? "green" : "neutral"}>{getCaseStatusLabel(status)}</AdminStatusPill> : null}
@@ -91,14 +91,14 @@ export function CaseWorkspaceNav({
 
       {/* Restrained secondary destinations. These are routes, not actions, and
           must not compete with the primary tabs above. */}
-      <nav data-testid="case-workspace-secondary-nav" aria-label="Ügy további nézetei" className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-[11px]">
+      {activeTab === "communications" ? <nav data-testid="case-workspace-secondary-nav" aria-label="Ügy további nézetei" className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-[11px]">
         <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">További nézetek</span>
         {secondaryLinks.map((link) => (
           <Link key={link.id} href={link.href} className="font-semibold text-[var(--adm-text-muted)] hover:text-[var(--adm-text)] hover:underline">
             {link.label}
           </Link>
         ))}
-      </nav>
+      </nav> : null}
     </section>
   );
 }

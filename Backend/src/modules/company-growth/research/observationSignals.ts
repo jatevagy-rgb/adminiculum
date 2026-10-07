@@ -1,4 +1,11 @@
-import { GROW_ASSESSMENT_SCHEMA, evaluateAssessmentAnswers } from '../assessments/registry';
+import { GROW_ASSESSMENT_SCHEMA, GROW_ASSESSMENT_V2_SCHEMA, isAssessmentSchema, evaluateAssessmentAnswers } from '../assessments/registry';
+import type { AssessmentFindingResult } from '../assessments/registry';
+
+export interface GrowAssessmentFinding extends AssessmentFindingResult {
+  packKey: string;
+  packVersion: number;
+  polarity: 'INVESTIGATION' | 'PROBLEM';
+}
 
 /**
  * GROW — fail-closed Observation → GrowSignal normalization boundary.
@@ -93,6 +100,8 @@ export interface GrowSignalProvenance {
   channel?: string | null;
   /** Canonical source record reference, when present. */
   sourceRecordId?: string | null;
+  defersAutomation?: boolean;
+  assessmentFinding?: GrowAssessmentFinding;
 }
 
 /**
@@ -139,7 +148,7 @@ function readProvenanceChannel(record: Record<string, unknown>): string | null {
  * - Findings without a canonical category (e.g. strategy/leadership/culture)
  *   remain assessment-level and NEVER enter Grow research. There is no
  *   GENERAL_FLOW fallback.
- * - One signal per canonical category per observation (deterministic dedupe).
+ * - V1 retains category dedupe; V2 retains each bounded finding identity.
  */
 function assessmentObservationToGrowSignals(
   observation: NormalizableObservation,
@@ -148,6 +157,7 @@ function assessmentObservationToGrowSignals(
   const packKey = typeof record.packKey === 'string' ? record.packKey : '';
   const packVersion =
     typeof record.packVersion === 'number' ? record.packVersion : Number(record.packVersion);
+  if ((packVersion === 1 && record.schema !== GROW_ASSESSMENT_SCHEMA) || (packVersion >= 2 && record.schema !== GROW_ASSESSMENT_V2_SCHEMA)) return [];
   const rawAnswers = record.answers;
   if (!packKey || !Number.isFinite(packVersion) || !Array.isArray(rawAnswers)) return [];
 
@@ -168,7 +178,7 @@ function assessmentObservationToGrowSignals(
   const seenCategories = new Set<string>();
   for (const finding of evaluation.findings) {
     const categoryKey = finding.surveyCategoryKey;
-    if (!categoryKey || seenCategories.has(categoryKey)) continue;
+    if (!categoryKey || (packVersion === 1 && seenCategories.has(categoryKey))) continue;
     const domainKey = SURVEY_CATEGORY_TO_DOMAIN[categoryKey];
     if (!domainKey) continue; // fail-closed: never guess a domain
     seenCategories.add(categoryKey);
@@ -184,6 +194,15 @@ function assessmentObservationToGrowSignals(
         categoryKey,
         channel,
         sourceRecordId: observation.sourceRecordId ?? null,
+        ...(packVersion === 2 ? {
+          assessmentFinding: {
+            ...finding,
+            packKey,
+            packVersion,
+            polarity: finding.findingKey === 'v2_repeatable_candidate' ? 'INVESTIGATION' as const : 'PROBLEM' as const,
+          },
+        } : {}),
+        ...(evaluation.findings.some(f => f.defersAutomation) ? { defersAutomation: true } : {}),
       },
     });
   }
@@ -212,7 +231,7 @@ export function observationToGrowSignals(observation: NormalizableObservation): 
   if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return [];
   const record = payload as Record<string, unknown>;
 
-  if (record.schema === GROW_ASSESSMENT_SCHEMA) {
+  if (isAssessmentSchema(record.schema)) {
     return assessmentObservationToGrowSignals(observation, record);
   }
 
@@ -293,7 +312,7 @@ function assessmentSupersedeScopeKey(observation: NormalizableObservation): stri
   const payload = observation.rawPayload;
   if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return null;
   const record = payload as Record<string, unknown>;
-  if (record.schema !== GROW_ASSESSMENT_SCHEMA) return null;
+  if (!isAssessmentSchema(record.schema)) return null;
   const packKey = typeof record.packKey === 'string' ? record.packKey.trim() : '';
   if (!packKey) return null;
   const processId =

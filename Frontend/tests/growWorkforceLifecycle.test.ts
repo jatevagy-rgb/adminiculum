@@ -125,8 +125,10 @@ test('ASSUMED is never presented as an achieved result', () => {
 
 test('outcomes without before/after data show an honest empty state, no invented delta', () => {
   const src = read(JOURNEY);
-  assert.match(src, /Nincs mérési adat\./);
-  assert.match(src, /outcome\.metricsSummary\?\.before \?/);
+  const comparison = read('Frontend/src/components/clients/GrowOutcomeComparison.tsx');
+  assert.match(src, /<GrowOutcomeComparison outcome=\{outcome\}/);
+  assert.match(comparison, /Nincs mérési adat\./);
+  assert.match(comparison, /outcome\.metricsSummary\?\.before \?/);
   // No fabricated percentage/score wording anywhere in the journey.
   assert.doesNotMatch(src, /%\-os javulás|százalékos javulás|maturityScore|fake|mock/i);
 });

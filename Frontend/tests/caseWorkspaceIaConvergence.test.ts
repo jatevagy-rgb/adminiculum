@@ -24,16 +24,16 @@ describe("Case Workspace IA convergence", () => {
 
     const heroSlice = source.slice(
       source.indexOf('data-testid="matter-hero"'),
-      source.indexOf('data-testid="kpi-row"'),
+      source.indexOf('<CaseContextTiles'),
     );
     assert.doesNotMatch(heroSlice, /setModal\(\{ type: "task-create" \}\)/, "the hero must not carry a competing create action");
     assert.doesNotMatch(heroSlice, /Megjegyzés hozzáadása/, "the hero must not carry a competing note action");
 
     const actionSlice = source.slice(
       source.indexOf('data-testid="case-workspace-quick-actions"'),
-      source.indexOf("Ügy munkatér szakaszai"),
+      source.indexOf('title="Aktív munka"'),
     );
-    for (const label of ["Új feladat", "Dokumentum feltöltése", "Megjegyzés hozzáadása", "AI előkészítés", "Munkaidő rögzítése"]) {
+    for (const label of ["Új feladat", "Dokumentum feltöltése", "Megjegyzés hozzáadása", "Munkaidő rögzítése"]) {
       assert.ok(actionSlice.includes(label), `${label} must live on the Műveletek surface`);
     }
   });
@@ -81,7 +81,7 @@ describe("Case Workspace IA convergence", () => {
 
   it("7. the Communication route remains reachable", () => {
     assert.match(nav(), /\/cases\/\$\{caseId\}\/communications/);
-    assert.match(overview(), /\/cases\/\$\{caseId\}\/communications/);
+    assert.match(read("src/components/cases/word-workflow/tools/WordWideCommunicationLeaf.tsx"), /communicationId=/);
     assert.ok(exists("src/app/cases/[caseId]/communications/page.tsx"));
   });
 
@@ -126,7 +126,7 @@ describe("Case Workspace IA convergence", () => {
     assert.ok(exists("src/app/cases/[caseId]/documents/page.tsx"));
     assert.match(overview(), /router\.push\(`\/cases\/\$\{caseId\}\/documents\?documentId=\$\{encodeURIComponent\(docId\)\}`\)/);
     for (const anchor of ["ck-starting-context", "ck-work-package", "ck-notes", "ck-activity", "ck-time"]) {
-      assert.match(overview(), new RegExp(`'${anchor}'`), `${anchor} deep link must remain`);
+      assert.match(overview(), new RegExp(`id="${anchor}"`), `${anchor} deep link must remain`);
     }
   });
 

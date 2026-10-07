@@ -1,16 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { useDialogAccessibility } from "@/components/ui/useDialogAccessibility";
 import {
   anonymizeDocument,
+  ApiError,
   getAnonymizationSourceText,
   type AnonymizationMetadataInput,
   type CaseContractListItem,
+  type KnownPartyInput,
 } from "@/lib/api";
 import { AIPromptPanel } from "@/components/documents/AIPromptPanel";
 import { OrganizationPersonPicker } from "@/components/documents/OrganizationPersonPicker";
 import type { KnownPartyTransfer } from "@/lib/organizationPersonMapping";
+import {
+  resolveAnonymizeSourceOutcome,
+  SOURCE_TEXT_LIMITATION_MESSAGE,
+} from "@/lib/documents/anonymizeSourceOutcome";
 
 // Minimal structured counterparty input
 interface CounterpartyInput {
@@ -65,13 +73,15 @@ const redactionLevelOptions: { value: RedactionLevel; label: string }[] = [
 
 const legalRoleOptions = ["Ügyfél", "Megbízó", "Eladó", "Vevő", "Ellenérdekű fél", "Egyéb fél"];
 
-const SOURCE_TEXT_LIMITATION_MESSAGE = "A dokumentum teljes szöveges előnézete jelenleg nem érhető el. Az anonimizálás a feltöltött dokumentum backend feldolgozásán fut.";
-
 const COPY_FAILURE_MESSAGE = "Nem sikerült a vágólapra másolni. Jelöld ki és másold kézzel.";
 
 const PSEUDONYMIZATION_NOTE = "Az Adminiculum az AI-átadáshoz pszeudonimizált munkapéldányt készít; az eredeti adatok visszaállíthatók az Adminiculumban.";
 
 export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientId, clientName, clientRole, onSuccess }: AnonymizeModalProps) {
+  const [mounted, setMounted] = useState(false);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+
+  useDialogAccessibility({ open: isOpen && mounted, onClose, dialogRef });
   const [aiTask, setAiTask] = useState<AITask>("REVIEW_RISKS");
   const [redactionLevel, setRedactionLevel] = useState<RedactionLevel>("FULL");
   const [customPrompt, setCustomPrompt] = useState("");
@@ -82,7 +92,7 @@ export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientId, cl
   const [sourceTextLoading, setSourceTextLoading] = useState(false);
   const [sourceTextAvailable, setSourceTextAvailable] = useState(false);
   const [sourceText, setSourceText] = useState("");
-  const [workspaceText, setWorkspaceText] = useState("");
+  const generation = useRef(0);
   const [sourceLimitationMessage, setSourceLimitationMessage] = useState(SOURCE_TEXT_LIMITATION_MESSAGE);
 
   const [metadataClientName, setMetadataClientName] = useState(clientName || "");
@@ -110,23 +120,36 @@ export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientId, cl
   const [contactEmail, setContactEmail] = useState("");
 const [phone, setPhone] = useState("");
   const [showPersonPicker, setShowPersonPicker] = useState(false);
+  // Additional complete known-party bundles beyond the primary party. Each entry
+  // is an independent identity bundle; adding/removing one never mutates another.
+  const [additionalKnownParties, setAdditionalKnownParties] = useState<Array<KnownPartyInput & { id: string }>>([]);
 
   const applyOrganizationPerson = (transfer: KnownPartyTransfer, legalRole: string) => {
-    setKnownPartyKind("PERSON");
-    if (transfer.name !== undefined) {
-      setKnownPartyName(transfer.name);
-      setMetadataClientName(transfer.name);
-    }
-    if (transfer.role !== undefined) setKnownPartyRole(transfer.role);
-    if (transfer.notes !== undefined) setKnownPartyNotes(transfer.notes);
-    if (transfer.contactEmail !== undefined) setContactEmail(transfer.contactEmail);
-    if (transfer.phone !== undefined) setPhone(transfer.phone);
-    setKnownPartyLegalRole(legalRole);
-    setMetadataClientRole(legalRole);
+    // Append a NEW known-party bundle rather than overwriting the primary party,
+    // so selecting a second person never erases the first.
+    setAdditionalKnownParties((prev) => [
+      ...prev,
+      {
+        id: `kp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        kind: "PERSON",
+        legalRole,
+        name: transfer.name,
+        role: transfer.role,
+        notes: transfer.notes,
+        contactEmail: transfer.contactEmail,
+        phone: transfer.phone,
+      },
+    ]);
     setShowPersonPicker(false);
   };
 
+  const removeAdditionalParty = (id: string) => {
+    setAdditionalKnownParties((prev) => prev.filter((party) => party.id !== id));
+  };
+
   const router = useRouter();
+
+  useEffect(() => setMounted(true), []);
 
   // Structured counterparty (extra-party) input
   const [counterparties, setCounterparties] = useState<CounterpartyInput[]>([]);
@@ -146,10 +169,13 @@ const [phone, setPhone] = useState("");
   // document changes, so an old anonymized result never masquerades as belonging
   // to a different document.
   useEffect(() => {
+    generation.current += 1;
     if (!isOpen) return;
     setResult(null);
     setError(null);
     setCopiedState(null);
+    setIsLoading(false);
+    return () => { generation.current += 1; };
   }, [isOpen, contract.id]);
 
   const knownPartyPrimaryName = knownPartyKind === "COMPANY"
@@ -162,28 +188,28 @@ const [phone, setPhone] = useState("");
     let active = true;
     const loadSourceText = async () => {
       setSourceTextLoading(true);
+      setSourceTextAvailable(false);
+      setSourceText("");
       try {
         const response = await getAnonymizationSourceText(contract.id);
         if (!active) return;
 
-        const text = (response.sourceText || "").trim();
-        if (response.success && response.textAvailable && text.length > 0) {
+        const outcome = resolveAnonymizeSourceOutcome(response);
+        if (outcome.available) {
+          const text = (response.sourceText || "").trim();
           setSourceTextAvailable(true);
           setSourceText(text);
-          setWorkspaceText(text);
-          setSourceLimitationMessage(SOURCE_TEXT_LIMITATION_MESSAGE);
+          setSourceLimitationMessage(outcome.message);
         } else {
           setSourceTextAvailable(false);
           setSourceText("");
-          setWorkspaceText("");
-          setSourceLimitationMessage(response.limitationMessage || SOURCE_TEXT_LIMITATION_MESSAGE);
+          setSourceLimitationMessage(outcome.message);
         }
       } catch {
         if (!active) return;
         setSourceTextAvailable(false);
         setSourceText("");
-        setWorkspaceText("");
-        setSourceLimitationMessage(SOURCE_TEXT_LIMITATION_MESSAGE);
+        setSourceLimitationMessage(resolveAnonymizeSourceOutcome({ code: "PROCESSING_FAILURE" }).message);
       } finally {
         if (active) {
           setSourceTextLoading(false);
@@ -211,6 +237,8 @@ const [phone, setPhone] = useState("");
   };
 
   const handleAnonymize = async () => {
+    if (!sourceTextAvailable || sourceTextLoading) return;
+    const request = generation.current;
     setIsLoading(true);
     setError(null);
     setResult(null);
@@ -221,7 +249,6 @@ const [phone, setPhone] = useState("");
         customPrompt: aiTask === "CUSTOM" ? customPrompt : undefined,
         redactionLevel,
         counterparties: counterparties.length > 0 ? counterparties : undefined,
-        sourceText: sourceTextAvailable && workspaceText.trim().length > 0 ? workspaceText : undefined,
         metadata: {
           clientName: metadataClientName.trim() || knownPartyPrimaryName || undefined,
           clientRole: metadataClientRole.trim() || knownPartyLegalRole.trim() || undefined,
@@ -252,6 +279,9 @@ const [phone, setPhone] = useState("");
             contactEmail: contactEmail.trim() || undefined,
             phone: phone.trim() || undefined,
           },
+          knownParties: additionalKnownParties.length > 0
+            ? additionalKnownParties.map(({ id: _id, ...party }) => party)
+            : undefined,
         } as AnonymizationMetadataInput,
       }) as unknown as {
         success: boolean;
@@ -267,6 +297,7 @@ const [phone, setPhone] = useState("");
         error?: string;
       };
 
+      if (request !== generation.current) return;
       if (response.success && response.anonymizedDocumentId) {
         const resultData: AnonymizeResult = {
           anonymizedDocumentId: response.anonymizedDocumentId,
@@ -279,22 +310,12 @@ const [phone, setPhone] = useState("");
         setResult(resultData);
         onSuccess?.(resultData);
       } else {
-        setError(response.error || "Az anonimizálás nem sikerült.");
+        setError(resolveAnonymizeSourceOutcome({ code: 'PROCESSING_FAILURE' }).message);
       }
     } catch (err) {
-      const e = err as any;
-      const rd = e?.response?.data;
-      const msg =
-        (typeof rd?.details === 'string' && rd.details) ||
-        (typeof rd?.message === 'string' && rd.message) ||
-        (typeof rd?.error === 'string' && rd.error) ||
-        (typeof e?.details === 'string' && e.details) ||
-        (typeof e?.message === 'string' && e.message) ||
-        (typeof e?.error === 'string' && e.error) ||
-        "Az anonimizálás nem sikerült.";
-      setError(msg);
+      if (request === generation.current) setError(resolveAnonymizeSourceOutcome({ code: err instanceof ApiError ? err.code || 'PROCESSING_FAILURE' : 'PROCESSING_FAILURE' }).message);
     } finally {
-      setIsLoading(false);
+      if (request === generation.current) setIsLoading(false);
     }
   };
 
@@ -340,15 +361,15 @@ const [phone, setPhone] = useState("");
     setCustomPrompt("");
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-      <div className="bg-white w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl border border-[#e4e2dd]">
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/30 px-4 py-4 backdrop-blur-sm">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="anonymize-modal-title" tabIndex={-1} className="flex max-h-[calc(100dvh-2rem)] w-full max-w-2xl flex-col overflow-hidden border border-[#e4e2dd] bg-white shadow-2xl outline-none">
         {/* Header */}
-        <div className="bg-[#06190d] px-6 py-4 flex justify-between items-center">
+        <div className="flex shrink-0 items-center justify-between bg-[#06190d] px-6 py-4">
           <div>
-            <h2 className="text-lg font-['Newsreader'] font-bold text-white">
+            <h2 id="anonymize-modal-title" className="text-lg font-['Newsreader'] font-bold text-white">
               AI-előkészítés / Anonimizálás
             </h2>
             <p className="text-xs text-white/60 mt-1">
@@ -364,7 +385,7 @@ const [phone, setPhone] = useState("");
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
           {!result ? (
             <>
               {/* Source Document Info */}
@@ -384,23 +405,24 @@ const [phone, setPhone] = useState("");
               <div className="mb-6 p-4 border border-[#c3c8c1]/20">
                 <div className="flex items-center gap-2 mb-3">
                   <span className="material-symbols-outlined text-[#434843] text-base">article</span>
-                  <p className="text-xs font-bold text-[#06190d]">Szöveges munkafelület (MVP)</p>
+                  <p className="text-xs font-bold text-[var(--adm-text-primary)]">Dokumentumforrás előnézete</p>
                 </div>
                 {sourceTextLoading ? (
                   <p className="text-xs text-[#434843]">Forrásszöveg betöltése...</p>
                 ) : sourceTextAvailable ? (
                   <>
                     <p className="text-[10px] text-[#434843]/70 mb-2">
-                      Az anonimizálás az itt látható / szerkesztett szövegen fut.
+                      Az anonimizálás a dokumentum ellenőrzött, tárolt szövegéből készül.
                     </p>
                     <textarea
-                      value={workspaceText}
-                      onChange={(e) => setWorkspaceText(e.target.value)}
+                      value={sourceText}
+                      readOnly
+                      aria-label="A dokumentum hiteles forrásszövege"
                       rows={10}
                       className="w-full p-3 border border-[#c3c8c1]/20 text-xs text-[#06190d] focus:outline-none focus:border-[#06190d] font-mono"
                     />
                     <p className="mt-2 text-[10px] text-[#434843]/60">
-                      Eredeti betöltött karakterek: {sourceText.length} • aktuális munkaszöveg: {workspaceText.length}
+                      Betöltött karakterek: {sourceText.length}
                     </p>
                   </>
                 ) : (
@@ -510,6 +532,38 @@ const [phone, setPhone] = useState("");
                   )}
                 </div>
               </div>
+
+              {/* Additional known-party bundles (person picker appends here) */}
+              {additionalKnownParties.length > 0 && (
+                <div className="mb-6 p-4 border border-[#c3c8c1]/20">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="material-symbols-outlined text-[#434843] text-base">group_add</span>
+                    <p className="text-xs font-bold text-[#06190d]">További ismert felek</p>
+                  </div>
+                  <div className="space-y-2">
+                    {additionalKnownParties.map((party) => (
+                      <div key={party.id} className="flex items-center justify-between px-3 py-2 bg-[#f5f3ee] border border-[#c3c8c1]/10">
+                        <div>
+                          <p className="text-xs font-bold text-[#06190d]">{party.name || "Ismert fél"}</p>
+                          <p className="text-[10px] text-[#434843]/70">
+                            {party.legalRole || "Szerep nélkül"}
+                            {party.role ? ` — ${party.role}` : ""}
+                            {party.contactEmail ? ` — ${party.contactEmail}` : ""}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeAdditionalParty(party.id)}
+                          className="text-[#8b3a3a] hover:text-[#6b2020] text-xs font-bold"
+                          aria-label={`Eltávolítás: ${party.name || "Ismert fél"}`}
+                        >
+                          Eltávolítás
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Known Party Context — case client is already known, user only needs counterparty info */}
               {clientName && (
@@ -771,7 +825,7 @@ const [phone, setPhone] = useState("");
 
         {/* Footer */}
         {!result && (
-          <div className="px-6 py-4 border-t border-[#e4e2dd] flex justify-end gap-3">
+          <div className="flex shrink-0 justify-end gap-3 border-t border-[#e4e2dd] px-6 py-4">
             <button
               onClick={onClose}
               className="px-4 py-2 text-xs font-bold uppercase tracking-widest border border-[#c3c8c1]/20 text-[#434843] hover:bg-[#f5f3ee]"
@@ -780,7 +834,7 @@ const [phone, setPhone] = useState("");
             </button>
             <button
               onClick={handleAnonymize}
-              disabled={isLoading || (aiTask === "CUSTOM" && !customPrompt)}
+              disabled={isLoading || sourceTextLoading || !sourceTextAvailable || (aiTask === "CUSTOM" && !customPrompt)}
               className="px-6 py-2 text-xs font-bold uppercase tracking-widest bg-[#06190d] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? "Feldolgozás..." : "Anonimizált másolat készítése"}
@@ -788,6 +842,7 @@ const [phone, setPhone] = useState("");
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

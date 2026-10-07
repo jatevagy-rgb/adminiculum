@@ -65,6 +65,7 @@ export interface OrgGrowOutcome {
   id: string;
   basis: 'MEASURED' | 'CALCULATED' | 'ESTIMATED';
   basisLabel: string;
+  initiativeId: string | null;
   initiativeTitle: string | null;
   processName: string | null;
 }
@@ -309,6 +310,7 @@ export async function getOrganizationalGrow(
       id: o.id,
       basis,
       basisLabel: OUTCOME_BASIS_LABELS[basis] || basis,
+      initiativeId: o.developmentInitiativeId,
       initiativeTitle: o.developmentInitiative?.title || null,
       processName: o.businessProcess?.name || null,
     };

@@ -194,7 +194,7 @@ describe('Client-level module information architecture convergence (structural)'
     assert.ok(tabsIndex >= 0 && heroIndex >= 0);
     assert.ok(tabsIndex < heroIndex, 'ClientWorkspaceTabs must precede the compliance hero');
     // Restrained, shared module hero treatment.
-    assert.match(src, /rounded-3xl border border-\[#DCCCA6\] bg-\[#fbf9f4\]/);
+    assert.match(src, /rounded-xl border border-\[var\(--adm-border\)\] bg-white/);
     assert.doesNotMatch(src, /rounded-\[var\(--adm-radius-md\)\] border border-\[#DCCCA6\]/);
   });
 
@@ -205,7 +205,32 @@ describe('Client-level module information architecture convergence (structural)'
     assert.ok(tabsIndex >= 0 && subNavIndex >= 0);
     assert.ok(tabsIndex < subNavIndex, 'Client shell must stay above the Grow sub-navigation');
     // The methodology-led journey is preserved as a legacy deep link, not the default.
-    assert.match(src, /<GrowJourney clientId=\{client\.id\} clientName=\{client\.name\} \/>/);
+    assert.match(src, /import\s*\{\s*GrowJourney\s*\}\s*from\s*["']@\/components\/clients\/GrowJourney["']/);
+    assert.match(src, /activeTab\s*===\s*"journey"\s*\?\s*\(\s*<GrowJourney\b/);
+    const journeyMounts = src.match(/<GrowJourney\b[^>]*\/>/g) ?? [];
+    assert.equal(journeyMounts.length, 1, 'The canonical page must mount exactly one scoped Journey');
+    const mount = journeyMounts[0];
+    assert.doesNotMatch(mount, /\{\s*\.\.\./, 'Spread props must not override identity or capabilities');
+    const props = new Map([...mount.matchAll(/\b(\w+)\s*=\s*\{([^}]*)\}/g)].map((match) => [match[1], match[2].trim()]));
+    for (const [prop, expression] of Object.entries({
+      key: 'client.id', clientId: 'client.id', clientName: 'client.name',
+      canManage: 'canManage', canPublish: 'canPublish', canPreparePublication: 'canPreparePublication',
+    })) {
+      assert.equal(props.get(prop), expression, `${prop} must use the canonical client/authority state`);
+    }
+    assert.match(src, /getCurrentUser\(\)/);
+    const resolvedAuthority = blockFrom(src, 'if (userResult.status === "fulfilled")', '} else setAuthorityError(true);');
+    assert.match(resolvedAuthority, /const role = userResult\.value\.role/);
+    for (const [capability, setter, roles] of [
+      ['canManage', 'setCanManage', ['ADMIN', 'PARTNER']],
+      ['canPublish', 'setCanPublish', ['ADMIN', 'PARTNER', 'LAWYER']],
+      ['canPreparePublication', 'setCanPreparePublication', ['ADMIN', 'PARTNER', 'LAWYER', 'COLLAB_LAWYER']],
+    ] as const) {
+      assert.match(src, new RegExp(`\\[${capability}, ${setter}\\] = useState\\(false\\)`));
+      const assignment = resolvedAuthority.match(new RegExp(`${setter}\\((\\[[^\\]]+\\])\\.includes\\(role\\)\\)`));
+      assert.ok(assignment, `${capability} must derive from resolved role membership`);
+      assert.deepEqual(JSON.parse(assignment[1]), roles, `${capability} must preserve its backend role boundary`);
+    }
     // The operational workbench is the default primary surface.
     assert.match(src, /<GrowWorkbench/);
     // Legacy deep-link aliases survive the IA change.

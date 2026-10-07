@@ -218,7 +218,7 @@ router.get('/dashboard/operational-overview', authenticate, async (req: Request,
 // ============================================================================
 // GET /cases/:caseId/timeline
 // ============================================================================
-router.get('/:caseId/timeline', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:caseId/timeline', authenticate, requireWorkforceUser, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
     const timeline = await casesService.getCaseTimeline(caseId);
@@ -232,7 +232,7 @@ router.get('/:caseId/timeline', authenticate, async (req: Request, res: Response
 // ============================================================================
 // GET /cases/:caseId/documents
 // ============================================================================
-router.get('/:caseId/documents', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:caseId/documents', authenticate, requireWorkforceUser, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
     const documents = await casesService.getCaseDocuments(caseId);
@@ -263,7 +263,7 @@ router.get('/:caseId/workflow', authenticate, requireCaseReadAccess, async (req:
 // ============================================================================
 // GET /cases/:caseId/workflow-graph (NEW)
 // ============================================================================
-router.get('/:caseId/workflow-graph', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:caseId/workflow-graph', authenticate, requireWorkforceUser, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
     const workflowGraph = await workflowService.getWorkflowGraph(caseId);
@@ -283,7 +283,7 @@ router.get('/:caseId/workflow-graph', authenticate, async (req: Request, res: Re
 // ============================================================================
 // GET /cases/:caseId/workflow-history
 // ============================================================================
-router.get('/:caseId/workflow-history', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:caseId/workflow-history', authenticate, requireWorkforceUser, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
     const history = await workflowService.getWorkflowHistory(caseId);
@@ -658,7 +658,7 @@ router.post('/:caseId/archive', authenticate, requireCaseManageAccess, async (re
 // ============================================================================
 // GET /cases/:caseId/client-house-style
 // ============================================================================
-router.get('/:caseId/client-house-style', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:caseId/client-house-style', authenticate, requireWorkforceUser, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
     const profile = await casesService.getCaseClientHouseStyle(caseId);
@@ -766,6 +766,7 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
     let caseTypeDefinitionId = req.body?.caseTypeDefinitionId || req.body?.['caseTypeDefinitionId'];
     let selectedModuleKeys = req.body?.selectedModuleKeys ?? req.body?.['selectedModuleKeys'];
     let sourceCommunicationId = req.body?.sourceCommunicationId || req.body?.['sourceCommunicationId'];
+    let clientOwnerPersonId = req.body?.clientOwnerPersonId || req.body?.['clientOwnerPersonId'];
 
     if (!clientName && !clientId) {
       res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Missing required field: clientName or clientId' });
@@ -788,6 +789,7 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
       caseTypeDefinitionId: caseTypeDefinitionId || undefined,
       selectedModuleKeys,
       sourceCommunicationId: sourceCommunicationId || undefined,
+      clientOwnerPersonId: clientOwnerPersonId || undefined,
       createdById: userId
     });
 

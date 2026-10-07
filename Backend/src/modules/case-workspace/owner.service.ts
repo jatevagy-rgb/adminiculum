@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { Request } from 'express';
 import { prisma } from '../../prisma/prisma.service';
 import { WorkspaceError, workspaceScope } from './tiles.service';
+import { isCaseClientOwnerEnabled } from './capabilities';
 export function eligibleOwner(person: {
     employmentStatus: string;
     startDate: Date | null;
@@ -50,7 +51,7 @@ export async function saveOwner(req: Request, caseId: string, input: any, db = p
 }
 // Called by both report preview and PDF, only when the additive capability is enabled.
 export async function savedOwnerPersonId(db: typeof prisma, caseId: string, clientId: string): Promise<string | null> {
-    if (process.env.ENABLE_DURABLE_CASE_WORKSPACE !== 'true')
+    if (!isCaseClientOwnerEnabled())
         return null;
     const a = await db.caseClientOwner.findUnique({ where: { caseId }, include: { person: true, case: { select: { clientId: true } } } });
     return a?.person && a.clientId === clientId && a.case.clientId === clientId && a.person.clientId === clientId && eligibleOwner(a.person) ? a.person.id : null;

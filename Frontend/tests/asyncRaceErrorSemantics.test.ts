@@ -20,7 +20,7 @@ const hasDetail = (tree: any, needle: string) => panelDetails(tree).some((d) => 
 // Grow
 // ---------------------------------------------------------------------------
 
-function growHarness(listAdminWorkspaces: () => Promise<any>) {
+function growHarness(listOpportunityPublicationWorkspaces: () => Promise<any>) {
   return createRaceHarness('src/app/clients/[clientId]/grow/page.tsx', 'GrowPageContent', {
     '@/components/AuthenticatedApp': { AuthenticatedApp: 'div' },
     '@/components/clients/GrowJourney': { GrowJourney: 'div' },
@@ -37,9 +37,12 @@ function growHarness(listAdminWorkspaces: () => Promise<any>) {
       ],
     },
     '@/components/clients/ClientWorkspaceTabs': { ClientWorkspaceTabs: 'div' },
-    '@/components/adminiculum/OperationalPrimitives': { SafePanelError: 'div' },
-    '@/lib/api': { getClient: async () => ({ id: 'B', name: 'B Ügyfél' }) },
-    '@/lib/clientPortalAdminApi': { listAdminWorkspaces },
+    '@/components/adminiculum/OperationalPrimitives': { SafePanelError: 'SafePanelError' },
+    '@/lib/api': {
+      getClient: async () => ({ id: 'B', name: 'B Ügyfél' }),
+      getCurrentUser: async () => ({ role: 'ADMIN' }),
+    },
+    '@/lib/growApi': { growApi: { listOpportunityPublicationWorkspaces } },
     'next/navigation': {
       useParams: () => ({ clientId: 'B' }),
       useSearchParams: () => new URLSearchParams(''),
@@ -54,7 +57,13 @@ test('LF-002 grow: organization-mode lookup 500 shows an error, not the mode gat
   await settle();
   const tree = h.render();
 
-  assert.ok(hasDetail(tree, 'szervezeti ügyfélmód'), 'mode lookup failure is surfaced');
+  const errorPanels = flatten(tree).filter((node) => node.type === 'SafePanelError');
+  assert.equal(errorPanels.length, 1, 'mode lookup failure renders an explicit error surface');
+  assert.equal(
+    errorPanels[0].props.detail,
+    'A Grow adatok betöltése sikertelen. Ez nem jelent üres ügyféladatot.',
+    'the canonical error explicitly distinguishes failed Grow data from empty data',
+  );
   assert.ok(
     !textOf(tree).includes('A Grow felület csak szervezeti ügyfélmódban érhető el.'),
     'failure must not masquerade as the legitimate mode gate',
@@ -62,7 +71,7 @@ test('LF-002 grow: organization-mode lookup 500 shows an error, not the mode gat
 });
 
 test('LF-002 grow: valid empty workspace list still shows the mode gate (success empty)', async () => {
-  const h = growHarness(async () => ({ items: [] }));
+  const h = growHarness(async () => ({ items: [], organizationMode: false }));
   h.commit();
   await settle();
   const tree = h.render();
@@ -71,7 +80,11 @@ test('LF-002 grow: valid empty workspace list still shows the mode gate (success
     textOf(tree).includes('A Grow felület csak szervezeti ügyfélmódban érhető el.'),
     'a valid empty workspace list is a legitimate business gate',
   );
-  assert.ok(!hasDetail(tree, 'szervezeti ügyfélmód'), 'no error panel for a successful empty result');
+  assert.equal(
+    flatten(tree).filter((node) => node.type === 'SafePanelError').length,
+    0,
+    'no workspace or authority error panel for a successful non-organization result',
+  );
 });
 
 // ---------------------------------------------------------------------------

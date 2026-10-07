@@ -176,7 +176,9 @@ d('Diagnostic workbench integration (PostgreSQL)', () => {
     expect(result.observed.observations.every((observation) => observation.provenanceClass === 'DECLARED_OBSERVATION')).toBe(true);
     expect(result.observed.observations).toHaveLength(1);
     expect(result.observed.observations[0].observationType).toBe('DECLARED_SURVEY');
-    expect(result.observed.processSnapshots.every((snapshot) => snapshot.provenanceClass === 'MEASURED_SNAPSHOT')).toBe(true);
+    // Snapshot capture uses estimated step durations; persistence is not measurement.
+    expect(result.observed.processSnapshots.every((snapshot) => snapshot.provenanceClass === 'ESTIMATED_SNAPSHOT')).toBe(true);
+    expect(result.observed.processSnapshots[0].sourceBasis).toBe('ESTIMATED');
     expect(result.observed.processSnapshots[0].metrics.every((metric) => [
       'TOTAL_ACTIVE_MINUTES',
       'TOTAL_WAITING_MINUTES',

@@ -19,6 +19,7 @@ beforeAll(async()=>{
  const identity=await prisma.$queryRaw<any[]>`SELECT current_database() db, current_user usr, inet_server_port() port`;
  expect(identity[0]).toMatchObject({db:'adminiculum_replay_wf10',usr:'wf10_pgtest',port:55483});
  process.env.ENABLE_DURABLE_CASE_WORKSPACE='true';
+ process.env.ENABLE_CASE_CLIENT_OWNER='true';
  for(const id of [ids.manager,ids.reader,ids.outsider])await prisma.user.create({data:{id,email:`${id}@wf10.invalid`,name:'Synthetic',role:'LAWYER',skills:[]}});
  await prisma.client.create({data:{id:ids.client,name:'WF10 synthetic client'}});
  for(const id of [ids.case,ids.other])await prisma.case.create({data:{id,caseNumber:id,title:'Synthetic case',clientId:ids.client,caseType:'OTHER',createdById:ids.manager}});

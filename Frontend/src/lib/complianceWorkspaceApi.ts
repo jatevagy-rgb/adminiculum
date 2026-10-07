@@ -21,6 +21,7 @@ export type ComplianceWorkspaceMissingFact = {
 };
 
 export type ComplianceWorkspaceCitation = {
+  sourceUrl?: string | null;
   supportRole: string;
   sourceTitle: string | null;
   canonicalCitation: string | null;
@@ -44,6 +45,7 @@ export type ComplianceWorkspaceArea = {
   scopeType: string | null;
   subjectLabel: string | null;
   evaluationAt: string;
+  evaluationFreshness?: "RECORDED" | "STALE" | "UNAVAILABLE";
   sourceSupportState: string;
   specialistRequirement: string;
   activeFindingId: string | null;

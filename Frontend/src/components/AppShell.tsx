@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import { ViewportDialog } from "@/components/ui/ViewportDialog";
+
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { DashboardFocused } from "./DashboardFocused";
@@ -56,6 +59,7 @@ type AppShellProps = {
 
 export function AppShell({ onSignOut, userProfile, section = "dashboard", children, fullViewport = false, workspaceChrome = "default" }: AppShellProps) {
   const [uiPack] = useUiPack();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const isSignalOps = uiPack === "signal_tiles_console";
   const isFocused = workspaceChrome === "focused";
   const profileName = userProfile?.name ?? "Ügyvéd";
@@ -100,11 +104,12 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
   const rootHeightClass = fullViewport ? "h-dvh min-h-0 overflow-hidden" : "min-h-screen";
   const mainScrollClass = fullViewport
     ? "flex-1 min-h-0 overflow-hidden app-shell-main p-0"
-    : `flex-1 overflow-y-auto app-shell-main ${isSignalOps ? "bg-[#0B1220] p-6" : section === "dashboard" ? "adm-shell-bg p-0" : "adm-shell-bg p-4 lg:p-5"}`;
+    : `flex-1 overflow-y-auto app-shell-main ${isSignalOps ? "bg-[#0B1220] p-6" : isFocused || section === "dashboard" ? "adm-shell-bg p-0" : "adm-shell-bg p-4 lg:p-5"}`;
 
   return (
     <div
       data-ui-pack={uiPack}
+      data-workspace-surface={!isSignalOps && ["cases", "case-detail", "clients", "tasks", "compliance", "communications", "work-report", "calendar"].includes(section) ? "clean" : undefined}
       data-shell-viewport={fullViewport ? "fixed" : "page"}
       data-shell-chrome={isFocused ? "focused" : "default"}
       className={`${rootHeightClass} app-shell flex ${isFocused ? "flex-col" : ""} ${isSignalOps ? "bg-[#0B1220] text-[#D6E2F2] ui-pack-signal-ops" : "adm-shell-bg text-[var(--adm-text)] ui-pack-insight-analytics"}`}
@@ -142,17 +147,20 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
             </div>
           </header>
         ) : (
-          <Sidebar
+          <div className="hidden shrink-0 md:block"><Sidebar
             activeItem={section}
             profileName={profileName}
             profileRole={userProfile?.role ?? "Admin"}
             uiPack={uiPack}
-          />
+          /></div>
         )}
 
+      {mobileNavOpen ? <ViewportDialog title="Navigáció" onClose={() => setMobileNavOpen(false)} drawer maxWidth="max-w-sm" testId="mobile-navigation"><Sidebar mobile activeItem={section} profileName={profileName} profileRole={userProfile?.role ?? "Admin"} uiPack={uiPack} onNavigate={() => setMobileNavOpen(false)} /></ViewportDialog> : null}
       <div className={`min-w-0 flex-1 flex flex-col min-h-0 app-shell-content ${isSignalOps ? "" : "adm-shell-bg"}`}>
         {!isFocused ? (
           <TopBar
+            onOpenNavigation={() => setMobileNavOpen(true)}
+            navigationOpen={mobileNavOpen}
             title={titleBySection[section] || "Műszerfal"}
             onSignOut={onSignOut}
             profileName={profileName}
@@ -168,7 +176,7 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
 
         {!fullViewport ? (
           <footer className={`app-shell-footer border-t px-5 py-2 flex items-center justify-between gap-3 ${isSignalOps ? "border-[#1E293B] bg-[#0F172A]" : "border-[var(--adm-border)] bg-[rgba(255,253,247,0.72)]"}`}>
-            <p className={`text-xs ${isSignalOps ? "text-[#94A3B8]" : "text-[var(--adm-text-muted)]"}`} style={{ fontFamily: 'var(--font-newsreader)' }}>
+            <p className={`text-xs ${isSignalOps ? "text-[#94A3B8]" : "text-[var(--adm-text-muted)]"}`}>
               Adminiculum · Jogi munkapad
             </p>
             <div className={`text-[10px] uppercase tracking-[0.2em] ${isSignalOps ? "text-[#64748B]" : "text-[var(--adm-text-soft)]"}`}>

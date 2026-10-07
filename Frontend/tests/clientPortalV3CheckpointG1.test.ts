@@ -73,7 +73,7 @@ describe("Checkpoint G1 — grow runtime", () => {
     assert.match(src, /o\.basis === "CALCULATED"/);
     assert.match(src, /o\.basis === "ESTIMATED"/);
     assert.match(src, /measuredOutcomes\.length/);
-    assert.match(src, /Mért eredményként csak MEASURED alapú eredmény jelenik meg/);
+    assert.match(src, /Mért eredményként csak mért alapú eredmény jelenik meg/);
   });
 
   it("7. operating canvas reuses the canonical projection and canvas components", () => {

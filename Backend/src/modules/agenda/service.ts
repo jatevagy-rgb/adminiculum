@@ -2,9 +2,9 @@ import { prisma } from '../../prisma/prisma.service';
 import type { CaseStatus } from '@prisma/client';
 import { buildCaseReadScope } from '../cases/authorization';
 import { CLOSED_TASK_STATUSES } from '../tasks/taskStatus';
+import { BUSINESS_TIME_ZONE, addCalendarDays, businessDateKey, businessDayStart } from './businessTime';
 import {
   compactSafeText,
-  compareDeadlines,
   deriveCaseDeadlineStatus,
   deriveDeadlineCapabilities,
   deriveDeadlineUrgency,
@@ -24,6 +24,7 @@ export interface WorkflowAgendaDto {
   timezone: string;
   range: { from: string; to: string };
   scope: AgendaScope;
+  queue?: 'CALENDAR' | 'OVERDUE';
   summary: {
     overdue: number;
     today: number;
@@ -57,7 +58,7 @@ const DEFAULT_LIMIT = 100;
 const CLOSED_STATUSES = new Set<WorkflowDeadlineStatus>(['COMPLETED', 'CANCELLED', 'SUPERSEDED']);
 
 function applicationTimezone(): string {
-  return process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  return BUSINESS_TIME_ZONE;
 }
 
 function parseDateOnly(value: unknown, fallback: Date): Date {
@@ -66,31 +67,19 @@ function parseDateOnly(value: unknown, fallback: Date): Date {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
     throw new AgendaRequestError(400, 'INVALID_DATE', 'Date parameters must use YYYY-MM-DD.');
   }
-  const parsed = new Date(`${text}T00:00:00.000`);
-  if (Number.isNaN(parsed.getTime())) {
+  const calendarDate = new Date(`${text}T00:00:00.000Z`);
+  if (Number.isNaN(calendarDate.getTime()) || calendarDate.toISOString().slice(0, 10) !== text) {
     throw new AgendaRequestError(400, 'INVALID_DATE', 'Invalid date parameter.');
   }
-  return parsed;
-}
-
-function addDays(value: Date, days: number): Date {
-  const next = new Date(value);
-  next.setDate(next.getDate() + days);
-  return next;
+  return businessDayStart(text);
 }
 
 function dateOnly(value: Date | string): string {
-  const date = value instanceof Date ? value : new Date(value);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return businessDateKey(value);
 }
 
 function endOfDate(value: Date): Date {
-  const end = new Date(value);
-  end.setHours(23, 59, 59, 999);
-  return end;
+  return new Date(businessDayStart(addCalendarDays(dateOnly(value), 1)).getTime() - 1);
 }
 
 function parseLimit(value: unknown): number {
@@ -148,9 +137,8 @@ function caseStatusFilter(status: 'OPEN' | 'COMPLETED' | 'ALL') {
 }
 
 export function makeDefaultAgendaRange(now = new Date()): { from: Date; to: Date } {
-  const from = new Date(now);
-  from.setHours(0, 0, 0, 0);
-  return { from, to: addDays(from, 14) };
+  const today = businessDateKey(now);
+  return { from: businessDayStart(today), to: businessDayStart(addCalendarDays(today, 14)) };
 }
 
 export async function getWorkflowAgenda(params: {
@@ -163,6 +151,7 @@ export async function getWorkflowAgenda(params: {
   to?: unknown;
   limit?: unknown;
   offset?: unknown;
+  queue?: unknown;
   now?: Date;
   db?: typeof prisma;
 }): Promise<WorkflowAgendaDto> {
@@ -180,6 +169,11 @@ export async function getWorkflowAgenda(params: {
 
   const scope = parseScope(params.scope);
   const status = parseStatus(params.status);
+  const queue = String(params.queue || 'CALENDAR').toUpperCase();
+  if (queue !== 'CALENDAR' && queue !== 'OVERDUE') throw new AgendaRequestError(400, 'INVALID_AGENDA_QUEUE', 'Unsupported agenda queue.');
+  if (queue === 'OVERDUE' && status !== 'OPEN') throw new AgendaRequestError(400, 'OVERDUE_REQUIRES_OPEN', 'The overdue queue contains open work only.');
+  // Separate, bounded work queue. The calendar query retains its date window.
+  const dueWindow = queue === 'OVERDUE' ? { lt: now } : { gte: from, lte: to };
   const limit = parseLimit(params.limit);
   const offset = parseOffset(params.offset);
 
@@ -201,13 +195,13 @@ export async function getWorkflowAgenda(params: {
   }
 
   const taskWhere: any = {
-    dueDate: { gte: from, lte: to },
+    dueDate: dueWindow,
     ...taskStatusFilter(status),
     ...(caseReadScope ? { case: caseReadScope } : {}),
   };
 
   const caseWhere: any = {
-    deadline: { gte: from, lte: to },
+    deadline: dueWindow,
     ...caseStatusFilter(status),
   };
   if (caseReadScope) {
@@ -216,7 +210,7 @@ export async function getWorkflowAgenda(params: {
   }
 
   const intakeWhere: any = {
-    dueAt: { gte: from, lte: to },
+    dueAt: dueWindow,
     case: {
       ...caseStatusFilter(status),
       ...(caseReadScope ? { AND: [caseReadScope] } : {}),
@@ -330,6 +324,7 @@ export async function getWorkflowAgenda(params: {
         safeDescription: compactSafeText(task.description),
         startsAt: null,
         dueAt,
+        temporalType: 'TIMESTAMP',
         allDay: false,
         status: deadlineStatus,
         urgency: deriveDeadlineUrgency(dueAt, now),
@@ -377,6 +372,7 @@ export async function getWorkflowAgenda(params: {
         ].filter(Boolean).join(' · ')),
         startsAt: null,
         dueAt,
+        temporalType: 'TIMESTAMP',
         allDay: false,
         status: deadlineStatus,
         urgency: deriveDeadlineUrgency(dueAt, now),
@@ -404,8 +400,6 @@ export async function getWorkflowAgenda(params: {
     })
     .filter(Boolean) as WorkflowDeadlineDto[];
 
-  const intakeKeys = new Set(intakeItems.map((item) => `${item.caseId}::${item.dueAt}`));
-
   const caseItems: WorkflowDeadlineDto[] = caseRows
     .map((caseRecord) => {
       const dueAt = toSafeIsoDate(caseRecord.deadline);
@@ -421,6 +415,7 @@ export async function getWorkflowAgenda(params: {
         safeDescription: compactSafeText([caseRecord.caseNumber, caseRecord.clientName].filter(Boolean).join(' · ')),
         startsAt: null,
         dueAt,
+        temporalType: 'TIMESTAMP',
         allDay: false,
         status: deadlineStatus,
         urgency: deriveDeadlineUrgency(dueAt, now),
@@ -449,7 +444,11 @@ export async function getWorkflowAgenda(params: {
 
   const filtered = [...taskItems, ...intakeItems, ...caseItems]
     .filter((item) => status === 'ALL' || (status === 'OPEN' ? !CLOSED_STATUSES.has(item.status) : CLOSED_STATUSES.has(item.status)))
-    .sort((left, right) => compareDeadlines(left, right, params.userId));
+    // Paging follows the same deadline/id prefix fetched from every source.
+    // Priority-first sorting here could move an unseen later deadline ahead of
+    // earlier pages and permanently skip items when the next prefix expands.
+    .sort((left, right) => new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime()
+      || left.id.localeCompare(right.id));
   const page = filtered.slice(offset, offset + limit);
 
   const summarySource = filtered;
@@ -473,6 +472,7 @@ export async function getWorkflowAgenda(params: {
     timezone: applicationTimezone(),
     range: { from: dateOnly(from), to: dateOnly(toStart) },
     scope,
+    queue,
     summary,
     days: [...dayMap.entries()].map(([date, items]) => ({ date, items })),
     pagination: {

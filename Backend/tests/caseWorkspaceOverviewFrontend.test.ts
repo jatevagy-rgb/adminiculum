@@ -6,6 +6,9 @@ const read = (rel: string) => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
 
 const overview = read('Frontend/src/components/cases/CaseWorkspaceOverview.tsx');
 const panels = read('Frontend/src/components/cases/CaseCockpitPanels.tsx');
+const communication = read('Frontend/src/components/cases/word-workflow/tools/WordWideCommunicationLeaf.tsx');
+const history = read('Frontend/src/components/cases/word-workflow/history/CaseHistoryPanel.tsx');
+const timeSummary = read('Frontend/src/components/cases/CaseTimeBillingSummary.tsx');
 const caseDetail = read('Frontend/src/components/CaseDetail.tsx');
 
 /**
@@ -28,7 +31,7 @@ describe('matter cockpit — data source and states', () => {
 
   it('takes every operational summary from the server cockpit, never inventing one', () => {
     expect(overview).toContain('const cp = ws.cockpit');
-    for (const kpi of ['cp.kpi.openTasks', 'cp.kpi.deadlines', 'cp.kpi.communication', 'cp.kpi.review', 'cp.kpi.activeDocuments']) {
+    for (const kpi of ['cp.taskGroups', 'cp.kpi.deadlines', 'cp.replyNeeded', 'cp.activeDocuments']) {
       expect(overview).toContain(kpi);
     }
   });
@@ -49,26 +52,26 @@ describe('matter hero', () => {
     expect(overview).toContain('data-testid="hero-next-deadline"');
   });
 
-  it('offers the three primary actions', () => {
+  it('offers task/upload actions and the communication leaf action', () => {
     expect(overview).toContain('Új feladat');
-    expect(overview).toContain('Kommunikáció hozzáadása');
+    expect(communication).toContain('E-mail thread hozzárendelése');
     expect(overview).toContain('Dokumentum feltöltése');
   });
 });
 
-describe('functional KPI row', () => {
-  it('renders exactly the six required cards', () => {
+describe('work-first summary without duplicate KPI cards', () => {
+  it('keeps one work-first summary and no six-card KPI row', () => {
     const cards = (overview.match(/<KpiCard\b/g) || []).length;
-    expect(cards).toBe(6);
-    for (const label of ['Nyitott feladatok', 'Közelgő határidők', 'Kommunikáció', 'Review tételek', 'Aktív dokumentumok', 'Következő lépés']) {
+    expect(cards).toBe(0);
+    for (const label of ['Aktuális munka és következő lépés', 'Aktív munka', 'Következő lépés']) {
       expect(overview).toContain(label);
     }
   });
 
-  it('gives every card a meaningful secondary line, not a bare count', () => {
-    expect(overview).toContain('secondary={cp.kpi.openTasks.secondary}');
-    expect(overview).toContain('secondary={cp.kpi.deadlines.secondary}');
-    expect(overview).toContain('secondary={cp.kpi.communication.secondary}');
+  it('keeps stored next-step and deadline context', () => {
+    expect(overview).toContain('cp.nextStep');
+    expect(overview).toContain('cp.kpi.deadlines.nextDueAt');
+    expect(overview).toContain('aria-label="Következő feladat"');
   });
 
   it('cards are click-through controls that jump to their panel', () => {
@@ -76,15 +79,16 @@ describe('functional KPI row', () => {
     expect(panels).toContain('data-testid={`kpi-${targetId}`}');
   });
 
-  it('emphasises a card when it demands attention', () => {
-    expect(overview).toContain('emphasised={cp.kpi.openTasks.urgentCount > 0}');
-    expect(overview).toContain('emphasised={cp.kpi.communication.replyNeededCount > 0}');
+  it('preserves urgent-task and reply-needed signals without duplicating KPI cards', () => {
+    expect(overview).toContain('task-group-immediate');
+    expect(overview).toContain('replyNeededIds={cp.replyNeeded}');
+    expect(communication).toContain('data-testid="reply-needed"');
   });
 });
 
 describe('two-column operational layout', () => {
   it('uses a responsive two-column grid that collapses to one column', () => {
-    expect(overview).toContain('xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]');
+    expect(overview).toContain('lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]');
     expect(overview).toContain('grid-cols-1');
   });
 
@@ -110,8 +114,10 @@ describe('two-column operational layout', () => {
   });
 
   it('flags communication awaiting a reply and internal vs external', () => {
-    expect(overview).toContain('data-testid="reply-needed"');
-    expect(overview).toContain('m.internal ?');
+    expect(overview).toContain('replyNeededIds={cp.replyNeeded}');
+    expect(overview).toContain('communicationSignals={ws.communications}');
+    expect(communication).toContain('data-testid="reply-needed"');
+    expect(communication).toContain('signal.internal ?');
   });
 
   it('shows only operationally relevant documents, each with a reason', () => {
@@ -120,7 +126,8 @@ describe('two-column operational layout', () => {
     expect(overview).toContain('Review-ra vár');
     expect(overview).toContain('Határidő lejárt');
     // The whole repository must not be dumped into the panel.
-    expect(overview).not.toContain('ws.documents.map');
+    expect(overview).toContain('activeDocuments={cp.activeDocuments}');
+    // Full document selection is allowed inside the secondary matrix chooser.
   });
 });
 
@@ -132,9 +139,9 @@ describe('empty states are actionable', () => {
       'Határidő hozzáadása',
       'E-mail thread hozzárendelése',
       'Dokumentum feltöltése',
-      'Első megjegyzés létrehozása',
+      'Első megjegyzés írása',
     ]) {
-      expect(overview).toContain(action);
+      expect(overview + communication).toContain(action);
     }
   });
 
@@ -144,17 +151,17 @@ describe('empty states are actionable', () => {
 });
 
 describe('secondary area', () => {
-  it('renders structured activity with actor, action and object as parts', () => {
-    expect(overview).toContain('data-testid="activity-feed"');
-    expect(overview).toContain('a.actor');
-    expect(overview).toContain('a.actionLabel');
-    expect(overview).toContain('a.objectLabel');
+  it('uses the canonical history with author, title and detail', () => {
+    expect(overview).toContain('<CaseHistoryPanel key={caseId}');
+    expect(history).toContain('item.authorName');
+    expect(history).toContain('item.title');
+    expect(history).toContain('item.detail');
     expect(overview).not.toContain('Esemény rögzítve');
   });
 
   it('keeps time secondary and honest', () => {
-    expect(overview).toContain('ws.time.available');
-    expect(overview).toContain('Nem áll rendelkezésre megbízható ügy-szintű összesítés.');
+    expect(overview).toContain('<CaseTimeBillingSummary');
+    expect(timeSummary).toContain('Az idő-összesítő jelenleg nem érhető el.');
   });
 });
 

@@ -18,11 +18,11 @@ test("Case workspace preservation: the canonical cockpit remains the entry point
   const overview = read("src/components/cases/CaseWorkspaceOverview.tsx");
   assert.match(overview, /title="Aktív munka"/);
   assert.match(overview, /title="Határidők"/);
-  assert.match(overview, /title="Kommunikáció"/);
-  assert.match(overview, /E-mail thread hozzárendelése/);
+  assert.match(overview, /<WordWideCommunicationLeaf/);
+  assert.match(overview, /onAddThread=/);
   assert.match(overview, /title="Dokumentumok"/);
-  assert.match(overview, /title="Jegyzetek"/);
-  assert.match(overview, /title="Aktivitás"/);
+  assert.match(overview, /<CaseWorkspaceNotesSection/);
+  assert.match(overview, /<CaseHistoryPanel/);
   assert.match(overview, /title="Munkaidő"/);
   assert.match(overview, /CaseTimeBillingSummary/);
   assert.match(overview, /HourlyRateCard/);

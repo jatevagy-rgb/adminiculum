@@ -25,6 +25,8 @@ import {
   AssessmentValidationError,
   GROW_ASSESSMENT_KIND,
   GROW_ASSESSMENT_SCHEMA,
+  GROW_ASSESSMENT_V2_SCHEMA,
+  isAssessmentSchema,
   getAssessmentPack,
   validateAssessmentSubmission,
 } from '../company-growth/assessments/registry';
@@ -50,6 +52,7 @@ export interface SubmitPortalAssessmentInput {
   answers: unknown;
   idempotencyKey: string;
   processId?: string;
+  packVersion?: number;
 }
 
 export interface PortalAssessmentSubmissionResult {
@@ -167,7 +170,7 @@ interface CanonicalAssessmentPayloadInput {
  * requests always produce an identical digest. */
 function buildCanonicalAssessmentPayload(input: CanonicalAssessmentPayloadInput): Record<string, unknown> {
   return {
-    schema: GROW_ASSESSMENT_SCHEMA,
+    schema: input.packVersion >= 2 ? GROW_ASSESSMENT_V2_SCHEMA : GROW_ASSESSMENT_SCHEMA,
     kind: GROW_ASSESSMENT_KIND,
     packKey: input.packKey,
     packVersion: input.packVersion,
@@ -201,7 +204,7 @@ export async function submitPortalGrowAssessment(
     // Use the registry pack version instead of a hard-coded 1 so a pack version
     // bump does not make every submission fail with ASSESSMENT_UNKNOWN_VERSION.
     const packDefinition = getAssessmentPack(packKey);
-    validated = validateAssessmentSubmission(packKey, packDefinition?.version ?? 1, input.answers);
+    validated = validateAssessmentSubmission(packKey, input.packVersion ?? (packDefinition?.version === 1 ? 1 : undefined), input.answers);
   } catch (error) {
     if (error instanceof AssessmentValidationError) {
       throw new InteractionError(error.status, error.code, error.message);
@@ -357,7 +360,7 @@ function toSafeSubmission(row: {
   rawPayload: Prisma.JsonValue;
 }): SafePortalAssessmentSubmission | null {
   const payload = row.rawPayload as Record<string, any> | null;
-  if (!payload || payload.schema !== GROW_ASSESSMENT_SCHEMA) return null;
+  if (!payload || !isAssessmentSchema(payload.schema)) return null;
   const packKey = typeof payload.packKey === 'string' ? payload.packKey : '';
   const pack = getAssessmentPack(packKey);
   if (!pack) return null;
@@ -418,7 +421,7 @@ export async function listPortalGrowAssessments(
     WHERE "clientId" = ${ctx.clientId}
       AND "connectionId" = ${connection.id}
       AND "observationType"::text = 'DECLARED_SURVEY'
-      AND "rawPayload"->>'schema' = ${GROW_ASSESSMENT_SCHEMA}
+      AND "rawPayload"->>'schema' IN (${GROW_ASSESSMENT_SCHEMA}, ${GROW_ASSESSMENT_V2_SCHEMA})
       AND "rawPayload"->'provenance'->>'channel' = 'CLIENT_PORTAL'
       AND "rawPayload"->'provenance'->>'workspaceId' = ${ctx.workspaceId}
     ORDER BY

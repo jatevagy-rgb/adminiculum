@@ -2,12 +2,13 @@ import express, { Express, NextFunction, Request, Response } from 'express';
 import http from 'http';
 
 const prismaMock = {
+  $transaction: jest.fn((run: any) => run(prismaMock)),
   $queryRaw: jest.fn(),
-  communication: { findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn(), count: jest.fn() },
+  communication: { findMany: jest.fn(), findUnique: jest.fn(), updateMany: jest.fn(), update: jest.fn(), count: jest.fn() },
   communicationAttachment: { findMany: jest.fn() },
-  task: { findMany: jest.fn() },
+  task: { findMany: jest.fn(), findFirst: jest.fn() },
   client: { findMany: jest.fn(), findUnique: jest.fn() },
-  case: { findUnique: jest.fn(), findMany: jest.fn() },
+  case: { findFirst: jest.fn(), findUnique: jest.fn(), findMany: jest.fn() },
   caseCollaborator: { findFirst: jest.fn() },
   timelineEvent: { create: jest.fn() },
   notification: { findMany: jest.fn(), count: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
@@ -130,14 +131,15 @@ describe('operational client color projections', () => {
     delete process.env.ENABLE_COMMUNICATIONS_PERSISTENCE;
   });
 
-  it('refreshes the communication color after case reassignment updates the persisted client relation', async () => {
+  it('refreshes the communication color after its first case association sets the client relation', async () => {
     process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
     let row = communicationRow('comm-reassigned', null);
     prismaMock.case.findUnique.mockResolvedValue({ id: 'case-beta', caseNumber: 'CASE-BETA', clientId: 'client-beta', assignedLawyerId: 'user-1', createdById: 'user-1' });
+    prismaMock.case.findFirst.mockImplementation((args: any) => prismaMock.case.findUnique(args));
     prismaMock.communication.findUnique.mockResolvedValue({ ...row, attachments: [], relatedTasks: [] });
-    prismaMock.communication.update.mockImplementation(async ({ data }: { data: { caseId: string; clientId: string } }) => {
+    prismaMock.communication.updateMany.mockImplementation(async ({ data }: { data: { caseId: string; clientId: string } }) => {
       row = { ...row, caseId: data.caseId, clientId: data.clientId };
-      return row;
+      return { count: 1 };
     });
     prismaMock.timelineEvent.create.mockResolvedValue({ id: 'event-1' });
     prismaMock.$queryRaw.mockImplementation(async () => [row]);
@@ -158,8 +160,8 @@ describe('operational client color projections', () => {
       const refreshedResponse = await requestJson(app, '/communications?limit=8');
 
       expect(linkResponse.status).toBe(200);
-      expect(prismaMock.communication.update).toHaveBeenCalledWith({
-        where: { id: 'comm-reassigned' },
+      expect(prismaMock.communication.updateMany).toHaveBeenCalledWith({
+        where: { id: 'comm-reassigned', caseId: null, clientId: null },
         data: { caseId: 'case-beta', clientId: 'client-beta' },
       });
       expect(refreshedResponse.body.communications[0]).toEqual(expect.objectContaining({

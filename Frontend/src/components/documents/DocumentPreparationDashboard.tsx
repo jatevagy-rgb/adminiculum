@@ -21,12 +21,10 @@ import {
   downloadDocument,
   getAnonymousDocumentsBySource,
   getDocumentWorkContext,
-  listDocumentLegalAnalyses,
   type AnonymousDocumentItem,
   type CaseContractListItem,
   type CaseWorkspace,
   type DocumentWorkCard,
-  type LegalAnalysisSummaryRecord,
 } from "@/lib/api";
 import { AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
 import { ConfirmationDialog } from "@/components/ui";
@@ -42,7 +40,6 @@ import {
   pickLatestAnonymousDocument,
   redactedItemCount,
   resolveDefaultPreparationDocumentId,
-  summarizeRiskMatrix,
 } from "@/lib/documents/documentPreparation";
 
 type WorkspaceDoc = CaseWorkspace["documents"][number];
@@ -57,6 +54,7 @@ export interface DocumentPreparationDashboardProps {
   clientRole?: string | null;
   onOpenDocument: (documentId: string) => void;
   onRefresh?: () => void;
+  onOpenRiskMatrix?: (documentId: string) => void;
 }
 
 function fmtDateTime(value: string | null | undefined): string {
@@ -96,16 +94,15 @@ export function DocumentPreparationDashboard({
   clientRole,
   onOpenDocument,
   onRefresh,
+  onOpenRiskMatrix,
 }: DocumentPreparationDashboardProps) {
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(() =>
     resolveDefaultPreparationDocumentId(documents, activeDocuments),
   );
   const [card, setCard] = useState<DocumentWorkCard | null>(null);
-  const [analyses, setAnalyses] = useState<LegalAnalysisSummaryRecord[]>([]);
   const [anonymous, setAnonymous] = useState<AnonymousDocumentItem[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
-  const [analysesError, setAnalysesError] = useState(false);
   const [anonymousError, setAnonymousError] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "ok" | "fail">("idle");
   const [downloading, setDownloading] = useState(false);
@@ -136,15 +133,14 @@ export function DocumentPreparationDashboard({
       requestRef.current = requestId;
       setDataLoading(true);
       setDataError(null);
-      setAnalysesError(false);
       setAnonymousError(false);
+      setAnonymous([]);
       setCard(null);
       try {
         // Settled results keep request failure distinct from a successful empty
         // response: 403/500/network must never read as "nothing here".
-        const [cardResult, analysesResult, anonymousResult] = await Promise.allSettled([
+        const [cardResult, anonymousResult] = await Promise.allSettled([
           getDocumentWorkContext(documentId),
-          listDocumentLegalAnalyses(documentId, { caseId, documentSourceType: "DOCUMENT" }),
           getAnonymousDocumentsBySource(documentId),
         ]);
         if (requestRef.current !== requestId) return;
@@ -153,12 +149,6 @@ export function DocumentPreparationDashboard({
         } else {
           setCard(null);
           setDataError("A dokumentum munkakontextusa nem tölthető be.");
-        }
-        if (analysesResult.status === "fulfilled") {
-          setAnalyses(analysesResult.value);
-        } else {
-          setAnalyses([]);
-          setAnalysesError(true);
         }
         if (anonymousResult.status === "fulfilled") {
           setAnonymous(anonymousResult.value);
@@ -177,21 +167,19 @@ export function DocumentPreparationDashboard({
     if (!selectedDocumentId) {
       requestRef.current += 1;
       setCard(null);
-      setAnalyses([]);
       setAnonymous([]);
       setDataLoading(false);
       setDataError(null);
-      setAnalysesError(false);
       setAnonymousError(false);
       return;
     }
     setCopyState("idle");
     void loadDocument(selectedDocumentId);
+    return () => { requestRef.current += 1; };
   }, [selectedDocumentId, loadDocument]);
 
   const latestAnonymous = pickLatestAnonymousDocument(anonymous);
   const latestAnonymousCount = redactedItemCount(latestAnonymous);
-  const matrix = summarizeRiskMatrix(analyses);
   const lastActivity = selectedDocumentId ? latestDocumentActivity(activity, selectedDocumentId) : null;
 
   const workStatus = card?.workStatus ?? selectedDocument?.workStatus ?? null;
@@ -480,54 +468,8 @@ export function DocumentPreparationDashboard({
           className="rounded-lg border border-[var(--adm-border-canonical)] border-l-4 border-l-[var(--adm-palette-teal)] bg-[var(--adm-canvas-white)] p-4"
         >
           <p className="text-[12px] font-bold uppercase tracking-[0.08em] text-[var(--adm-palette-teal)]">Kockázati mátrix</p>
-          {analysesError ? (
-            <>
-              <p data-testid="preparation-risk-unavailable" className="mt-2 text-[13px] text-[var(--adm-text-secondary)]">
-                A kockázati elemzés állapota most nem tölthető be.
-              </p>
-              <div className="mt-3">
-                <AdminButton
-                  data-testid="preparation-risk-retry"
-                  variant="neutral"
-                  size="xs"
-                  disabled={dataLoading}
-                  onClick={() => {
-                    if (selectedDocumentId) void loadDocument(selectedDocumentId);
-                  }}
-                >
-                  Újrapróbálás
-                </AdminButton>
-              </div>
-            </>
-          ) : matrix.hasMatrix ? (
-            <>
-              <p data-testid="preparation-risk-recorded" className="mt-2 text-[13.5px] font-semibold text-[var(--adm-text-primary)]">
-                Kockázati elemzés rögzítve
-              </p>
-              {matrix.latestUpdatedAt ? (
-                <p data-testid="preparation-risk-updated" className="mt-1 text-[11.5px] text-[var(--adm-text-secondary)]">
-                  Frissítve: {fmtDateTime(matrix.latestUpdatedAt)}
-                </p>
-              ) : null}
-            </>
-          ) : (
-            <>
-              <p data-testid="preparation-risk-empty" className="mt-2 text-[13px] text-[var(--adm-text-secondary)]">
-                {dataLoading ? "Betöltés…" : "Még nincs kockázati mátrix."}
-              </p>
-              <div className="mt-3">
-                <AdminButton
-                  data-testid="preparation-risk-action"
-                  variant="neutral"
-                  size="xs"
-                  disabled={dataLoading}
-                  onClick={() => setAiOpen(true)}
-                >
-                  Kockázati mátrix készítése
-                </AdminButton>
-              </div>
-            </>
-          )}
+          <p className="mt-2 text-sm text-[var(--adm-text-secondary)]">A kiválasztott dokumentum mentett mátrixa és szerkesztője egy helyen érhető el.</p>
+          <AdminButton variant="neutral" size="sm" disabled={!selectedDocumentId || !onOpenRiskMatrix} onClick={() => selectedDocumentId && onOpenRiskMatrix?.(selectedDocumentId)}>Mátrix megnyitása</AdminButton>
         </section>
 
         {/* Tile 4 — Anonimizált változat: privacy / utility. */}

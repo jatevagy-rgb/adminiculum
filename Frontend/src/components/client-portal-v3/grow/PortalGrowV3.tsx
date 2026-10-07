@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { GrowAdaptiveJourney } from "@/components/client-portal/GrowAdaptiveJourney";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, SafePanelError } from "@/components/ui";
 import { AdminBadge, AdminStatusPill } from "@/components/adminiculum/ui";
 import {
+  CLIENT_PORTAL_WORKSPACE_STORAGE_KEY,
+  getStoredPortalWorkspace,
   getPortalGrowAssessment,
   getPortalOrgGrow,
   listPortalGrowAssessments,
@@ -21,6 +24,7 @@ import {
   type PortalOrgGrow,
 } from "@/lib/clientPortalApi";
 import { clientSafeError } from "@/lib/clientInteractionApi";
+import { ApiError } from "@/lib/api";
 import { SURVEY_CATEGORY_LABELS_HU } from "@/lib/growApi";
 import { projectGrowOperatingProcess } from "@/lib/growOperatingProjection";
 import { OrgGrowOperatingCanvas } from "@/components/client-portal/OrgGrowOperatingCanvas";
@@ -130,15 +134,39 @@ function GrowSectionHeader({ step, title, description }: { step: string; title: 
   return (
     <div>
       <p className={EYEBROW}>{step}</p>
-      <h2 className="mt-1 font-serif text-[22px] font-medium leading-tight text-[var(--adm-text-primary)]">{title}</h2>
+      <h2 className="mt-1 font-sans text-[22px] font-medium leading-tight text-[var(--adm-text-primary)]">{title}</h2>
       <p className={`mt-1 max-w-3xl text-sm leading-6 ${MUTED}`}>{description}</p>
     </div>
   );
 }
 
 export function PortalGrowV3() {
+  const [, refreshWorkspace] = useState(0);
+  const workspaceReference = getStoredPortalWorkspace();
+  useEffect(() => {
+    const changed = (event: StorageEvent) => {
+      if (event.key === null || event.key === CLIENT_PORTAL_WORKSPACE_STORAGE_KEY) refreshWorkspace((value) => value + 1);
+    };
+    window.addEventListener("storage", changed);
+    return () => window.removeEventListener("storage", changed);
+  }, []);
+  return <PortalGrowWorkspaceV3 key={workspaceReference ?? "unselected"} workspaceReference={workspaceReference} />;
+}
+
+function PortalGrowWorkspaceV3({ workspaceReference }: { workspaceReference: string | null }) {
+  // A late read or mutation refresh must not survive unmount, a newer read, or workspace selection.
+  const requests = useRef({ generation: 0, main: 0, surveys: 0, catalogue: 0, assessment: 0, submission: 0 });
+  useEffect(() => () => { requests.current.generation += 1; }, []);
+  const beginRead = useCallback((kind: "main" | "surveys" | "catalogue" | "assessment" | "submission") => {
+    const generation = requests.current.generation;
+    const sequence = ++requests.current[kind];
+    return () => generation === requests.current.generation && sequence === requests.current[kind]
+      && workspaceReference === getStoredPortalWorkspace();
+  }, [workspaceReference]);
   const [data, setData] = useState<PortalOrgGrow | null>(null);
   const [loading, setLoading] = useState(true);
+  const [adaptiveFocused, setAdaptiveFocused] = useState(false);
+  const [detailedOpen, setDetailedOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
 
@@ -156,6 +184,8 @@ export function PortalGrowV3() {
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [surveys, setSurveys] = useState<PortalGrowSurveyItem[]>([]);
+  const [surveyState, setSurveyState] = useState<"loading" | "ready" | "error" | "unauthorized" | "unavailable">("loading");
+  const [surveyError, setSurveyError] = useState<string | null>(null);
   const idempotencyKeyRef = useRef<string>(generateUUID());
 
   const [catalogue, setCatalogue] = useState<PortalGrowAssessmentCatalogue | null>(null);
@@ -180,45 +210,70 @@ export function PortalGrowV3() {
   const [selectedPackKey, setSelectedPackKey] = useState<string | null>(null);
 
   const loadSurveys = useCallback(async () => {
+    const isCurrent = beginRead("surveys");
+    if (!isCurrent()) return;
+    setSurveyState("loading");
+    setSurveyError(null);
+    setSurveys([]);
     try {
       const res = await listPortalGrowSurveys();
-      if (res && Array.isArray(res.items)) setSurveys(res.items);
-    } catch {
-      // safe fallback, non-blocking
+      if (!isCurrent()) return;
+      if (!res || !Array.isArray(res.items)) {
+        setSurveyState("unavailable");
+        setSurveyError("A korábbi visszajelzések jelenleg nem érhetők el.");
+        return;
+      }
+      setSurveys(res.items);
+      setSurveyState("ready");
+    } catch (err) {
+      if (!isCurrent()) return;
+      const unavailable = err instanceof ApiError && ([404, 503].includes(err.status) || err.code?.includes("DISABLED"));
+      setSurveyState(unavailable ? "unavailable"
+        : err instanceof ApiError && [401, 403].includes(err.status) ? "unauthorized" : "error");
+      setSurveyError(unavailable ? "A korábbi visszajelzések jelenleg nem érhetők el." : clientSafeError(err));
     }
-  }, []);
+  }, [beginRead]);
 
   const loadCatalogue = useCallback(async () => {
+    const isCurrent = beginRead("catalogue");
+    if (!isCurrent()) return;
     try {
       setCatalogueError(null);
       const res = await listPortalGrowAssessments();
-      if (res && Array.isArray(res.packs)) {
-        setCatalogue(res);
-        setSelectedPackKey((prev) => prev ?? res.packs[0]?.packKey ?? null);
-      }
+      if (!isCurrent()) return;
+      if (!res || !Array.isArray(res.packs)) throw new Error("Grow catalogue unavailable");
+      setCatalogue(res);
+      setSelectedPackKey((prev) => prev ?? res.packs[0]?.packKey ?? null);
     } catch (err) {
-      setCatalogueError(clientSafeError(err));
+      if (isCurrent()) setCatalogueError(clientSafeError(err));
     }
-  }, []);
+  }, [beginRead]);
 
   const load = useCallback(async () => {
+    const isCurrent = beginRead("main");
+    if (!isCurrent()) return;
     setLoading(true);
     setError(null);
     try {
       const res = await getPortalOrgGrow();
+      if (!isCurrent()) return;
+      if (!res) throw new Error("Grow data unavailable");
       setData(res);
       if (res?.surveys && Array.isArray(res.surveys)) {
+        requests.current.surveys += 1;
         setSurveys(res.surveys);
+        setSurveyState("ready");
+        setSurveyError(null);
       } else {
-        await loadSurveys();
+        void loadSurveys();
       }
       await loadCatalogue();
     } catch (err) {
-      setError(clientSafeError(err));
+      if (isCurrent()) setError(clientSafeError(err));
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, [loadSurveys, loadCatalogue]);
+  }, [beginRead, loadSurveys, loadCatalogue]);
 
   useEffect(() => {
     void load();
@@ -350,11 +405,14 @@ export function PortalGrowV3() {
   }, []);
 
   const startAssessment = useCallback((packKey: string, processId?: string | null) => {
+    const isCurrent = beginRead("assessment");
+    if (!isCurrent()) return;
     setActiveTab("teendok");
     setAssessmentBusy(true);
     setAssessmentError(null);
     void getPortalGrowAssessment(packKey, processId)
       .then((detail) => {
+        if (!isCurrent()) return;
         setRunnerDetail(detail);
         setRunnerIndex(0);
         setRunnerAnswers({});
@@ -362,26 +420,31 @@ export function PortalGrowV3() {
         assessmentKeyRef.current = generateUUID();
         setAssessmentView({ mode: "runner", packKey });
       })
-      .catch((err) => setAssessmentError(clientSafeError(err)))
-      .finally(() => setAssessmentBusy(false));
-  }, []);
+      .catch((err) => { if (isCurrent()) setAssessmentError(clientSafeError(err)); })
+      .finally(() => { if (isCurrent()) setAssessmentBusy(false); });
+  }, [beginRead]);
 
   const viewAssessmentResult = useCallback((packKey: string, processId?: string | null) => {
+    const isCurrent = beginRead("assessment");
+    if (!isCurrent()) return;
     setActiveTab("teendok");
     setAssessmentBusy(true);
     setAssessmentError(null);
     void getPortalGrowAssessment(packKey, processId)
       .then((detail) => {
+        if (!isCurrent()) return;
         setAssessmentResult(detail.latestResult);
         setAssessmentResultUnavailable(detail.latestResult === null);
         setAssessmentResultScope(detail.resultScope ?? null);
         setAssessmentView({ mode: "result", packKey });
       })
-      .catch((err) => setAssessmentError(clientSafeError(err)))
-      .finally(() => setAssessmentBusy(false));
-  }, []);
+      .catch((err) => { if (isCurrent()) setAssessmentError(clientSafeError(err)); })
+      .finally(() => { if (isCurrent()) setAssessmentBusy(false); });
+  }, [beginRead]);
 
   const backToCatalogue = useCallback(async () => {
+    requests.current.assessment += 1;
+    setAssessmentBusy(false);
     setAssessmentView({ mode: "catalogue" });
     setRunnerDetail(null);
     setAssessmentResult(null);
@@ -394,6 +457,8 @@ export function PortalGrowV3() {
 
   const submitAssessment = useCallback(async () => {
     if (!runnerDetail) return;
+    const isCurrent = beginRead("assessment");
+    if (!isCurrent()) return;
     const answers = runnerDetail.definition.questions.map((q) => ({
       questionKey: q.questionKey,
       answer: runnerAnswers[q.questionKey],
@@ -406,6 +471,7 @@ export function PortalGrowV3() {
         idempotencyKey: assessmentKeyRef.current,
         processId: assessmentProcessId || undefined,
       });
+      if (!isCurrent()) return;
       setAssessmentResult(res.result);
       setAssessmentResultUnavailable(false);
       setAssessmentResultScope({
@@ -415,14 +481,16 @@ export function PortalGrowV3() {
       setAssessmentView({ mode: "result", packKey: runnerDetail.definition.packKey });
       await loadCatalogue();
     } catch (err) {
-      setAssessmentError(clientSafeError(err));
+      if (isCurrent()) setAssessmentError(clientSafeError(err));
     } finally {
-      setAssessmentBusy(false);
+      if (isCurrent()) setAssessmentBusy(false);
     }
-  }, [runnerDetail, runnerAnswers, assessmentProcessId, loadCatalogue]);
+  }, [beginRead, runnerDetail, runnerAnswers, assessmentProcessId, loadCatalogue]);
 
   const handleSurveySubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    const isCurrent = beginRead("submission");
+    if (!isCurrent()) return;
     if (selectedCategories.length === 0) {
       setSubmitError("Kérjük, válasszon legalább egy témakört a visszajelzéshez.");
       return;
@@ -437,6 +505,7 @@ export function PortalGrowV3() {
         processId: selectedProcessId || undefined,
         idempotencyKey: idempotencyKeyRef.current,
       });
+      if (!isCurrent()) return;
       setSubmitSuccess(res.message || "Rögzítettük. A jelzést a működés áttekintésekor figyelembe vesszük.");
       setSelectedCategories([]);
       setFreeText("");
@@ -444,9 +513,9 @@ export function PortalGrowV3() {
       idempotencyKeyRef.current = generateUUID();
       await loadSurveys();
     } catch (err) {
-      setSubmitError(clientSafeError(err));
+      if (isCurrent()) setSubmitError(clientSafeError(err));
     } finally {
-      setSubmitting(false);
+      if (isCurrent()) setSubmitting(false);
     }
   };
 
@@ -545,7 +614,7 @@ export function PortalGrowV3() {
 
   const NAV_ITEMS: Array<{ id: GrowTab; label: string; count?: number }> = [
     { id: "attekintes", label: "Áttekintés" },
-    { id: "teendok", label: "Most Önre vár", count: uncompletedPacksCount },
+    { id: "teendok", label: "Választható felmérések" },
     { id: "fejlesztesi-iranyok", label: "Amin érdemes dolgozni", count: publishedOpportunitiesCount },
     { id: "kezdemenyezesek", label: "Folyamatban", count: initiatives.length },
     { id: "mukodes", label: "Az Ön működése", count: processes.length },
@@ -563,9 +632,7 @@ export function PortalGrowV3() {
           kezdeményezésekről és azok eredményeiről.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button variant="primary" size="sm" onClick={() => handleTabChange("teendok")}>
-            Teendők megnyitása
-          </Button>
+          <a className="inline-flex min-h-10 items-center text-sm font-semibold underline" href="#grow-adaptive-journey">Rövid működési visszajelzés</a>
           <Link
             href="/portal/megkeresesek"
             className="inline-flex items-center rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] px-3 py-1.5 text-xs font-semibold text-[var(--adm-text-primary)] hover:bg-[var(--adm-canvas-subtle)]"
@@ -574,6 +641,21 @@ export function PortalGrowV3() {
           </Link>
         </div>
       </header>
+
+      {surveyState !== "ready" || surveys.length === 0 ? (
+        <div data-testid="grow-survey-history-status" data-state={surveyState} aria-live="polite">
+          {surveyState === "loading" ? (
+            <p className={`text-sm ${MUTED}`}>Korábbi visszajelzések betöltése...</p>
+          ) : surveyState === "ready" ? (
+            <p className={`text-sm ${MUTED}`}>Még nincs beküldött működési visszajelzés.</p>
+          ) : (
+            <SafePanelError detail={`Korábbi visszajelzések: ${surveyError ?? "Az adatok nem tölthetők be."}`} onRetry={() => void loadSurveys()} />
+          )}
+        </div>
+      ) : null}
+
+      {(focus === null) ? <GrowAdaptiveJourney processes={processes} onFocusChange={setAdaptiveFocused} onDetailed={() => { setDetailedOpen(true); handleTabChange("teendok"); }} onNext={() => handleTabChange("fejlesztesi-iranyok")} /> : null}
+      <div hidden={adaptiveFocused} className="space-y-5">
 
       <nav
         className="flex flex-wrap items-center gap-1.5"
@@ -614,11 +696,14 @@ export function PortalGrowV3() {
       {(focus === null || focus === "assessment") ? (
         <div id="grow-section-teendok" className="scroll-mt-24 space-y-4" data-testid="grow-section-teendok">
           <GrowSectionHeader
-            step="1 · Most Önre vár"
-            title="Amit most érdemes elvégeznie"
-            description="Kizárólag valódi ügyfélteendők: a még nem kitöltött felmérések és az Ön által beküldhető működési visszajelzés."
+            step="1 · Választható felmérések"
+            title="Önkéntes működési visszajelzés"
+            description="Ezek a felmérések választhatók. A kötelező ügyfélkéréseket és határidejüket a Teendők között találja."
           />
-          <section className={CARD} data-testid="grow-assessments-section">
+          <Link href="/portal/megkeresesek" className="inline-flex min-h-10 items-center text-sm font-semibold text-[var(--adm-brand-green)] underline">Kötelező teendők és határidők megnyitása</Link>
+          <details open={detailedOpen || assessmentView.mode !== "catalogue"} data-testid="grow-detailed-assessments">
+            <summary className="min-h-10 cursor-pointer py-2 font-semibold" onClick={(event) => { event.preventDefault(); setDetailedOpen(value => !value); }}>Részletes felmérések · korábbi V1-kitöltések</summary>
+            <section className={CARD} data-testid="grow-assessments-section">
             {assessmentView.mode === "runner" && currentQuestion ? (
               <div data-testid="grow-assessment-runner">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1053,6 +1138,8 @@ export function PortalGrowV3() {
             )}
           </section>
 
+          </details>
+
           {/* Secondary cross-pack summary of assessment findings */}
           <section className={CARD} data-testid="grow-aggregated-findings">
             <p className={EYEBROW}>Összegzés</p>
@@ -1392,7 +1479,7 @@ export function PortalGrowV3() {
       {(focus === null || focus === "initiative") ? (
         activeInitiative ? (
           (() => {
-            const relatedOutcomes = allOutcomes.filter((outcome) => outcome.initiativeTitle === activeInitiative.title);
+            const relatedOutcomes = allOutcomes.filter((outcome) => outcome.initiativeId === activeInitiative.id);
             const completedMilestones = activeInitiative.milestones.filter(
               (milestone) => milestone.statusLabel === "Teljesítve",
             ).length;
@@ -1483,7 +1570,7 @@ export function PortalGrowV3() {
                             key={outcome.id}
                             className="rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)] p-3 text-sm"
                           >
-                            <AdminStatusPill tone={outcomeTone(outcome.basis)}>{outcome.basisLabel}</AdminStatusPill>
+                            <AdminStatusPill tone={outcomeTone(outcome.basis)}>{portalOutcomeBasisLabel(outcome.basis)}</AdminStatusPill>
                             {outcome.processName ? (
                               <span className={`ml-2 text-xs ${MUTED}`}>Érintett folyamat: {outcome.processName}</span>
                             ) : null}
@@ -1759,7 +1846,7 @@ export function PortalGrowV3() {
           <GrowSectionHeader
             step="5 · Eredmények"
             title="Rögzített eredmények és hatások"
-            description="Mért eredményként csak MEASURED alapú eredmény jelenik meg; a számított és becsült hatások külön kategóriában szerepelnek."
+            description="Mért eredményként csak mért alapú eredmény jelenik meg; a számított és becsült hatások külön kategóriában szerepelnek."
           />
         <section className={CARD}>
           <p className={EYEBROW}>Eredmények és hatás</p>
@@ -1776,7 +1863,7 @@ export function PortalGrowV3() {
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 {measuredOutcomes.map((item) => (
                   <div key={item.id} className="rounded-[8px] border border-[var(--adm-brand-green)] bg-[var(--adm-semantic-success-soft)] p-4">
-                    <AdminStatusPill tone="green">{item.basisLabel}</AdminStatusPill>
+                    <AdminStatusPill tone="green">{portalOutcomeBasisLabel(item.basis)}</AdminStatusPill>
                     {item.initiativeTitle ? (
                       <p className="mt-2 text-sm font-medium text-[var(--adm-text-primary)]">
                         Kezdeményezés: <span className="font-semibold">{item.initiativeTitle}</span>
@@ -1803,7 +1890,7 @@ export function PortalGrowV3() {
                   <div className="mt-2 grid gap-3 sm:grid-cols-2">
                     {calculatedOutcomes.map((item) => (
                       <div key={item.id} className="rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] p-4">
-                        <AdminStatusPill tone="gold">{item.basisLabel}</AdminStatusPill>
+                        <AdminStatusPill tone="gold">{portalOutcomeBasisLabel(item.basis)}</AdminStatusPill>
                         {item.initiativeTitle ? (
                           <p className="mt-2 text-sm font-medium text-[var(--adm-text-primary)]">
                             Kezdeményezés: <span className="font-semibold">{item.initiativeTitle}</span>
@@ -1824,7 +1911,7 @@ export function PortalGrowV3() {
                   <div className="mt-2 grid gap-3 sm:grid-cols-2">
                     {estimatedOnlyOutcomes.map((item) => (
                       <div key={item.id} className="rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] p-4">
-                        <AdminStatusPill tone="neutral">{item.basisLabel}</AdminStatusPill>
+                        <AdminStatusPill tone="neutral">{portalOutcomeBasisLabel(item.basis)}</AdminStatusPill>
                         {item.initiativeTitle ? (
                           <p className="mt-2 text-sm font-medium text-[var(--adm-text-primary)]">
                             Kezdeményezés: <span className="font-semibold">{item.initiativeTitle}</span>
@@ -1851,13 +1938,16 @@ export function PortalGrowV3() {
           <div className={`mt-5 rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)] p-3 text-xs leading-5 ${MUTED}`}>
             <p className="font-semibold text-[var(--adm-text-primary)]">Módszertan és forrásmegjelölés</p>
             <p className="mt-0.5">
-              Mért eredményként csak MEASURED alapú eredmény jelenik meg. Számított és becsült hatások külön
+              Mért eredményként csak mért alapú eredmény jelenik meg. Számított és becsült hatások külön
               kategóriában szerepelnek.
             </p>
           </div>
         </section>
         </div>
       ) : null}
+      </div>
     </div>
   );
 }
+
+function portalOutcomeBasisLabel(basis: string): string { return ({ MEASURED: "Mért eredmény", CALCULATED: "Számított eredmény", ESTIMATED: "Becsült eredmény" } as Record<string, string>)[basis] || "Nem meghatározott eredmény"; }

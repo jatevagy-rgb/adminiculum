@@ -1,5 +1,7 @@
 "use client";
 
+import { complianceFactQuestion } from "@/lib/complianceFactPresentation";
+import { AdminButton } from "@/components/adminiculum/ui";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -7,6 +9,7 @@ import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { ClientWorkspaceTabs } from "@/components/clients/ClientWorkspaceTabs";
 import {
   ComplianceOverviewPanel,
+  ComplianceAttentionSummary,
   ComplianceControlsSection,
   ComplianceProposalPanel,
   complianceOutcomeClass,
@@ -149,8 +152,8 @@ type EvaluationSummary = {
 };
 
 function evaluationStatusClass(summary: EvaluationSummary): string {
-  if (!summary.enrolled) return "border-[#DCCCA6] bg-[#FFF9E9] text-[#735D16]";
-  if (summary.findingsCreated > 0) return "border-[#DCCCA6] bg-[#FFF9E9] text-[#735D16]";
+  if (!summary.enrolled) return "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text)]";
+  if (summary.findingsCreated > 0) return "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text)]";
   if (summary.baseline) return "border-[var(--adm-border)] bg-white text-[var(--adm-text)]";
   if (summary.snapshotsCreated > 0) return "border-[var(--adm-semantic-success-border)] bg-[var(--adm-semantic-success-soft)] text-[var(--adm-semantic-success)]";
   return "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)]";
@@ -211,7 +214,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function WorkspaceAreaRow({ area, cases, clients, focusedFactKey }: { area: ComplianceWorkspaceArea; cases: CaseListItem[]; clients: Client[]; focusedFactKey?: string }) {
+function WorkspaceAreaRow({ area, cases, clients, focusedFactKey, onFinding }: { onFinding: (id: string) => void; area: ComplianceWorkspaceArea; cases: CaseListItem[]; clients: Client[]; focusedFactKey?: string }) {
   const [open, setOpen] = useState(false);
   const factItemId = useId();
   const focusedFactRef = useRef<HTMLLIElement>(null);
@@ -242,11 +245,12 @@ function WorkspaceAreaRow({ area, cases, clients, focusedFactKey }: { area: Comp
           </span>
         </span>
         <span className={`shrink-0 rounded border px-2 py-1 text-xs ${complianceOutcomeClass[outcome] || ""}`}>
-          {complianceOutcomeLabels[outcome] || area.outcome}
+          {complianceOutcomeLabels[outcome] || "Ismeretlen állapot"}
         </span>
       </button>
       {open ? (
         <div className="mt-3 space-y-3 border-t border-[var(--adm-border)] pt-3 text-sm">
+          {area.evaluationFreshness !== "RECORDED" ? <p role="status">Az értékelés frissítésre vár. Újabb adatok már rendelkezésre állhatnak; az ügyfél megkeresése előtt frissítse az értékelést.</p> : null}
           {area.normativeStatement ? (
             <div className="mt-2 rounded border border-[var(--adm-border)] bg-[var(--adm-surface-subtle)] p-2 text-xs">
               <p className="font-semibold text-[var(--adm-text)]">Előírt követelmény:</p>
@@ -257,11 +261,11 @@ function WorkspaceAreaRow({ area, cases, clients, focusedFactKey }: { area: Comp
             <p className="text-xs text-[var(--adm-text-muted)]">Forrástámogatás: {sourceSupportLabels[area.sourceSupportState]}</p>
           ) : null}
           {area.requirementVersionKey || area.ruleVersionKey ? (
-            <p className="text-xs text-[var(--adm-text-muted)]">
+            <details className="text-xs text-[var(--adm-text-muted)]"><summary>Technikai verzióadatok</summary>
               {area.requirementVersionKey ? `Követelményverzió: ${area.requirementVersionKey}` : null}
               {area.requirementVersionKey && area.ruleVersionKey ? " · " : null}
               {area.ruleVersionKey ? `Értékelő szabályverzió: ${area.ruleVersionKey}` : null}
-            </p>
+            </details>
           ) : null}
           {area.usedFacts.length ? (
             <div>
@@ -281,7 +285,8 @@ function WorkspaceAreaRow({ area, cases, clients, focusedFactKey }: { area: Comp
               <ul className="mt-1 space-y-1">
                 {area.missingFacts.map((fact) => (
                   <li key={fact.factKey} ref={fact.factKey === focusedFactKey ? focusedFactRef : undefined} id={fact.factKey === focusedFactKey ? factItemId : undefined} tabIndex={fact.factKey === focusedFactKey ? -1 : undefined} className="text-xs text-[var(--adm-text)]">
-                    {fact.label || "További vállalati adat szükséges"}
+                    {fact.label || "Nem azonosított vállalati adat — ügyvédi pontosítás szükséges"}
+                    {area.evaluationFreshness === "RECORDED" ? <ClientRequestComposer key={fact.factKey} cases={cases} clients={clients} complianceContext={{ requirementVersionId: area.requirementVersionId, applicabilityId: area.applicabilityId, factKey: fact.factKey }} complianceContextLabel={area.title + " · " + (fact.label || "Tisztázandó adat")} initialQuestion={complianceFactQuestion(fact)} defaultType="QUESTION_RESPONSE" triggerLabel="Adat pontosítása az ügyféllel" triggerVariant="neutral" /> : null}
                     {fact.profileAnswerable ? (
                       <span className="ml-1 text-[var(--adm-text-muted)]">— a meglévő vállalati profil felületen adható meg.</span>
                     ) : null}
@@ -296,17 +301,18 @@ function WorkspaceAreaRow({ area, cases, clients, focusedFactKey }: { area: Comp
               <ul className="mt-1 space-y-1">
                 {citations.map((citation, index) => (
                   <li key={index} className="text-xs text-[var(--adm-text)]">
+                    {citation.sourceUrl ? <a href={citation.sourceUrl} target="_blank" rel="noopener noreferrer" className="mr-2 underline">Jóváhagyott jogforrás megnyitása</a> : null}
                     <b>{citation.canonicalCitation || citation.sourceTitle || "Jogi forrás"}</b>
                     {citation.sourceTitle && citation.canonicalCitation ? ` — ${citation.sourceTitle}` : null}
                     {locatorText(citation) ? <span className="text-[var(--adm-text-muted)]"> · {locatorText(citation)}</span> : null}
-                    <span className="ml-1 text-[var(--adm-text-muted)]">({citationRoleLabels[citation.supportRole] || citation.supportRole})</span>
+                    <span className="ml-1 text-[var(--adm-text-muted)]">({citationRoleLabels[citation.supportRole] || "Forrás"})</span>
                   </li>
                 ))}
               </ul>
             </div>
           ) : null}
           {area.activeFindingId ? (
-            <p className="text-xs text-[var(--adm-text-muted)]">Ehhez a területhez aktív megállapítás tartozik — lásd lentebb.</p>
+            <AdminButton variant="neutral" onClick={() => onFinding(area.activeFindingId!)}>Kapcsolódó megállapítás megnyitása</AdminButton>
           ) : null}
           <div className="mt-3 flex flex-wrap gap-2 border-t border-[var(--adm-border)] pt-3">
             <ClientRequestComposer
@@ -355,6 +361,7 @@ export default function ClientCompliancePage() {
   const [modeError, setModeError] = useState(false);
   const [organizationMode, setOrganizationMode] = useState(false);
   const [view, setView] = useState<ComplianceView>("status");
+  const [findingTarget, setFindingTarget] = useState<string | null>(null);
   const [requirementsTarget, setRequirementsTarget] = useState<{ clientId: string; applicabilityId: string; factKey: string } | null>(null);
   const [clientCases, setClientCases] = useState<CaseListItem[]>([]);
   const [complianceFindings, setComplianceFindings] = useState<ComplianceFindingView[]>([]);
@@ -372,6 +379,7 @@ export default function ClientCompliancePage() {
   useEffect(() => {
     if (!clientId) return;
     setRequirementsTarget(null);
+    setFindingTarget(null);
     const generation = route.generation;
     // Never let the previous client's identity/mode/cases survive into the new route.
     setError(false);
@@ -554,11 +562,11 @@ export default function ClientCompliancePage() {
                 <>
                   {/* Client-level shell first, then the module hero, matching Company OS / Grow. */}
                   <ClientWorkspaceTabs clientId={client.id} active="compliance" organizationMode={organizationMode} />
-                  <header className="rounded-3xl border border-[#DCCCA6] bg-[#fbf9f4] p-5 sm:p-6 shadow-sm">
+                  <header className="rounded-xl border border-[var(--adm-border)] bg-white p-5 sm:p-6 shadow-sm">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#014337]">Megfelelés</p>
-                        <h1 className="mt-1 font-serif text-2xl font-semibold text-stone-950 sm:text-3xl">{client.name}</h1>
+                        <h1 className="mt-1 font-sans text-2xl font-semibold text-stone-950 sm:text-3xl">{client.name}</h1>
                         <p className="mt-1 text-xs text-stone-600 sm:text-sm">
                           A szervezet releváns megfelelőségi területei, megállapításai és a következő jogi lépések.
                         </p>
@@ -584,7 +592,7 @@ export default function ClientCompliancePage() {
                         >
                           {reconciling
                             ? "Értékelés folyamatban…"
-                            : workspace?.summary.enrollment === "ENROLLED"
+                            : workspace?.summary.enrollment === "ENROLLED" && workspace.summary.evaluatedCount > 0
                               ? "Értékelés frissítése"
                               : "Első megfelelőségi értékelés indítása"}
                         </button>
@@ -593,7 +601,7 @@ export default function ClientCompliancePage() {
                     </div>
                     {/* Immediate, view-independent feedback for the evaluation action. */}
                     {evaluationSummary ? (
-                      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#DCCCA6] pt-3 text-xs">
+                      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--adm-border)] pt-3 text-xs">
                         <span className={`rounded border px-2 py-1 font-medium ${evaluationStatusClass(evaluationSummary)}`}>
                           {evaluationStatusLabel(evaluationSummary)}
                         </span>
@@ -609,7 +617,7 @@ export default function ClientCompliancePage() {
                       </div>
                     ) : null}
                     {reconcileError && !evaluationSummary ? (
-                      <p role="alert" className="mt-3 border-t border-[#DCCCA6] pt-3 text-xs text-red-800">
+                      <p role="alert" className="mt-3 border-t border-[var(--adm-border)] pt-3 text-xs text-red-800">
                         {reconcileError}
                       </p>
                     ) : null}
@@ -624,7 +632,7 @@ export default function ClientCompliancePage() {
                         role="tab"
                         aria-selected={view === key}
                         className={tabClass(view === key)}
-                        onClick={() => { setRequirementsTarget(null); setView(key); }}
+                        onClick={() => { setRequirementsTarget(null); setFindingTarget(null); setView(key); }}
                       >
                         {complianceViewLabels[key]}
                       </button>
@@ -647,22 +655,6 @@ export default function ClientCompliancePage() {
                               <p className="mb-3 rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-sm text-[var(--adm-text-muted)]">
                                 Az ügyfél jelenleg nincs bekapcsolva a megfelelőségi értékelésbe.
                               </p>
-                            ) : null}
-                            {workspace.summary.enrollment === "ENROLLED" ? (
-                              <div className="mb-3">
-                                <button
-                                  type="button"
-                                  disabled={reconciling}
-                                  onClick={() => { void handleReconcile(); }}
-                                  className="rounded border border-[var(--adm-green-800)] bg-white px-3 py-2 text-xs font-medium text-[var(--adm-green-800)] disabled:opacity-60"
-                                >
-                                  {reconciling
-                                    ? "Értékelés folyamatban…"
-                                    : workspace.summary.evaluatedCount === 0
-                                      ? "Első megfelelőségi értékelés indítása"
-                                      : "Értékelés frissítése"}
-                                </button>
-                              </div>
                             ) : null}
                             {workspace.summary.evaluatedCount === 0 ? (
                               <div className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
@@ -740,7 +732,7 @@ export default function ClientCompliancePage() {
                                 <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Érintett területek</p>
                                 <div className="mt-1 flex flex-wrap gap-1">
                                   {evaluationSummary.affectedAreas.map((title) => (
-                                    <span key={title} className="rounded border border-[#DCCCA6] bg-[#FFF9E9] px-2 py-1 text-xs text-[#735D16]">{title}</span>
+                                    <span key={title} className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-1 text-xs text-[var(--adm-text)]">{title}</span>
                                   ))}
                                 </div>
                               </div>
@@ -764,7 +756,7 @@ export default function ClientCompliancePage() {
                         <Section title="Tisztázandó / hiányzó információ">
                           <ul className="space-y-2">
                             {missingInformation.map((item) => (
-                              <li key={item.factKey} className="rounded border border-[#DCCCA6] bg-[#FFF9E9] p-3 text-sm text-[#735D16]">
+                              <li key={item.factKey} className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-sm text-[var(--adm-text)]">
                                 {item.genericOnly
                                   ? `${item.label}: a követelmény értékeléséhez további adat szükséges.`
                                   : `${item.label || "További vállalati adat"}: az értékeléshez hiányzik.`}
@@ -777,14 +769,9 @@ export default function ClientCompliancePage() {
                         </Section>
                       ) : null}
 
-                      <Section title="Megállapítások">
-                        <ComplianceOverviewPanel
-                          title="Megállapítások"
-                          findings={attentionFindings}
-                          loading={complianceLoading}
-                          error={complianceError}
-                          onRetry={() => { void loadCompliance(); }}
-                        />
+                      <Section title="Megállapítások összegzése">
+                        {complianceLoading ? <p>Betöltés…</p> : complianceError ? <SafePanelError detail={complianceError} onRetry={() => void loadCompliance()} /> : <ComplianceAttentionSummary findings={attentionFindings} />}
+                        <AdminButton variant="neutral" onClick={() => setView("findings")}>Megállapítások és intézkedések megnyitása</AdminButton>
                       </Section>
                     </>
                   ) : null}
@@ -797,7 +784,7 @@ export default function ClientCompliancePage() {
                     ) : !workspaceLoading && !workspaceError && workspace && workspace.areas.length ? (
                       <Section title="Megfelelőségi területek">
                         <ul className="space-y-2">
-                          {workspace.areas.map((area) => <WorkspaceAreaRow key={area.applicabilityId} area={area} cases={clientCases} clients={client ? [client] : []} focusedFactKey={area.applicabilityId === requirementsTarget?.applicabilityId && targetArea ? requirementsTarget.factKey : undefined} />)}
+                          {workspace.areas.map((area) => <WorkspaceAreaRow key={area.applicabilityId} area={area} onFinding={(id) => { setFindingTarget(id); setView("findings"); }} cases={clientCases} clients={client ? [client] : []} focusedFactKey={area.applicabilityId === requirementsTarget?.applicabilityId && targetArea ? requirementsTarget.factKey : undefined} />)}
                         </ul>
                       </Section>
                     ) : (
@@ -829,7 +816,7 @@ export default function ClientCompliancePage() {
 
                   {view === "findings" ? (
                     <>
-                      <ComplianceOverviewPanel
+                      <ComplianceOverviewPanel focusFindingId={findingTarget}
                         title="Megállapítások"
                         findings={complianceFindings}
                         loading={complianceLoading}

@@ -40,10 +40,17 @@ describe('handoff package adjacent foundation checks', () => {
     delete process.env.ENABLE_CONTRACT_REVIEW_NOTES;
   });
 
+  it('retires direct creation without writing a package or timeline event', async () => {
+    await expect(handoffPackagesService.createHandoffPackage({ caseId: 'case-1' }))
+      .rejects.toMatchObject({ statusCode: 410, code: 'HANDOFF_PACKAGE_CREATION_RETIRED' });
+    expect(prisma.case.findUnique).not.toHaveBeenCalled();
+    expect(prisma.lawyerHandoffPackage.create).not.toHaveBeenCalled();
+    expect(prisma.timelineEvent.create).not.toHaveBeenCalled();
+  });
+
   it('rejects legal analysis references before querying absent foundations', async () => {
     await expect(
-      handoffPackagesService.createHandoffPackage({
-        caseId: 'case-1',
+      handoffPackagesService.updateHandoffPackage('package-1', {
         legalAnalysisId: 'analysis-1',
       })
     ).rejects.toMatchObject({
@@ -82,6 +89,46 @@ describe('handoff package adjacent foundation checks', () => {
       },
       orderBy: { updatedAt: 'desc' },
     });
+  });
+
+  it('includes archived records and preserves every DTO field in complete history', async () => {
+    const archived = {
+      id: 'package-1', caseId: 'case-1', status: 'ARCHIVED', packageType: 'FINAL_APPROVAL',
+      sourceDocumentId: 'document-1', anonymizedDocumentId: 'anonymous-1',
+      generatedContractId: 'generation-1', legalAnalysisId: 'analysis-1', reviewNotesId: 'notes-1',
+      preparerSummary: 'Original summary', preparedById: 'worker-1',
+      submittedAt: new Date('2026-07-17T08:00:00Z'), reviewedById: 'reviewer-1',
+      reviewedAt: new Date('2026-07-17T09:00:00Z'), reviewDecision: 'REJECTED_BLOCKING',
+      reviewComment: 'Original review', createdAt: new Date('2026-07-17T07:00:00Z'),
+      updatedAt: new Date('2026-07-17T10:00:00Z'),
+    };
+    (prisma.lawyerHandoffPackage.findMany as jest.Mock).mockResolvedValue([archived]);
+    await expect(handoffPackagesService.listHandoffPackages('case-1', { includeArchived: true }))
+      .resolves.toEqual([archived]);
+    expect(prisma.lawyerHandoffPackage.findMany).toHaveBeenCalledWith({
+      where: { caseId: 'case-1' }, orderBy: { updatedAt: 'desc' },
+    });
+  });
+
+  it('reports unavailable complete history while retaining default missing-table behavior', async () => {
+    (prisma.lawyerHandoffPackage.findMany as jest.Mock)
+      .mockRejectedValueOnce(new Error('Table LawyerHandoffPackage does not exist'))
+      .mockRejectedValueOnce(new Error('Table LawyerHandoffPackage does not exist'));
+    await expect(handoffPackagesService.listHandoffPackages('case-1', { includeArchived: true }))
+      .rejects.toMatchObject({ statusCode: 501, code: 'HANDOFF_FEATURE_UNAVAILABLE' });
+    await expect(handoffPackagesService.listHandoffPackages('case-1')).resolves.toEqual([]);
+  });
+
+  it('reports a missing repository for complete history without changing default behavior', async () => {
+    const repo = prisma.lawyerHandoffPackage;
+    try {
+      (prisma as any).lawyerHandoffPackage = undefined;
+      await expect(handoffPackagesService.listHandoffPackages('case-1', { includeArchived: true }))
+        .rejects.toMatchObject({ statusCode: 501, code: 'HANDOFF_FEATURE_UNAVAILABLE' });
+      await expect(handoffPackagesService.listHandoffPackages('case-1')).resolves.toEqual([]);
+    } finally {
+      (prisma as any).lawyerHandoffPackage = repo;
+    }
   });
 
   it('archives only the package row and preserves timeline records', async () => {
@@ -230,7 +277,8 @@ describe('handoff package adjacent foundation checks', () => {
     expect(prisma.lawyerHandoffPackage.update).not.toHaveBeenCalled();
   });
 
-  it('records an approved submitted handoff through the explicit review method', async () => {
+  it.each(['APPROVED', 'REJECTED_NEEDS_REVISION', 'REJECTED_BLOCKING'] as const)(
+    'records %s on an existing submitted handoff through explicit review', async (decision) => {
     const existing = {
       id: 'package-1',
       caseId: 'case-1',
@@ -254,21 +302,24 @@ describe('handoff package adjacent foundation checks', () => {
     (prisma.lawyerHandoffPackage.findUnique as jest.Mock).mockResolvedValue(existing);
     (prisma.lawyerHandoffPackage.update as jest.Mock).mockResolvedValue({
       ...existing,
-      status: 'APPROVED',
+      status: decision === 'APPROVED' ? 'APPROVED' : 'REJECTED',
       reviewedById: 'reviewer-1',
       reviewedAt: new Date('2026-07-17T09:00:00.000Z'),
-      reviewDecision: 'APPROVED',
+      reviewDecision: decision,
+      reviewComment: 'Existing package decision',
     });
     (prisma.timelineEvent.create as jest.Mock).mockResolvedValue({});
 
     const result = await handoffPackagesService.reviewHandoffPackage('package-1', {
-      decision: 'APPROVED',
+      decision,
       userId: 'reviewer-1',
+      reviewComment: 'Existing package decision',
     });
 
-    expect(result.status).toBe('APPROVED');
+    expect(result.status).toBe(decision === 'APPROVED' ? 'APPROVED' : 'REJECTED');
+    expect(result.reviewDecision).toBe(decision);
     expect(prisma.lawyerHandoffPackage.update).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ status: 'APPROVED', reviewedById: 'reviewer-1' }),
+      data: expect.objectContaining({ status: result.status, reviewedById: 'reviewer-1', reviewDecision: decision }),
     }));
     expect(prisma.timelineEvent.create).toHaveBeenCalled();
   });

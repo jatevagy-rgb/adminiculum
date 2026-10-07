@@ -58,7 +58,7 @@ describe("Case Workspace — Kontextus V1", () => {
   it("8. empty context produces a truthful empty state (no empty cards)", () => {
     assert.match(contextView(), /contextEntries\.length > 0 \?/);
     assert.match(contextView(), /data-testid="case-context-empty"/);
-    assert.match(contextView(), /még nincs rögzített induló helyzet vagy ügyvédi instrukció/);
+    assert.match(contextView(), /még nincs rögzített induló ügyhelyzet/);
   });
 
   it("9. linked communication metadata renders only from existing DTO data", () => {

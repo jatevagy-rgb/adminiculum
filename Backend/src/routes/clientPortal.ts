@@ -53,6 +53,8 @@ import {
   getGrowAssessmentCatalogue,
   getGrowAssessmentDetail,
   submitGrowAssessment,
+  getGrowAdaptiveJourney,
+  submitGrowAdaptivePain,
 } from '../modules/company-growth/assessments/service';
 import { getClientSafeComplianceReadModel } from '../modules/compliance/clientSafeComplianceService';
 import { getControlEvidenceJourney, submitControlEvidenceAnswer } from '../modules/client-workspace/companyProfileEvidenceService';
@@ -651,6 +653,22 @@ router.get('/org/grow-assessments', async (req, res) => {
   }
 });
 
+router.get('/org/grow-assessments/journey', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json(await getGrowAdaptiveJourney(identityId, workspaceId));
+  } catch (error) { fail(res, error); }
+});
+
+router.post('/org/grow-assessments/journey/pain', async (req, res) => {
+  try {
+    if (!(await portalIntake(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json(await submitGrowAdaptivePain(identityId, workspaceId, { categories: req.body?.categories, freeText: req.body?.freeText, idempotencyKey: req.body?.idempotencyKey }));
+  } catch (error) { fail(res, error); }
+});
+
 router.get('/org/grow-assessments/:packKey', async (req, res) => {
   try {
     if (!(await portalRead(req, res))) return;
@@ -671,6 +689,7 @@ router.post('/org/grow-assessments/:packKey/submissions', async (req, res) => {
     const { identityId, workspaceId } = orgContext(req);
     const result = await submitGrowAssessment(identityId, workspaceId, req.params.packKey, {
       answers: req.body?.answers,
+      packVersion: req.body?.packVersion,
       idempotencyKey: req.body?.idempotencyKey,
       processId: req.body?.processId,
     });

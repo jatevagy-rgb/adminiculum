@@ -62,6 +62,7 @@ export interface CaseIntakeInput {
   workflowAssignees?: unknown;
   caseTypeDefinitionId?: unknown;
   selectedModuleKeys?: unknown;
+  clientOwnerPersonId?: unknown;
 }
 
 // Maps step keys -> assignee user id. Unknown shapes collapse to an empty map
@@ -276,6 +277,7 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
   const workflowTemplateKey = str(input.workflowTemplateKey, 64, 'workflowTemplateKey');
   const workflowAssignees = normalizeWorkflowAssignees(input.workflowAssignees);
   const caseTypeDefinitionId = str(input.caseTypeDefinitionId, 64, 'caseTypeDefinitionId');
+  const clientOwnerPersonId = str(input.clientOwnerPersonId, 80, 'clientOwnerPersonId');
   if (workflowTemplateKey && !WORKFLOW_TEMPLATES[workflowTemplateKey]) {
     throw new CaseIntakeError('WORKFLOW_TEMPLATE_NOT_FOUND', 'Ismeretlen munkafolyamat-sablon.', 400);
   }
@@ -343,6 +345,7 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
             workflowAssignees,
             caseTypeDefinitionId,
             selectedModuleKeys: input.selectedModuleKeys,
+            clientOwnerPersonId,
           },
           tx,
           { withinTransaction: true, provisionCaseFolders: false },

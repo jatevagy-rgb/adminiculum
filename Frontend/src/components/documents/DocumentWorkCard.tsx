@@ -8,7 +8,7 @@
  * MIME-ish type, version internals) in a secondary expandable area so they never
  * dominate. Storage identifiers are absent from the contract entirely.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ApiError, deleteDocument,
   getDocumentWorkContext, updateDocumentWorkContext,
@@ -19,7 +19,7 @@ import {
 import { AdminButton } from "@/components/adminiculum/ui";
 import { ConfirmationDialog } from "@/components/ui";
 import { ACCENT } from "@/components/cases/CaseCockpitPanels";
-import { workStatusAccent, workStatusLabel, formatDocDate } from "@/lib/documents/workContext";
+import { workStatusAccent, workStatusLabel, formatDocDate, documentRoleLabel } from "@/lib/documents/workContext";
 import { documentDeleteErrorMessage } from "@/lib/documents/documentPreparation";
 
 // One mapping source for the whole app: the card, the workspace header and the
@@ -62,16 +62,21 @@ export function DocumentWorkCard({
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  const generation = useRef(0);
+  const currentDocumentId = useRef(documentId);
+  currentDocumentId.current = documentId;
   const load = useCallback(async () => {
+    const request = ++generation.current;
     setLoading(true); setError(null);
-    try { setCard(await getDocumentWorkContext(documentId)); }
-    catch { setError("A dokumentum munkakontextusa nem tölthető be."); }
-    finally { setLoading(false); }
+    try { const next = await getDocumentWorkContext(documentId); if (request === generation.current && next.id === documentId) setCard(next); }
+    catch { if (request === generation.current) setError("A dokumentum munkakontextusa nem tölthető be."); }
+    finally { if (request === generation.current) setLoading(false); }
   }, [documentId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { setEditing(false); setCard(null); void load(); return () => { ++generation.current; }; }, [load]);
 
   const afterChange = useCallback((next: WorkCard) => {
+    if (next.id !== currentDocumentId.current) return;
     setCard(next);
     onChanged?.();
   }, [onChanged]);
@@ -117,14 +122,14 @@ export function DocumentWorkCard({
             <p data-testid="doc-card-filename" className="mt-0.5 truncate text-[10.5px] text-[var(--adm-text-muted)]">
               {card.fileName || "Nincs eredeti fájlnév"}
               {card.currentVersion ? ` · v${card.currentVersion}` : ""}
-              {card.documentRole ? ` · ${card.documentRole}` : ""}
+              {documentRoleLabel(card.documentRole) ? ` · ${documentRoleLabel(card.documentRole)}` : ""}
             </p>
           </div>
           <DocumentWorkStatusBadge status={card.workStatus} />
         </div>
 
         {/* The work instruction is the point of the card. */}
-        <div data-testid="doc-card-instruction" className={`mt-2 rounded-md px-2.5 py-1.5 ${a.soft}`}>
+        <div hidden={editing} data-testid="doc-card-instruction" className={`mt-2 rounded-md px-2.5 py-1.5 ${a.soft}`}>
           <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Munkautasítás</p>
           <p className={`mt-0.5 whitespace-pre-line text-[12.5px] leading-5 ${card.workInstruction ? "text-[var(--adm-text)]" : "text-[var(--adm-text-muted)]"}`}>
             {card.workInstruction || "Nincs rögzített munkautasítás."}
@@ -135,6 +140,14 @@ export function DocumentWorkCard({
             </p>
           ) : null}
         </div>
+
+      {editing ? (
+        <DocumentWorkContextEditor
+          card={card}
+          onClose={() => setEditing(false)}
+          onSaved={(next) => { afterChange(next); setEditing(false); }}
+        />
+      ) : null}
 
         {!compact ? (
           <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
@@ -255,14 +268,6 @@ export function DocumentWorkCard({
           </dl>
         ) : null}
       </div>
-
-      {editing ? (
-        <DocumentWorkContextEditor
-          card={card}
-          onClose={() => setEditing(false)}
-          onSaved={(next) => { afterChange(next); setEditing(false); }}
-        />
-      ) : null}
 
       <ConfirmationDialog
         open={deleteOpen}

@@ -108,7 +108,7 @@ export function AdminPanel({ className = "", ...props }: HTMLAttributes<HTMLDivE
 }
 
 export function AdminSectionHeader({ eyebrow, title, subtitle, action, titleAs = "h3" }: { eyebrow?: string; title: string; subtitle?: string; action?: ReactNode; titleAs?: "h1" | "h2" | "h3" }) {
-  const titleClass = "font-serif text-xl font-medium leading-tight text-[#16201A]";
+  const titleClass = "font-sans text-xl font-semibold leading-tight text-[#16201A]";
   return (
     <div className="flex items-start justify-between gap-3 border-b border-[rgba(22,32,26,0.10)] px-4 py-3">
       <div>

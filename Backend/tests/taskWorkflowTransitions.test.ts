@@ -19,6 +19,8 @@ jest.mock('../src/middleware/auth', () => ({
 }));
 
 const prismaMock = {
+  $transaction: jest.fn(),
+  $queryRaw: jest.fn(),
   task: {
     findUnique: jest.fn(),
     update: jest.fn(),
@@ -118,6 +120,8 @@ function openTask(overrides: Record<string, unknown> = {}) {
 describe('task workflow transition routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    prismaMock.$transaction.mockImplementation((operation: any) => operation(prismaMock));
+    prismaMock.$queryRaw.mockResolvedValue([{ status: "ACTIVE" }]);
     prismaMock.user.findUnique.mockResolvedValue({ id: 'user-1', role: 'LAWYER' });
     prismaMock.case.findUnique.mockResolvedValue({ assignedLawyerId: 'user-1', createdById: 'creator-1' });
     prismaMock.caseCollaborator.findFirst.mockResolvedValue(null);
@@ -190,7 +194,7 @@ describe('task workflow transition routes', () => {
   });
 
   it('blocks and unblocks only with structured blocker state', async () => {
-    prismaMock.task.findUnique.mockResolvedValueOnce(openTask({ status: 'IN_PROGRESS' }));
+    prismaMock.task.findUnique.mockResolvedValue(openTask({ status: 'IN_PROGRESS' }));
     prismaMock.task.update.mockResolvedValueOnce({ ...openTask(), status: 'BLOCKED', stuckReason: 'DEPENDENCY' });
 
     const app = createApp();
@@ -200,7 +204,7 @@ describe('task workflow transition routes', () => {
       data: expect.objectContaining({ status: 'BLOCKED', stuckReason: 'DEPENDENCY' }),
     }));
 
-    prismaMock.task.findUnique.mockResolvedValueOnce(openTask({ status: 'BLOCKED', stuckReason: 'DEPENDENCY' }));
+    prismaMock.task.findUnique.mockResolvedValue(openTask({ status: 'BLOCKED', stuckReason: 'DEPENDENCY' }));
     prismaMock.task.update.mockResolvedValueOnce({ ...openTask(), status: 'IN_PROGRESS', stuckReason: null });
     const unblocked = await requestJson(app, 'POST', '/tasks/task-1/unblock', {});
 

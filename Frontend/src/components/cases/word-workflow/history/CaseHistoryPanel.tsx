@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchApi } from "@/lib/api";
 import { CustomerHistoryPolicyEditor } from './CustomerHistoryPolicyEditor';
-import { CaseClientOwner } from '../layout/CaseClientOwner';
+import { BUSINESS_TIME_ZONE } from '@/lib/businessDateTime';
 import { AdminStatusPill } from "@/components/ui";
 
 type HistoryItem = {
@@ -24,7 +24,7 @@ const LEVELS = [
 ];
 
 function formatDate(value: string): string {
-  return new Intl.DateTimeFormat("hu-HU", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  return new Intl.DateTimeFormat("hu-HU", { timeZone: BUSINESS_TIME_ZONE, dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
 /** WF01 host imports this leaf; the backend read route is registered by integration. */
@@ -65,7 +65,6 @@ export function CaseHistoryPanel({ caseId, clientId, readOnly = false, onChanged
 
   return (
     <section aria-label="Ügytörténet" className="rounded-xl border border-[var(--adm-border)] bg-white p-4 md:p-5">
-      <CaseClientOwner key={`${caseId}:owner`} caseId={caseId}/><CustomerHistoryPolicyEditor key={`${caseId}:policy`} caseId={caseId}/>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-[var(--adm-text)]">Ügytörténet</h2>
@@ -89,12 +88,13 @@ export function CaseHistoryPanel({ caseId, clientId, readOnly = false, onChanged
       {nextCursor ? <button type="button" disabled={busy} onClick={() => void load(nextCursor)} className="mt-4 min-h-10 rounded-lg border border-[var(--adm-border)] px-4 text-sm font-medium text-[var(--adm-green-800)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--adm-green-800)]">További események</button> : null}
       {busy ? <p role="status" className="mt-3 text-sm text-[var(--adm-text-muted)]">Betöltés…</p> : null}
 
-      <div className="mt-6 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4" aria-label="Ügyfélnek látható előnézet">
-        <h3 className="text-sm font-semibold text-[var(--adm-text)]">Ügyfélnek látható előnézet</h3>
+      <details className="mt-4 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3" aria-label="Ügytörténet megosztása">
+        <summary className="min-h-10 cursor-pointer text-sm font-semibold text-[var(--adm-text)]">Ügytörténet megosztása az ügyféllel</summary>
+        <CustomerHistoryPolicyEditor key={`${caseId}:policy`} caseId={caseId}/>
         <p className="mt-2 text-sm text-[var(--adm-text-muted)]">Az ügyfélnek látható tartalmat az ügytörténet megosztási szabálya határozza meg. A belső események nem jelennek meg automatikusan.</p>
         <ul className="mt-3 grid gap-2 md:grid-cols-3">{LEVELS.map((level) => <li key={level.name} className="rounded border border-[var(--adm-border)] bg-white p-3"><strong className="text-sm text-[var(--adm-text)]">{level.name}</strong><p className="mt-1 text-xs text-[var(--adm-text-muted)]">{level.detail}</p></li>)}</ul>
         {!readOnly && clientId ? <p className="mt-3 text-xs text-[var(--adm-text-muted)]">A szint, az egyedi elrejtés és az ügyféloldali felelős mentése a tartós jogosultsági szabály bevezetése után lesz elérhető.</p> : null}
-      </div>
+      </details>
     </section>
   );
 }

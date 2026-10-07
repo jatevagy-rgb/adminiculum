@@ -49,7 +49,8 @@ test("navigation states are derived from canonical DTO data only", () => {
   assert.match(src, /hint: selectedId \?/);
   assert.match(src, /hint: activeInitiativeCount > 0/);
   assert.match(src, /hint: outcomes\.length > 0/);
-  assert.match(src, /\{item\.hint\}/);
+  assert.match(src, /: item\.hint\}/);
+  assert.match(src, /readErrors\.opportunities/);
 });
 
 test("navigation distinguishes destinations from the gated detail context", () => {

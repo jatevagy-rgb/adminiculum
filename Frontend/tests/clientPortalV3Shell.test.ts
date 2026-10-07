@@ -126,10 +126,14 @@ describe("Checkpoint A — mobile navigation", () => {
     assert.match(src, /aria-haspopup="dialog"/);
     assert.match(src, /aria-expanded=\{moreOpen\}/);
     assert.match(src, /import \{ Modal \} from "@\/components\/ui"/);
-    // The canonical Modal provides focus trap, Escape handling and focus restore.
+    // The canonical Modal provides focus trap, Escape handling and focus restore
+    // through the shared dialog accessibility hook.
     const modal = read("src/components/ui/Modal.tsx");
-    assert.match(modal, /event\.key === "Escape"/);
-    assert.match(modal, /previousFocusRef/);
+    const dialogA11y = read("src/components/ui/useDialogAccessibility.ts");
+    assert.match(modal, /<ViewportDialog/);
+    assert.match(read("src/components/ui/ViewportDialog.tsx"), /useDialogAccessibility/);
+    assert.match(dialogA11y, /event\.key === "Escape"/);
+    assert.match(dialogA11y, /previousFocusRef/);
   });
 });
 

@@ -8,7 +8,7 @@ import { readVersionContentText, versionStorageReference } from '../documents/ve
 import driveService from '../sharepoint/driveService';
 import { getScanner } from '../upload-security/scannerAdapter';
 import { anonymizeDocument } from './services';
-const RULES = 'wf10-existing-redactor-1';
+const RULES = 'wf10-existing-redactor-2';
 const digest = (data: string | Buffer) => createHash('sha256').update(data).digest('hex');
 async function source(tx: Prisma.TransactionClient, req: Request, documentId: string, versionId: string, manage: boolean) {
     const v = await tx.documentVersion.findUnique({ where: { id: versionId }, include: { document: true } });
@@ -49,7 +49,8 @@ export async function createVerifiedArtifact(req: Request, documentId: string, v
         const current = await source(tx, req, documentId, versionId, true);
         if (current.scope.clientId !== initial.scope.clientId || current.scope.id !== initial.scope.id || current.profileDigest !== initial.profileDigest || versionStorageReference(current.v) !== versionStorageReference(initial.v))
             throw new WorkspaceError(409, 'SOURCE_CHANGED_DURING_PROCESSING');
-        const result = await anonymizeDocument({ documentId, userId: req.user!.userId, sourceText: extracted.text!, redactionLevel: 'FULL', counterparties: (input.extraPhrases || []).map((name: string) => ({ name })) }, tx);
+        const result = await anonymizeDocument({ documentId, userId: req.user!.userId, redactionLevel: 'FULL', counterparties: (input.extraPhrases || []).map((name: string) => ({ name, side: 'ADDITIONAL_PARTY' as const })) }, tx,
+            { documentId, versionId, storageReference: versionStorageReference(current.v)!, text: extracted.text! });
         if (!result.success || !result.anonymizedDocumentId || !result.redactedText)
             throw new WorkspaceError(409, 'ANONYMIZATION_FAILED');
         await tx.anonymizedSourceBinding.create({ data: { artifactId: result.anonymizedDocumentId, sourceDocumentId: documentId, sourceDocumentVersionId: versionId, caseId: current.scope.id, clientId: current.scope.clientId, sourceDigest: content.sourceDigest, profileDigest: current.profileDigest, artifactDigest: digest(result.redactedText), rulesRevision: RULES, scanProvider: content.scanProvider, createdById: req.user!.userId } });

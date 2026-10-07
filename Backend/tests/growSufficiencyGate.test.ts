@@ -42,6 +42,15 @@ describe('decideSufficiency', () => {
     expect(decideSufficiency({ ...base }).decision).toBe('INSUFFICIENT_EVIDENCE');
   });
 
+  it.each(['ESTIMATED', 'DERIVED'] as const)('keeps %s internal evidence eligible without calling it measured', sourceBasis => {
+    expect(decideSufficiency({ ...base, sourceBasis }).decision).toBe('NEEDS_MORE_DATA');
+    const supported = decideSufficiency({ ...base, sourceBasis, verifiedEvidenceCount: 1 });
+    expect(supported.decision).toBe('SUPPORTED');
+    expect(supported.reasons.join(' ')).not.toContain('ügyfél-mérési pillanatkép');
+    expect(decideSufficiency({ ...base, sourceBasis, verifiedEvidenceCount: 1, disputedEvidenceCount: 1 }).decision).toBe('CONFLICTING_EVIDENCE');
+    expect(decideSufficiency({ ...base, sourceBasis, disputedEvidenceCount: 1 }).decision).toBe('HUMAN_DOMAIN_REVIEW');
+  });
+
   it('returns SUPPORTED only with verified evidence plus an internal signal', () => {
     expect(decideSufficiency({ ...base, verifiedEvidenceCount: 1, measured: true }).decision).toBe('SUPPORTED');
     expect(decideSufficiency({ ...base, verifiedEvidenceCount: 1, declared: true }).decision).toBe('SUPPORTED');

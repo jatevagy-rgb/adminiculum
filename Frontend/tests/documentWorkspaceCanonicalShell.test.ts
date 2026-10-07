@@ -14,8 +14,8 @@ const documentPage = () => read("src/app/cases/[caseId]/documents/page.tsx");
 
 test("Canonical document route uses the normal application shell", () => {
   const source = documentPage();
-  assert.match(source, /<AuthenticatedApp section="case-detail">/);
-  assert.doesNotMatch(source, /<AuthenticatedApp section="case-detail" workspaceChrome="focused">/);
+  assert.match(source, /<AuthenticatedApp section="case-detail" workspaceChrome="focused">/);
+  assert.doesNotMatch(source, /<AuthenticatedApp[^>]*fullViewport/);
 });
 
 test("Canonical four-region workspace layout renders in page.tsx", () => {
@@ -114,13 +114,14 @@ test("Contextual work-panel shell exposes truthful four-group structure and neut
   // In-shell working panels (Slice 2)
   assert.match(shell, /LegalAnalysisIntakePanel/);
   assert.match(shell, /ClientPublicationPanel/);
-  assert.match(shell, /HandoffPackagePanel/);
+  assert.match(shell, /href="#document-task-submission"/);
+  assert.doesNotMatch(source, /HandoffPackagePanel|createCaseHandoffPackage/);
 
   // Truthfulness positive assertions
   assert.match(source, /Publikálva/);
   assert.match(source, /Nincs publikálva/);
   assert.match(shell, /publicationStatusLabel/);
-  assert.match(shell, /Leadási csomag/);
+  assert.match(shell, /Feladathoz kapcsolódó Leadás/);
 
   // Truthfulness negative assertions (defects must not be present)
   assert.doesNotMatch(shell, /Elemzés elérhető/, "Must not fabricate legal analysis availability");
@@ -153,10 +154,11 @@ test("Preserved extended tools section keeps all existing workspaces and actions
   assert.match(source, /LegalAnalysisIntakePanel/);
   assert.match(source, /ClientPublicationPanel/);
   assert.match(source, /ClientHouseStylePanel/);
-  assert.match(source, /HandoffPackagePanel/);
+  assert.match(source, /<WordDocumentWorkspaceHeader/);
+  assert.match(source, /Korábbi leadások/);
   assert.match(source, /AnonymizeModal/);
   assert.match(source, /RehydrateModal/);
-  assert.match(source, /id="ledger-delete-document-title"/);
+  assert.match(source, /<ViewportDialog title="Dokumentum törlése"/);
 });
 
 test("Document workspace presents backend enums with human-readable labels", () => {
@@ -246,7 +248,8 @@ test("Contextual right shell hosts actual working panels without downward scroll
   // Working panels are mounted in the right shell
   assert.match(shell, /<LegalAnalysisIntakePanel/);
   assert.match(shell, /<ClientPublicationPanel/);
-  assert.match(shell, /<HandoffPackagePanel/);
+  assert.match(shell, /href="#document-task-submission"/);
+  assert.doesNotMatch(shell, /<HandoffPackagePanel/);
 });
 
 test("Canonical handoff summary does not claim ZIP export or fabricate package state", () => {
@@ -257,7 +260,8 @@ test("Canonical handoff summary does not claim ZIP export or fabricate package s
 
   assert.doesNotMatch(source, /ZIP export és átadási jegyzék/);
   assert.doesNotMatch(shell, /ZIP export és átadási jegyzék/);
-  assert.match(shell, /HandoffPackagePanel/);
+  assert.match(shell, /#ck-tasks/);
+  assert.doesNotMatch(shell, /HandoffPackagePanel/);
 });
 
 // Targeted regression tests for transient-state truthfulness repairs (PR #182 Final Pass)

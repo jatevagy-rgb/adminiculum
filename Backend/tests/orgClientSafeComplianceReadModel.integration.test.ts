@@ -115,7 +115,8 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
       await db.assessmentFinding.deleteMany({ where: { clientId: { in: testClients } } });
       await db.requirementApplicability.deleteMany({ where: { clientId: { in: testClients } } });
       await db.clientControl.deleteMany({ where: { clientId: { in: testClients } } });
-      await db.client.deleteMany({ where: { id: { in: testClients } } });
+      await db.clientFact.deleteMany({ where: { clientId: { in: testClients } } });
+    await db.client.deleteMany({ where: { id: { in: testClients } } });
     }
     await db.requirementControlMap.deleteMany({ where: { controlDefinitionId: { in: [portalControlDefinitionId, unknownControlDefinitionId] } } });
     if (createdRuleIds.length > 0) {
@@ -168,7 +169,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     return { applicabilityId, findingId };
   }
 
-  async function createMissingProjection(clientId: string, title: string, definitionId: string, factKey: string) {
+  async function createMissingProjection(clientId: string, title: string, definitionId: string, factKey: string, missingFactKeys: string[] = [factKey]) {
     const versionId = crypto.randomUUID();
     createdVersionIds.push(versionId);
     await db.requirementVersion.create({
@@ -178,7 +179,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
         versionKey: `V_${versionId.slice(0, 8)}`,
         title,
         normativeStatement: 'Test',
-        effectiveFrom: new Date(Date.now() + createdVersionIds.length * 1000),
+        effectiveFrom: new Date(Date.now() - 1000),
         sourceSupportState: 'SUFFICIENT',
         specialistRequirement: 'NONE',
         status: 'APPROVED',
@@ -214,7 +215,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
         sourceSupportState: 'SUFFICIENT',
         specialistRequirement: 'NONE',
         schemaVersion: 'phase6-requirement-applicability/v1',
-        snapshotJson: { missingFactKeys: [factKey] },
+        snapshotJson: { missingFactKeys },
         snapshotDigest: hex64(`projection-snap-${applicabilityId}`),
       },
     });
@@ -411,7 +412,9 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     const topic = result.topics.find((t) => t.topicLabel === 'Adatvédelmi feldolgozás');
     expect(topic).toBeDefined();
     expect(topic!.state).toBe('MORE_INFORMATION_NEEDED');
-    expect(topic!.nextAction).toContain('hiányzó információkat');
+    expect(topic!.evaluationFreshness).toBe('UNAVAILABLE');
+    expect(topic!.missingInformation).toEqual([]);
+    expect(topic!.nextAction).toContain('belső frissítésre vár');
   });
 
   it('maps LEGAL_REVIEW_REQUIRED to LAWYER_REVIEW_REQUIRED', async () => {
@@ -421,7 +424,8 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     const topic = result.topics.find((t) => t.topicLabel === 'Adatvédelmi feldolgozás');
     expect(topic).toBeDefined();
     expect(topic!.state).toBe('LAWYER_REVIEW_REQUIRED');
-    expect(topic!.nextAction).toContain('Ügyvédi áttekintés javasolt');
+    expect(topic!.evaluationFreshness).toBe('UNAVAILABLE');
+    expect(topic!.nextAction).toContain('belső frissítésre vár');
   });
 
   it('DEMO flag matrix: production + flag true → hidden', async () => {
@@ -455,7 +459,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     expect(serialized).not.toContain(sharedReqId);
 
     for (const topic of result.topics) {
-      expect(Object.keys(topic).sort()).toEqual(['documents', 'missingInformation', 'nextAction', 'shortExplanation', 'state', 'topicId', 'topicLabel']);
+      expect(Object.keys(topic).sort()).toEqual(['documents', 'evaluatedAt', 'evaluationFreshness', 'missingInformation', 'nextAction', 'shortExplanation', 'state', 'topicId', 'topicLabel']);
       expect(topic.topicId).toMatch(/^portal\//);
       for (const document of topic.documents) {
         // Only client-safe published-document fields may be projected.
@@ -509,4 +513,20 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
       expect(result.topics.find((t) => t.topicLabel === label)).toBeDefined();
     }
   });
+  it('does not infer missing data from unconsumed dependencies and suppresses stale questions', async () => {
+    const clientId=await createTestClient('snapshot-authority');
+    const definition=await db.factDefinition.findUniqueOrThrow({where:{key:'employee_count'}});
+    await createMissingProjection(clientId,'Recorded missing employee count',definition.id,'employee_count');
+    let result=await getClientSafeComplianceReadModel(clientId,true,false,db);
+    expect(result.topics[0].missingInformation).toHaveLength(1);
+    const noMissingClient=await createTestClient('unconsumed-not-missing');
+    await createMissingProjection(noMissingClient,'Unconsumed dependency',definition.id,'employee_count',[]);
+    expect((await getClientSafeComplianceReadModel(noMissingClient,true,false,db)).topics[0].missingInformation).toEqual([]);
+    await db.clientFact.create({data:{clientId,type:'typed',value:'8',scopeType:'COMPANY',validFrom:new Date(),factDefinitionId:definition.id,numberValue:8}});
+    result=await getClientSafeComplianceReadModel(clientId,true,false,db);
+    expect(result.topics[0].evaluationFreshness).toBe('STALE');
+    expect(result.topics[0].missingInformation).toEqual([]);
+    expect(result.topics[0].nextAction).toContain('nem kell újra beküldeni');
+  });
+
 });

@@ -1271,6 +1271,7 @@ export interface WorkflowDeadlineItem {
   startsAt?: string | null;
   dueAt: string;
   allDay: boolean;
+  temporalType?: 'DATE_ONLY' | 'TIMESTAMP';
   status: WorkflowDeadlineStatus;
   urgency: WorkflowDeadlineUrgency;
   importance: 'CRITICAL' | 'HIGH' | 'NORMAL' | 'LOW' | 'UNSPECIFIED';
@@ -1330,6 +1331,7 @@ export async function getWorkflowAgenda(params?: {
   caseId?: string;
   limit?: number;
   offset?: number;
+  queue?: 'CALENDAR' | 'OVERDUE';
 }): Promise<WorkflowAgendaResponse> {
   const query = new URLSearchParams();
   if (params?.from) query.set('from', params.from);
@@ -1339,6 +1341,7 @@ export async function getWorkflowAgenda(params?: {
   if (params?.caseId) query.set('caseId', params.caseId);
   if (params?.limit) query.set('limit', String(params.limit));
   if (params?.offset) query.set('offset', String(params.offset));
+  if (params?.queue) query.set('queue', params.queue);
   const suffix = query.toString() ? `?${query.toString()}` : '';
   return fetchApi<WorkflowAgendaResponse>(`/agenda${suffix}`);
 }
@@ -1459,6 +1462,7 @@ export interface CreateCaseData {
   caseTypeDefinitionId?: string;
   selectedModuleKeys?: string[];
   sourceCommunicationId?: string;
+  clientOwnerPersonId?: string | null;
 }
 
 export interface CreateCaseResponse {
@@ -1481,7 +1485,7 @@ export interface CreateCaseResponse {
 }
 
 export async function createCase(data: CreateCaseData): Promise<CreateCaseResponse> {
-  const { clientName, clientId, matterType, title, description, clientRole, deadline, assignedLawyerId, responsibleLawyerId, workflowTemplateKey, workflowAssignees, caseTypeDefinitionId, selectedModuleKeys, sourceCommunicationId } = data;
+  const { clientName, clientId, matterType, title, description, clientRole, deadline, assignedLawyerId, responsibleLawyerId, workflowTemplateKey, workflowAssignees, caseTypeDefinitionId, selectedModuleKeys, sourceCommunicationId, clientOwnerPersonId } = data;
   const payload: Record<string, unknown> = { clientName, matterType };
   if (clientId) payload.clientId = clientId;
   if (title) payload.title = title;
@@ -1495,6 +1499,7 @@ export async function createCase(data: CreateCaseData): Promise<CreateCaseRespon
   if (caseTypeDefinitionId) payload.caseTypeDefinitionId = caseTypeDefinitionId;
   if (selectedModuleKeys !== undefined) payload.selectedModuleKeys = selectedModuleKeys;
   if (sourceCommunicationId) payload.sourceCommunicationId = sourceCommunicationId;
+  if (clientOwnerPersonId) payload.clientOwnerPersonId = clientOwnerPersonId;
   return fetchApi<CreateCaseResponse>('/cases', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -2635,36 +2640,39 @@ interface CounterpartyInput {
   partyType?: 'PERSON' | 'COMPANY' | 'UNKNOWN';
 }
 
+export interface KnownPartyInput {
+  kind?: 'PERSON' | 'COMPANY';
+  legalRole?: string;
+  name?: string;
+  role?: string;
+  notes?: string;
+  birthName?: string;
+  birthPlace?: string;
+  birthDate?: string;
+  mothersName?: string;
+  address?: string;
+  taxId?: string;
+  personalId?: string;
+  personalIdentifierNumber?: string;
+  identityCardNumber?: string;
+  companyName?: string;
+  seat?: string;
+  companyTaxNumber?: string;
+  euVatNumber?: string;
+  companyRegistrationNumber?: string;
+  representativeName?: string;
+  representativeTitle?: string;
+  contactEmail?: string;
+  phone?: string;
+}
+
 export interface AnonymizationMetadataInput {
   clientName?: string;
   clientRole?: string;
   counterparty?: string;
   notes?: string;
-  knownParty?: {
-    kind?: 'PERSON' | 'COMPANY';
-    legalRole?: string;
-    name?: string;
-    role?: string;
-    notes?: string;
-    birthName?: string;
-    birthPlace?: string;
-    birthDate?: string;
-    mothersName?: string;
-    address?: string;
-    taxId?: string;
-    personalId?: string;
-    personalIdentifierNumber?: string;
-    identityCardNumber?: string;
-    companyName?: string;
-    seat?: string;
-    companyTaxNumber?: string;
-    euVatNumber?: string;
-    companyRegistrationNumber?: string;
-    representativeName?: string;
-    representativeTitle?: string;
-    contactEmail?: string;
-    phone?: string;
-  };
+  knownParty?: KnownPartyInput;
+  knownParties?: KnownPartyInput[];
 }
 
 export interface AnonymizationSourceTextResponse {
@@ -2672,6 +2680,7 @@ export interface AnonymizationSourceTextResponse {
   textAvailable: boolean;
   sourceText?: string;
   limitationMessage?: string;
+  code?: string;
   error?: string;
 }
 
@@ -2681,8 +2690,6 @@ export async function anonymizeDocument(documentId: string, data?: {
   redactionLevel?: string;
   /** Structured extra-party context — manually supplied counterparty names */
   counterparties?: CounterpartyInput[];
-  /** Optional visible/edited source text from UI workspace */
-  sourceText?: string;
   /** Minimal metadata context from anonymization workspace */
   metadata?: AnonymizationMetadataInput;
 }): Promise<Record<string, unknown>> {
@@ -2712,7 +2719,7 @@ export async function getAnonymizationSourceText(documentId: string): Promise<An
     const bodyText = await response.text();
     const parsed = bodyText ? (() => {
       try {
-        return JSON.parse(bodyText) as Partial<AnonymizationSourceTextResponse> & { message?: string; error?: string };
+        return JSON.parse(bodyText) as Partial<AnonymizationSourceTextResponse> & { message?: string; error?: string; code?: string };
       } catch {
         return null;
       }
@@ -2722,8 +2729,9 @@ export async function getAnonymizationSourceText(documentId: string): Promise<An
       return {
         success: false,
         textAvailable: false,
+        code: response.status === 401 || response.status === 403 ? 'AUTHORIZATION_DENIED' : parsed?.code || 'PROCESSING_FAILURE',
         limitationMessage: parsed?.limitationMessage,
-        error: parsed?.error || parsed?.message || `HTTP ${response.status}`,
+        error: 'A forrásszöveg lekérése nem sikerült.',
       };
     }
 
@@ -2732,12 +2740,14 @@ export async function getAnonymizationSourceText(documentId: string): Promise<An
       textAvailable: Boolean(parsed?.textAvailable),
       sourceText: typeof parsed?.sourceText === 'string' ? parsed.sourceText : undefined,
       limitationMessage: typeof parsed?.limitationMessage === 'string' ? parsed.limitationMessage : undefined,
+      code: typeof parsed?.code === 'string' ? parsed.code : undefined,
       error: typeof parsed?.error === 'string' ? parsed.error : undefined,
     };
   } catch {
     return {
       success: false,
       textAvailable: false,
+      code: 'PROCESSING_FAILURE',
       error: 'Network error while loading anonymization source text',
     };
   }
@@ -5779,10 +5789,11 @@ export interface ReviewLawyerHandoffPackagePayload {
 }
 
 export async function listCaseHandoffPackages(
-  caseId: string
+  caseId: string,
+  options?: { includeArchived?: boolean }
 ): Promise<LawyerHandoffPackageRecord[]> {
   return fetchApi<LawyerHandoffPackageRecord[]>(
-    `/cases/${encodeURIComponent(caseId)}/handoff-packages`
+    `/cases/${encodeURIComponent(caseId)}/handoff-packages${options?.includeArchived ? '?includeArchived=true' : ''}`
   );
 }
 
@@ -6135,6 +6146,10 @@ export async function createCaseIntake(payload: CaseIntakePayload): Promise<Case
 
 /** Server error codes mapped to the message the lawyer should actually read. */
 export const CASE_INTAKE_ERROR_MESSAGES: Record<string, string> = {
+  OWNER_CAPABILITY_UNAVAILABLE: 'Az ügygazda funkció jelenleg nem érhető el. Az ügy nem jött létre.',
+  OWNER_NOT_IN_CLIENT: 'A kiválasztott ügygazda másik ügyfélhez tartozik.',
+  OWNER_NOT_ELIGIBLE: 'A kiválasztott ügygazda már nem választható.',
+  OWNER_PERSON_NOT_FOUND: 'A kiválasztott ügygazda nem található.',
   FIELD_REQUIRED: 'Hiányzik egy kötelező mező.',
   FIELD_TOO_LONG: 'Az egyik megadott érték túl hosszú.',
   CLIENT_NOT_FOUND: 'A kiválasztott ügyfél nem található.',
@@ -6152,6 +6167,7 @@ export const CASE_INTAKE_ERROR_MESSAGES: Record<string, string> = {
   TOO_MANY_ITEMS: 'Túl sok elemet adtál hozzá.',
 };
 export function caseIntakeErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.code && CASE_INTAKE_ERROR_MESSAGES[error.code]) return CASE_INTAKE_ERROR_MESSAGES[error.code];
   const raw = error instanceof Error ? error.message : String(error || '');
   for (const [code, message] of Object.entries(CASE_INTAKE_ERROR_MESSAGES)) {
     if (raw.includes(code)) return message;
@@ -6207,7 +6223,7 @@ export type CaseCreationOption = {
     items: Array<{ id: string; moduleType: string; moduleLabel?: string; moduleKey: string; label: string; description: string | null; order: number; isOptional: boolean; config: Record<string, unknown> }>;
   } | null;
 };
-export async function getCaseCreationOptions() { return fetchApi<{ items: CaseCreationOption[] }>('/work-package-admin/case-types/creation-options'); }
+export async function getCaseCreationOptions() { return fetchApi<{ items: CaseCreationOption[]; capabilities?: { clientOwner: boolean } }>('/work-package-admin/case-types/creation-options'); }
 export async function createUsableCaseType(name: string) { return fetchApi<CaseCreationOption>('/work-package-admin/case-types/usable', { method: 'POST', body: JSON.stringify({ name }) }); }
 
 export interface CaseWorkPackageOperationalItem {

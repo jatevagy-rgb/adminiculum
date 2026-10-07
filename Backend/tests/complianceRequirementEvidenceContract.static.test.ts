@@ -45,6 +45,10 @@ describe('compliance requirement -> evidence product contract (static)', () => {
   it('keeps the requirement normative wording on the workforce projection only', () => {
     expect(workspaceService).toContain('normativeStatement: true');
     // The client-safe read model must not publish internal requirement wording.
-    expect(portalReadModel).not.toMatch(/normativeStatement|reasonCodes|snapshotJson/);
+    expect(portalReadModel).not.toMatch(/normativeStatement|reasonCodes/);
+    // Snapshot data may be read internally to prevent contradictory missing-data claims.
+    const projection = portalReadModel.slice(portalReadModel.indexOf('topics.push({'));
+    expect(projection).not.toMatch(/^\s*snapshotJson\s*[:,]/m);
+    expect(projection).not.toMatch(/\.\.\.(applicability|finding|row)\b/);
   });
 });

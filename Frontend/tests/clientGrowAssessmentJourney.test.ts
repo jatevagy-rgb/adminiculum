@@ -256,7 +256,7 @@ test('truthful semantic doctrine: declared observations, observations vs facts, 
 
   // 4. MEASURED_PRESENTED_AS_VERIFIED=NO
   // Proves measured is not presented as verified / igazolt
-  assert.match(src, /Mért eredményként csak MEASURED alapú eredmény jelenik meg/);
+  assert.match(src, /Mért eredményként csak mért alapú eredmény jelenik meg/);
   assert.doesNotMatch(src, /igazolt, mérhető megfigyelések/);
   assert.doesNotMatch(src, /igazolt hatás|igazolt eredmény/);
   assert.doesNotMatch(journeySrc, /igazolt hatás|igazolt eredmény/);
