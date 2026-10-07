@@ -2678,7 +2678,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               <div data-testid="version-preview-unavailable" className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
                                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Előnézet</p>
                                 <h5 className="mt-2 font-sans text-2xl font-semibold text-[var(--adm-text)]">Az előnézet jelenleg nem érhető el</h5>
-                                <p className="mt-2 max-w-lg text-sm text-[#3D4842]">{versionTextUnavailableReason || 'Ehhez a verzióhoz nem sikerült betölteni a tárolt tartalmat. A dokumentum és a verziók továbbra is elérhetők; próbáld letölteni a verziót.'}</p>
+                                <p className="mt-2 max-w-lg text-sm text-[#3D4842]">{versionTextUnavailableReason || 'A kiválasztott verzió előnézete nem tölthető be. A letöltés elérhetősége külön ellenőrizhető.'}</p>
                               </div>
                             ) : (
                               <div className="max-h-[74vh] overflow-auto bg-[#efece4] p-4 sm:p-6">
@@ -2709,7 +2709,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               <div data-testid="version-preview-unavailable" className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
                                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{canonicalShellFileType} előnézet</p>
                                 <h5 className="mt-2 font-sans text-2xl font-semibold text-[var(--adm-text)]">A kinyert szöveg betöltése nem sikerült</h5>
-                                <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A szöveges előnézet jelenleg nem tölthető be. A dokumentum és a verzió letöltése továbbra is elérhető.</p>
+                                <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A szöveges előnézet jelenleg nem tölthető be. A letöltés elérhetősége külön ellenőrizhető.</p>
                               </div>
                             ) : (
                               <div data-testid="version-preview-unavailable" className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
@@ -3394,7 +3394,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                         <div data-testid="version-preview-unavailable" className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
                                           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Előnézet</p>
                                           <h5 className="mt-2 font-sans text-2xl font-semibold text-[var(--adm-text)]">Az előnézet jelenleg nem érhető el</h5>
-                                          <p className="mt-2 max-w-lg text-sm text-[#3D4842]">{versionTextUnavailableReason || 'Ehhez a verzióhoz nem sikerült betölteni a tárolt tartalmat. A dokumentum és a verziók továbbra is elérhetők; próbáld letölteni a verziót.'}</p>
+                                          <p className="mt-2 max-w-lg text-sm text-[#3D4842]">{versionTextUnavailableReason || 'A kiválasztott verzió előnézete nem tölthető be. A letöltés elérhetősége külön ellenőrizhető.'}</p>
                                         </div>
                                       ) : (
                                         <div className="max-h-[620px] overflow-auto whitespace-pre-wrap p-5 font-mono text-[12px] leading-6 text-[#1f2a24]">
@@ -3416,7 +3416,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                         <div data-testid="version-preview-unavailable" className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
                                           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{selectedVersionFileType} előnézet</p>
                                           <h5 className="mt-2 font-sans text-2xl font-semibold text-[var(--adm-text)]">A kinyert szöveg betöltése nem sikerült</h5>
-                                          <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A szöveges előnézet jelenleg nem tölthető be. A dokumentum és a verzió letöltése továbbra is elérhető.</p>
+                                          <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A szöveges előnézet jelenleg nem tölthető be. A letöltés elérhetősége külön ellenőrizhető.</p>
                                         </div>
                                       ) : (
                                         <div data-testid="version-preview-unavailable" className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
