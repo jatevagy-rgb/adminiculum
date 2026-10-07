@@ -666,6 +666,7 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
     const otherCaseDocumentId = uuidv4();
     const instructionOnlyId = uuidv4();
     const versionId = uuidv4();
+    const resubmittedVersionId = uuidv4();
     const draftVersionId = uuidv4();
     const reviewId = uuidv4();
     const draftReviewId = uuidv4();
@@ -689,6 +690,10 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
         { id: reviewId, documentId, documentVersionId: versionId, status: 'IN_REVIEW', assignedReviewerId: ids.admin, ownerId: ids.lawyerA, dueAt, createdById: ids.lawyerA },
         { id: draftReviewId, documentId: instructionOnlyId, documentVersionId: draftVersionId, status: 'DRAFT', dueAt, createdById: ids.lawyerA },
       ] });
+      const firstRound = await db.documentReviewRound.create({ data: {
+        reviewId, roundNumber: 1, reviewVersionId: versionId, status: 'IN_REVIEW', createdById: ids.lawyerA,
+      } });
+      await db.documentReview.update({ where: { id: reviewId }, data: { currentRoundId: firstRound.id } });
 
       const caseAgenda = await getWorkflowAgenda({
         userId: ids.lawyerA, userRole: 'LAWYER', scope: 'CASE', caseId: ids.caseA,
@@ -717,8 +722,26 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
       });
       expect(review.href).toBe(`/cases/${ids.caseA}/documents?documentId=${documentId}&versionId=${versionId}&mode=review`);
 
+      await db.documentVersion.update({ where: { id: versionId }, data: { isCurrent: false } });
+      await db.documentVersion.create({ data: {
+        id: resubmittedVersionId, documentId, version: 2, name: 'Agreement version 2', isCurrent: true,
+        previousVersionId: versionId, uploadedById: ids.lawyerA,
+      } });
+      const resubmittedRound = await db.documentReviewRound.create({ data: {
+        reviewId, roundNumber: 2, reviewVersionId: resubmittedVersionId, status: 'RESUBMITTED', createdById: ids.lawyerA,
+      } });
+      await db.documentReview.update({ where: { id: reviewId }, data: {
+        status: 'RESUBMITTED', currentRoundId: resubmittedRound.id, currentRoundNumber: 2,
+        ownerId: null,
+      } });
+      const resumedAgenda = await getWorkflowAgenda({ userId: ids.lawyerA, userRole: 'LAWYER', scope: 'CASE', caseId: ids.caseA,
+        queue: 'OVERDUE', status: 'OPEN', now, db });
+      const resumed = resumedAgenda.days.flatMap((day) => day.items).find((item) => item.id === `DOCUMENT_REVIEW:${reviewId}`);
+      expect(resumed?.href).toBe(`/cases/${ids.caseA}/documents?documentId=${documentId}&versionId=${resubmittedVersionId}&mode=review`);
+
       const myWork = await getWorkflowAgenda({ userId: ids.lawyerA, userRole: 'LAWYER', scope: 'MY_WORK', queue: 'OVERDUE', status: 'OPEN', now, db });
       expect(myWork.days.flatMap((day) => day.items).map((item) => item.id)).toContain(`DOCUMENT_WORK:${documentId}`);
+      expect(myWork.days.flatMap((day) => day.items).map((item) => item.id)).toContain(`DOCUMENT_REVIEW:${reviewId}`);
       const privileged = await getWorkflowAgenda({ userId: ids.admin, userRole: 'ADMIN', scope: 'CASE', caseId: ids.caseA, queue: 'OVERDUE', status: 'OPEN', now, db });
       expect(privileged.days.flatMap((day) => day.items).map((item) => item.id)).toContain(`DOCUMENT_WORK:${hrDocumentId}`);
 
@@ -734,6 +757,7 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
         `DOCUMENT_WORK:${documentId}`, `DOCUMENT_REVIEW:${reviewId}`,
       ]));
     } finally {
+      await db.documentReview.updateMany({ where: { documentId: { in: documentIds } }, data: { currentRoundId: null } });
       await db.documentReview.deleteMany({ where: { documentId: { in: documentIds } } });
       await db.documentVersion.deleteMany({ where: { documentId: { in: documentIds } } });
       await db.document.deleteMany({ where: { id: { in: documentIds } } });

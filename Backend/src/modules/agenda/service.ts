@@ -245,7 +245,11 @@ export async function getWorkflowAgenda(params: {
       { case: { assignedLawyerId: params.userId } },
     ];
     documentWhere.AND.push({ OR: [{ responsibleId: params.userId }, { reviewerId: params.userId }] });
-    reviewWhere.AND.push({ OR: [{ assignedReviewerId: params.userId }, { ownerId: params.userId }] });
+    reviewWhere.AND.push({ OR: [
+      { assignedReviewerId: params.userId },
+      { ownerId: params.userId },
+      { ownerId: null, createdById: params.userId },
+    ] });
   } else if (scope === 'CASE') {
     taskWhere.caseId = params.caseId;
     caseWhere.id = params.caseId;
@@ -349,6 +353,7 @@ export async function getWorkflowAgenda(params: {
         assignedReviewer: { select: { id: true, name: true, email: true } },
         owner: { select: { id: true, name: true, email: true } },
         documentVersion: { select: { documentId: true } },
+        currentRound: { select: { reviewId: true, reviewVersionId: true, reviewVersion: { select: { documentId: true } } } },
         document: { select: { caseId: true, title: true, name: true, case: { select: { status: true, completedAt: true, caseNumber: true, priority: true, assignedLawyerId: true, assignedLawyer: { select: { id: true, name: true, email: true } } } } } },
       },
       orderBy: [{ dueAt: 'asc' }, { id: 'asc' }],
@@ -436,14 +441,16 @@ export async function getWorkflowAgenda(params: {
 
   const reviewItems: WorkflowDeadlineDto[] = reviewRows
     .map((review) => {
-      if (review.documentVersion.documentId !== review.documentId) return null;
+      if (review.currentRound && review.currentRound.reviewId !== review.id) return null;
+      const reviewVersionId = review.currentRound?.reviewVersionId ?? review.documentVersionId;
+      if ((review.currentRound?.reviewVersion.documentId ?? review.documentVersion.documentId) !== review.documentId) return null;
       const dueAt = toSafeIsoDate(review.dueAt);
       if (!dueAt) return null;
       const caseStatus = deriveCaseDeadlineStatus(review.document.case.status, review.document.case.completedAt);
       const deadlineStatus = caseStatus !== 'OPEN' ? caseStatus
         : review.status === 'CANCELLED' ? 'CANCELLED'
           : ['CHANGES_REQUESTED', 'APPROVED', 'READY_FOR_CLIENT', 'PUBLISHED', 'CLOSED'].includes(review.status) ? 'COMPLETED' : 'OPEN';
-      const href = `/cases/${encodeURIComponent(review.document.caseId)}/documents?documentId=${encodeURIComponent(review.documentId)}&versionId=${encodeURIComponent(review.documentVersionId)}&mode=review`;
+      const href = `/cases/${encodeURIComponent(review.document.caseId)}/documents?documentId=${encodeURIComponent(review.documentId)}&versionId=${encodeURIComponent(reviewVersionId)}&mode=review`;
       return {
         id: `DOCUMENT_REVIEW:${review.id}`,
         sourceType: 'DOCUMENT_REVIEW' as const,

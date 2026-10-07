@@ -216,11 +216,13 @@ describe('workflow deadlines agenda and notifications', () => {
       id: 'review-1', documentId: 'doc-1', documentVersionId: 'v2', dueAt, updatedAt: dueAt,
       status: 'IN_REVIEW', assignedReviewerId: 'user-1', ownerId: null,
       assignedReviewer: assignedLawyer, owner: null, documentVersion: { documentId: 'doc-1' },
+      currentRound: { reviewId: 'review-1', reviewVersionId: 'v3', reviewVersion: { documentId: 'doc-1' } },
       document: { caseId: 'case-1', title: 'Munkapéldány', name: 'Dokumentum', case: caseRecord },
     }, {
       id: 'invalid-review', documentId: 'doc-1', documentVersionId: 'foreign-v1', dueAt, updatedAt: dueAt,
       status: 'IN_REVIEW', assignedReviewerId: 'user-1', ownerId: null,
-      assignedReviewer: assignedLawyer, owner: null, documentVersion: { documentId: 'other-doc' },
+      assignedReviewer: assignedLawyer, owner: null, documentVersion: { documentId: 'doc-1' },
+      currentRound: { reviewId: 'review-other', reviewVersionId: 'foreign-v2', reviewVersion: { documentId: 'other-doc' } },
       document: { caseId: 'case-1', title: 'Munkapéldány', name: 'Dokumentum', case: caseRecord },
     }]);
     const response = await requestJson(createApp(), 'GET', '/agenda?scope=CASE&caseId=case-1&status=OPEN&from=2026-07-14&to=2026-07-14');
@@ -231,7 +233,7 @@ describe('workflow deadlines agenda and notifications', () => {
     expect(work).toMatchObject({ sourceType: 'DOCUMENT_WORK', temporalType: 'TIMESTAMP', allDay: false,
       responsibility: { assignee: { id: 'user-1' } }, href: '/cases/case-1/documents?documentId=doc-1',
       capabilities: { canComplete: false, canCreateTask: false } });
-    expect(review).toMatchObject({ sourceType: 'DOCUMENT_REVIEW', href: '/cases/case-1/documents?documentId=doc-1&versionId=v2&mode=review' });
+    expect(review).toMatchObject({ sourceType: 'DOCUMENT_REVIEW', href: '/cases/case-1/documents?documentId=doc-1&versionId=v3&mode=review' });
     expect(items.map((item: any) => item.id)).not.toContain('DOCUMENT_REVIEW:invalid-review');
     expect(mockPrismaService.document.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
@@ -245,6 +247,14 @@ describe('workflow deadlines agenda and notifications', () => {
         AND: expect.arrayContaining([{ status: { in: ['ASSIGNED', 'IN_REVIEW', 'RESUBMITTED', 'READY_FOR_REVIEW'] } }]),
       }),
     }));
+    const reviewQuery = mockPrismaService.documentReview.findMany.mock.calls[0][0];
+    expect(reviewQuery.select.currentRound).toMatchObject({ select: { reviewId: true, reviewVersionId: true } });
+    const ownAgenda = await requestJson(createApp(), 'GET', '/agenda?scope=MY_WORK&status=OPEN&from=2026-07-14&to=2026-07-14');
+    expect(ownAgenda.status).toBe(200);
+    const ownReviewQuery = mockPrismaService.documentReview.findMany.mock.calls[1][0];
+    expect(ownReviewQuery.where.AND).toEqual(expect.arrayContaining([
+      expect.objectContaining({ OR: expect.arrayContaining([{ ownerId: null, createdById: 'user-1' }]) }),
+    ]));
   });
 
   it('rejects unsupported team agenda scope and inaccessible case scope', async () => {
