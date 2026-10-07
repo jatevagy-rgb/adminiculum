@@ -730,7 +730,7 @@ const [phone, setPhone] = useState("");
                 <label className="block text-xs font-bold uppercase tracking-widest text-[#434843] mb-3">
                   Anonimizált tartalom előnézete
                 </label>
-                <div className="p-4 bg-[#f5f3ee] border border-[#c3c8c1]/10 text-xs text-[#434843] max-h-48 overflow-y-auto font-mono whitespace-pre-wrap">
+                <div className="max-h-48 overflow-y-auto break-words whitespace-pre-wrap border border-[#c3c8c1]/10 bg-[#f5f3ee] p-4 font-mono text-xs text-[#434843]">
                   {result.redactedText || "Nincs elérhető előnézet"}
                 </div>
               </div>
@@ -741,7 +741,7 @@ const [phone, setPhone] = useState("");
                   <label className="block text-xs font-bold uppercase tracking-widest text-[#434843] mb-3">
                     AI-átadásra kész prompt
                   </label>
-                  <div className="p-4 bg-[#f5f3ee] border border-[#c3c8c1]/10 text-xs text-[#434843] max-h-48 overflow-y-auto font-mono whitespace-pre-wrap">
+                  <div className="max-h-48 overflow-y-auto break-words whitespace-pre-wrap border border-[#c3c8c1]/10 bg-[#f5f3ee] p-4 font-mono text-xs text-[#434843]">
                     {result.aiReadyPrompt}
                   </div>
                 </div>
