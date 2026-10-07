@@ -373,6 +373,22 @@ try {
   await page.screenshot({ path: path.join(SHOTS, `documents-${width}.png`), fullPage: true });
   await page.locator('[data-testid="document-submission-task"]').selectOption(TASK.id);
   await page.waitForFunction(() => !document.querySelector('[data-testid="document-top-submission"]')?.disabled);
+  assert.equal(await page.locator('[data-testid="document-submission-task-identity"]').innerText(), TASK.title);
+  if (width === 390) {
+    const layout = await page.evaluate(() => {
+      const selector = document.querySelector('[data-testid="document-submission-task"]');
+      const identity = document.querySelector('[data-testid="document-submission-task-identity"]');
+      const action = document.querySelector('[data-testid="document-top-submission"]');
+      const selectBox = selector.getBoundingClientRect();
+      const identityBox = identity.getBoundingClientRect();
+      const actionBox = action.getBoundingClientRect();
+      return { selectBox: { x: selectBox.x, right: selectBox.right, width: selectBox.width }, identityBottom: identityBox.bottom, actionBox: { x: actionBox.x, right: actionBox.right, top: actionBox.top, width: actionBox.width } };
+    });
+    assert.ok(layout.selectBox.width >= 280, 'mobile task selector remains readable');
+    assert.ok(layout.actionBox.top >= layout.identityBottom, 'Leadás follows the selected task identity');
+    assert.ok(layout.selectBox.x >= 0 && layout.selectBox.right <= width && layout.actionBox.x >= 0 && layout.actionBox.right <= width, 'selector and Leadás remain in the viewport');
+    assert.ok(layout.actionBox.width >= 44, 'Leadás retains an operable target');
+  }
   await page.getByRole('button', { name: 'Leadás', exact: true }).focus();
   await page.keyboard.press('Enter');
   await page.getByRole('link', { name: 'Beküldött verzió megnyitása' }).waitFor();
