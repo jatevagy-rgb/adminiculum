@@ -79,7 +79,7 @@ describe("Compliance overview truthful status summary", () => {
       topic({ topicId: "e", state: "RESOLVED" }),
       topic({ topicId: "f", state: "RESOLVED", missingInformation: [missing()] }),
     ];
-    assert.deepEqual(summaryGroups(topics), { customerAction: 3, atOffice: 2, noAction: 1 });
+    assert.deepEqual(summaryGroups(topics), { customerAction: 1, atOffice: 4, noAction: 1 });
     // The groups partition every topic exactly once.
     const g = summaryGroups(topics);
     assert.equal(g.customerAction + g.atOffice + g.noAction, topics.length);

@@ -86,17 +86,17 @@ describe("Status model: customer dimension vs office dimension", () => {
   });
 
   it("keeps the customer dimension truthful for attention and cleared topics", () => {
-    // Customer attention without executable data still counts as customer action.
+    // Office review without executable customer input cannot become customer work.
     assert.equal(
       customerActionNote(topic({ state: "REVIEW_RECOMMENDED" })),
-      "Öntől szükséges: a terület áttekintése",
+      "Öntől jelenleg nincs várt teendő.",
     );
     // Office-only and cleared topics never claim an immediate customer task.
     assert.equal(
       customerActionNote(topic({ state: "LAWYER_REVIEW_REQUIRED" })),
-      "Öntől jelenleg nincs várt adatmegadási teendő.",
+      "Öntől jelenleg nincs várt teendő.",
     );
-    assert.equal(customerActionNote(topic({ state: "RESOLVED" })), "Öntől jelenleg nincs várt adatmegadási teendő.");
+    assert.equal(customerActionNote(topic({ state: "RESOLVED" })), "Öntől jelenleg nincs várt teendő.");
   });
 
   it("renders both dimensions in the topic detail without the ambiguous 'Állapot' label", () => {
@@ -120,14 +120,14 @@ describe("Summary semantics: three mutually exclusive categories", () => {
   it("counts each topic in exactly one category and matches its semantics", () => {
     const topics = [
       lawyerWithCustomerInput(), // customer action (lawyer review overlap)
-      topic({ topicId: "a", state: "MORE_INFORMATION_NEEDED" }), // customer attention
-      topic({ topicId: "b", state: "REVIEW_RECOMMENDED" }), // customer attention
+      topic({ topicId: "a", state: "MORE_INFORMATION_NEEDED" }), // office refresh
+      topic({ topicId: "b", state: "REVIEW_RECOMMENDED" }), // office review
       topic({ topicId: "c", state: "ACTION_IN_PROGRESS" }), // office
       topic({ topicId: "d", state: "LAWYER_REVIEW_REQUIRED" }), // office
       topic({ topicId: "e", state: "RESOLVED" }), // cleared
     ];
     const groups = summaryGroups(topics);
-    assert.deepEqual(groups, { customerAction: 3, atOffice: 2, noAction: 1 });
+    assert.deepEqual(groups, { customerAction: 1, atOffice: 4, noAction: 1 });
     assert.equal(groups.customerAction + groups.atOffice + groups.noAction, topics.length);
 
     // "Öntől szükséges" counts exactly the CUSTOMER_ACTION bucket.
@@ -150,6 +150,29 @@ describe("Summary semantics: three mutually exclusive categories", () => {
       assert.match(customerActionNote(t), /^Öntől szükséges: 1 adat megadása$/);
       assert.match(officeProcessingNote(t), /ügyvédi vizsgálat/);
     }
+  });
+
+  it("never counts office refresh, review or a missing unanswerable question as customer work", () => {
+    const topics = [
+      topic({ topicId: "refresh", state: "MORE_INFORMATION_NEEDED", missingInformation: [] }),
+      topic({ topicId: "review", state: "REVIEW_RECOMMENDED", missingInformation: [] }),
+      topic({ topicId: "office", state: "LAWYER_REVIEW_REQUIRED", missingInformation: [missing({ portalAnswerable: false })] }),
+      topic({ topicId: "no-key", state: "MORE_INFORMATION_NEEDED", missingInformation: [missing({ questionKey: null })] }),
+    ];
+    assert.deepEqual(summaryGroups(topics), { customerAction: 0, atOffice: 4, noAction: 0 });
+    for (const item of topics) {
+      assert.equal(customerActionNote(item), "Öntől jelenleg nincs várt teendő.");
+    }
+    topics.push(topic({ topicId: "answer", state: "LAWYER_REVIEW_REQUIRED", missingInformation: [missing()] }));
+    assert.deepEqual(summaryGroups(topics), { customerAction: 1, atOffice: 4, noAction: 0 });
+  });
+
+  it("derives the V3 customer-required tile from the same rendered worklist", () => {
+    const v3 = readFileSync(path.join(root, "src/components/client-portal-v3/compliance/PortalComplianceV3.tsx"), "utf8");
+    assert.match(v3, /label="Öntől szükséges"\s+count=\{worklist\.length\}/);
+    assert.match(v3, /for \(const request of requestGroups\.awaiting\)/);
+    assert.match(v3, /if \(answerable\.length === 0\) continue/);
+    assert.doesNotMatch(v3, /count=\{groups\.customerAction \+ requestGroups\.awaiting\.length\}/);
   });
 });
 

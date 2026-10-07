@@ -180,22 +180,21 @@ function buildShortExplanation(
   }
 }
 
-function buildNextAction(
+export function buildNextAction(
   state: ClientSafeComplianceTopicDto['state'],
   missingInformation: MissingInformationItem[],
 ): string | null {
+  const answerable = missingInformation.some((info) => info.portalAnswerable === true && typeof info.questionKey === 'string' && info.questionKey.trim().length > 0);
+  if (answerable) return 'Kérjük, töltse ki a hiányzó információkat a portálon.';
   if (state === 'MORE_INFORMATION_NEEDED') {
-    if (missingInformation.length > 0) {
-      return 'Kérjük, töltse ki a hiányzó információkat a portálon.';
-    }
-    return 'Kérjük, egészítse ki a hiányzó információkat.';
+    return 'Irodai adatellenőrzés vagy belső frissítés szükséges. Öntől jelenleg nincs várt teendő.';
   }
   if (state === 'LAWYER_REVIEW_REQUIRED') {
     return 'Ügyvédi áttekintés javasolt.';
   }
   if (state === 'RESOLVED') return null;
   if (state === 'ACTION_IN_PROGRESS') return 'A terület állapota a portálon nyomon követhető.';
-  return 'Kérjük, tekintse át a jelenlegi állapotot.';
+  return 'Belső felülvizsgálat javasolt. Öntől jelenleg nincs várt teendő.';
 }
 
 /* ------------------------------------------------------------------ */

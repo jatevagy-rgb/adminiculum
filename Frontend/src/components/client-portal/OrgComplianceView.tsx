@@ -86,13 +86,10 @@ export function hasPortalAnswerableMissingInformation(topic: PortalComplianceTop
  */
 export function classifyTopic(topic: PortalComplianceTopic): ComplianceBucket {
   if (hasPortalAnswerableMissingInformation(topic)) return "CUSTOMER_ACTION";
-  if (topic.state === "LAWYER_REVIEW_REQUIRED") return "LAWYER_REVIEW";
-  if (topic.state === "ACTION_IN_PROGRESS") return "IN_PROGRESS";
-  if (topic.state === "MORE_INFORMATION_NEEDED" || topic.state === "REVIEW_RECOMMENDED" || topic.missingInformation.length > 0) {
-    return "CUSTOMER_ACTION";
-  }
+  if (topic.state === "LAWYER_REVIEW_REQUIRED" || topic.state === "REVIEW_RECOMMENDED") return "LAWYER_REVIEW";
+  if (topic.state === "ACTION_IN_PROGRESS" || topic.state === "MORE_INFORMATION_NEEDED" || topic.missingInformation.length > 0) return "IN_PROGRESS";
   if (topic.state === "RESOLVED" && topic.missingInformation.length === 0) return "NO_ACTION";
-  return "CUSTOMER_ACTION";
+  return "NO_ACTION";
 }
 
 /** Primary badge text for a topic: the bucket label, refined when the customer owes portal-answerable data. */
@@ -100,6 +97,7 @@ export function primaryBadgeLabel(topic: PortalComplianceTopic, bucket: Complian
   if (bucket === "CUSTOMER_ACTION" && hasPortalAnswerableMissingInformation(topic)) {
     return "Adatra várunk Öntől";
   }
+  if (bucket === "LAWYER_REVIEW" && topic.state === "REVIEW_RECOMMENDED") return "Irodai felülvizsgálat javasolt";
   return bucketLabels[bucket];
 }
 
@@ -150,8 +148,7 @@ export function customerActionNote(topic: PortalComplianceTopic): string {
     (info) => info.portalAnswerable === true && typeof info.questionKey === "string" && info.questionKey.trim().length > 0,
   ).length;
   if (answerable > 0) return `Öntől szükséges: ${answerable} adat megadása`;
-  if (classifyTopic(topic) === "CUSTOMER_ACTION") return "Öntől szükséges: a terület áttekintése";
-  return "Öntől jelenleg nincs várt adatmegadási teendő.";
+  return "Öntől jelenleg nincs várt teendő.";
 }
 
 /** OFFICE processing dimension, derived only from the safe client-facing topic state. */
@@ -162,9 +159,9 @@ export function officeProcessingNote(topic: PortalComplianceTopic): string {
     case "ACTION_IN_PROGRESS":
       return "Irodai feldolgozás: feldolgozás folyamatban";
     case "MORE_INFORMATION_NEEDED":
-      return "Irodai feldolgozás: a beérkezett adatok ellenőrzése folyamatban";
+      return "Irodai feldolgozás: adatellenőrzés vagy belső frissítés szükséges";
     case "REVIEW_RECOMMENDED":
-      return "Irodai feldolgozás: belső áttekintés előkészítés alatt";
+      return "Irodai feldolgozás: belső felülvizsgálat javasolt";
     case "RESOLVED":
       return topic.missingInformation.length === 0
         ? "Irodai feldolgozás: nincs nyitott lépés"

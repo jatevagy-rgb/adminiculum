@@ -153,12 +153,13 @@ export function hasPortalAnswerableMissingInformation(topic: ComplianceTopicForC
  */
 export function classifyComplianceNextActor(topic: ComplianceTopicForClassification): OrgHomeComplianceNextActor {
   if (hasPortalAnswerableMissingInformation(topic)) return 'CUSTOMER_ACTION';
-  if (topic.state === 'ACTION_IN_PROGRESS' || topic.state === 'LAWYER_REVIEW_REQUIRED') return 'OFFICE';
-  if (topic.state === 'MORE_INFORMATION_NEEDED' || topic.state === 'REVIEW_RECOMMENDED' || (topic.missingInformation?.length ?? 0) > 0) {
-    return 'CUSTOMER_ACTION';
-  }
+  if (
+    topic.state === 'ACTION_IN_PROGRESS' || topic.state === 'LAWYER_REVIEW_REQUIRED' ||
+    topic.state === 'MORE_INFORMATION_NEEDED' || topic.state === 'REVIEW_RECOMMENDED' ||
+    (topic.missingInformation?.length ?? 0) > 0
+  ) return 'OFFICE';
   if (topic.state === 'RESOLVED' && (topic.missingInformation?.length ?? 0) === 0) return 'NO_ACTION';
-  return 'CUSTOMER_ACTION';
+  return 'NO_ACTION';
 }
 
 type ComplianceTopicForNextAction = ComplianceTopicForClassification & {
@@ -388,7 +389,6 @@ export async function getOrganizationalHome(
   });
 
   const complianceActions: OrgHomeAction[] = [];
-  let compAttentionCount = 0;
   let compInProgressCount = 0;
   let compNoActionExpectedCount = 0;
 
@@ -396,7 +396,6 @@ export async function getOrganizationalHome(
     const nextActor = classifyComplianceNextActor(topic);
 
     if (nextActor === 'CUSTOMER_ACTION') {
-      compAttentionCount += 1;
       // Only portal-answerable fields become actionable rows. The safe DTO is the
       // single source of truth: no specific task is ever fabricated.
       const answerable = (topic.missingInformation ?? []).filter(
@@ -416,28 +415,14 @@ export async function getOrganizationalHome(
           actionUrl: '/portal/megfeleles',
         });
       }
-      // A review-recommended topic with no answerable field still has a truthful,
-      // customer-safe nextAction in the existing DTO; represent it once.
-      if (answerable.length === 0 && topic.state === 'REVIEW_RECOMMENDED' && topic.nextAction) {
-        complianceActions.push({
-          id: `compliance-${topic.topicId}`,
-          matterPublicationId: null,
-          matterTitle: topic.topicLabel,
-          title: topic.nextAction,
-          instructions: topic.shortExplanation,
-          dueAt: null,
-          typeLabel: 'Megfelelési teendő',
-          readOnlyNote: 'A megfelelés oldalon tudja áttekinteni.',
-          area: 'COMPLIANCE',
-          actionUrl: '/portal/megfeleles',
-        });
-      }
     } else if (nextActor === 'OFFICE') {
       compInProgressCount += 1;
     } else {
       compNoActionExpectedCount += 1;
     }
   }
+
+  const compAttentionCount = complianceActions.length;
 
   const INITIATIVE_STATUS_LABELS: Record<string, string> = {
     PLANNED: 'Tervezett',
