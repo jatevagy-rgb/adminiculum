@@ -19,6 +19,7 @@ import {
 import { useUiPack } from "@/lib/uiPack";
 import { WorkspaceLayout, Panel, Card, SectionBlock } from "@/components/ui/WorkspacePrimitives";
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
+import { AnonymizationCapabilityNotice, useAnonymizationCapability } from "@/components/documents/anonymizationCapability";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import {
   DOCUMENT_FAMILIES,
@@ -238,13 +239,14 @@ export default function GenerationPageContent({ params }: GenerationPageProps) {
   const [activeDocumentId, setActiveDocumentId] = useState<BundleDocId>("main_sale");
   const [bundleResults, setBundleResults] = useState<Partial<Record<BundleDocId, BundleGenerationResult>>>({});
   const [resolvedGenerationCaseId] = useState<string>(resolvedParams.caseId);
+  const anonymization = useAnonymizationCapability(caseData?.id || resolvedGenerationCaseId);
   const [familyOverride, setFamilyOverride] = useState<"auto" | DocumentFamilyId>("auto");
   const [anonymizeModalContract, setAnonymizeModalContract] = useState<CaseContractListItem | null>(null);
   const [rehydrateDoc, setRehydrateDoc] = useState<{ id: string; name: string } | null>(null);
   const [rehydrateModalOpen, setRehydrateModalOpen] = useState(false);
 
   const handleAnonymize = useCallback(() => {
-    if (!generatedDoc?.document?.id) return;
+    if (!generatedDoc?.document?.id || anonymization.status !== "AVAILABLE") return;
     const doc = generatedDoc.document;
     setAnonymizeModalContract({
       id: doc.id,
@@ -256,7 +258,7 @@ export default function GenerationPageContent({ params }: GenerationPageProps) {
       fileName: doc.fileName,
       generatedAt: doc.generatedAt,
     });
-  }, [generatedDoc]);
+  }, [generatedDoc, anonymization.status]);
 
   const handleAnonymizeSuccess = useCallback((result: AnonymizeResult) => {
     setAnonymizeModalContract(null);
@@ -1267,11 +1269,13 @@ export default function GenerationPageContent({ params }: GenerationPageProps) {
           {generatedDoc?.document?.id && (
             <button
               onClick={handleAnonymize}
+              disabled={anonymization.status !== "AVAILABLE"}
               className={`w-full py-2.5 px-4 rounded-lg text-xs font-semibold border transition-colors ${isSignalTiles ? "border-emerald-700 bg-emerald-950/60 text-emerald-300 hover:bg-emerald-900/60" : "border-[#23472F] bg-[#e2ede5] text-[#23472F] hover:bg-[#d4e8d7]"}`}
             >
               Anonimizálás
             </button>
           )}
+          {generatedDoc?.document?.id ? <AnonymizationCapabilityNotice status={anonymization.status} onRetry={anonymization.retry} /> : null}
         </SectionBlock>
       </div>
     </div>
@@ -1284,7 +1288,7 @@ export default function GenerationPageContent({ params }: GenerationPageProps) {
       {signalCenterContent}
 
       {/* Anonymize Modal */}
-      {anonymizeModalContract && (
+      {anonymizeModalContract && anonymization.status === "AVAILABLE" && (
         <AnonymizeModal
           isOpen={!!anonymizeModalContract}
           onClose={() => setAnonymizeModalContract(null)}
@@ -1319,7 +1323,7 @@ export default function GenerationPageContent({ params }: GenerationPageProps) {
       {insightCenterContent}
 
       {/* Anonymize Modal */}
-      {anonymizeModalContract && (
+      {anonymizeModalContract && anonymization.status === "AVAILABLE" && (
         <AnonymizeModal
           isOpen={!!anonymizeModalContract}
           onClose={() => setAnonymizeModalContract(null)}

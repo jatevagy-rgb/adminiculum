@@ -78,6 +78,7 @@ import {
   type DocumentAnnotationType,
 } from "@/lib/api";
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
+import { AnonymizationCapabilityNotice, useAnonymizationCapability } from "@/components/documents/anonymizationCapability";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import { AIPromptPreparationModal } from "@/components/ai-prompts/AIPromptPreparationModal";
 import { useDocumentWorkContext } from "@/components/documents/workContext/useDocumentWorkContext";
@@ -1162,6 +1163,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   };
 
   const handleAnonymize = (contract: CaseContractListItem) => {
+    if (anonymization.status !== "AVAILABLE") return;
     setAnonymizeModalContract(contract);
   };
 
@@ -1291,6 +1293,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const displayMatterName = (caseRecord?.title && caseRecord.title !== 'null' && caseRecord.title !== 'null - null') ? caseRecord.title : 'Dokumentumtár';
   const displayClient = (caseRecord?.clientName && caseRecord.clientName !== 'null') ? caseRecord.clientName : '';
   const canonicalCaseId = caseRecord?.id || resolvedParams.caseId;
+  const anonymization = useAnonymizationCapability(canonicalCaseId);
 
   // Package health calculations
   const totalContracts = contracts.length;
@@ -1428,6 +1431,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   };
 
   const openUploadedAnonymize = (document: DocumentItem) => {
+    if (anonymization.status !== "AVAILABLE" || (selectedVersion && !selectedVersion.isCurrent)) return;
     const uploadedDocumentAsContract: CaseContractListItem = {
       id: document.id,
       title: document.fileName || 'Feltöltött dokumentum',
@@ -1507,9 +1511,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     selectedUploadedDocument?.folder ? `Mappa: ${selectedUploadedDocument.folder}` : selectedGeneratedContract?.templateName ? `Sablon: ${selectedGeneratedContract.templateName}` : null,
     selectedUploadedDocument?.fileName ? `Típus: ${getDocumentKindLabel(selectedUploadedDocument.fileName)}` : selectedGeneratedContract?.fileName ? `Típus: ${getDocumentKindLabel(selectedGeneratedContract.fileName)}` : null,
   ].filter(Boolean);
-  const canAnonymizeActiveDocument = Boolean(selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY');
   const canDeleteSelectedDocument = Boolean(selectedUploadedDocument && caseRecord?.status !== 'ARCHIVED');
   const selectedVersion = versions.find((version) => version.id === selectedVersionId) || versions.find((version) => version.isCurrent) || versions[0] || null;
+  const canAnonymizeActiveDocument = Boolean(selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY');
   const selectedVersionStableId = selectedVersion?.id || null;
   const selectedVersionDocumentId = selectedVersion?.documentId || null;
 
@@ -3697,9 +3701,13 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               </AdminButton>
                             ) : null}
                             {canAnonymizeActiveDocument && selectedUploadedDocument ? (
-                              <AdminButton className="w-full justify-start" variant="neutral" onClick={() => openUploadedAnonymize(selectedUploadedDocument)}>
+                              <AdminButton className="w-full justify-start" variant="neutral" disabled={anonymization.status !== "AVAILABLE" || !selectedVersion?.isCurrent} onClick={() => openUploadedAnonymize(selectedUploadedDocument)}>
                                 Anonimizálás
                               </AdminButton>
+                            ) : null}
+                            {canAnonymizeActiveDocument ? <AnonymizationCapabilityNotice status={anonymization.status} onRetry={anonymization.retry} /> : null}
+                            {canAnonymizeActiveDocument && selectedVersion && !selectedVersion.isCurrent ? (
+                              <p className="text-xs text-[var(--adm-text-secondary)]">A kiválasztott történeti v{selectedVersion.versionNumber} verzió anonimizálása nem támogatott; az aktuális verzióra váltás nélkül nem indítható.</p>
                             ) : null}
                             {canDeleteSelectedDocument && selectedUploadedDocument ? (
                               <AdminButton
@@ -3836,7 +3844,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       )}
 
       {/* Anonymize Modal */}
-      {anonymizeModalContract && (
+      {anonymizeModalContract && anonymization.status === "AVAILABLE" && (
         <AnonymizeModal
           isOpen={!!anonymizeModalContract}
           onClose={() => setAnonymizeModalContract(null)}
