@@ -46,7 +46,7 @@ describe("W2C Case Workspace integration", () => {
     assert.match(dialog, /createPortal\([\s\S]*document\.body/);
     assert.match(dialog, /role="dialog" aria-modal="true" aria-labelledby="anonymize-modal-title"/);
     assert.match(dialog, /max-h-\[calc\(100dvh-2rem\)\]/);
-    assert.match(dialog, /min-h-0 flex-1 overflow-y-auto/);
+    assert.match(dialog, /min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden/);
     assert.match(dialog, /onClick=\{onClose\}/);
     assert.match(dialog, /onClick=\{handleAnonymize\}/);
   });
