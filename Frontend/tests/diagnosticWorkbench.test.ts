@@ -54,9 +54,9 @@ test("1. Default /clients/[id]/grow renders the operational Grow workbench", () 
   // The methodology-led GrowJourney is no longer the default landing; the
   // seven-tab operational workbench is. GrowJourney stays reachable through the
   // legacy `?view=journey` deep link.
-  assert.match(pageSrc, /<GrowWorkbench\s+clientId=\{client\.id\}\s+clientName=\{client\.name\}\s+activeTab=\{activeTab\}\s+requestedOpportunityId=\{opportunityId\}\s*\/>/);
+  assert.match(pageSrc, /<GrowWorkbench\s+key=\{client\.id\}\s+clientId=\{client\.id\}\s+clientName=\{client\.name\}\s+activeTab=\{activeTab\}\s+requestedOpportunityId=\{opportunityId\}\s+canManage=\{canManage\}\s+canPublish=\{canPublish\}\s*\/>/);
   assert.match(pageSrc, /searchParams\.get\("opportunity"\)/);
-  assert.match(pageSrc, /<GrowJourney clientId=\{client\.id\} clientName=\{client\.name\} \/>/);
+  assert.match(pageSrc, /<GrowJourney key=\{client\.id\} clientId=\{client\.id\} clientName=\{client\.name\} canManage=\{canManage\} canPublish=\{canPublish\} canPreparePublication=\{canPreparePublication\} \/>/);
   assert.match(pageSrc, /return "attekintes"/);
 });
 
@@ -126,18 +126,21 @@ test("6. Canonical state renders separately from observations", () => {
   assert.doesNotMatch(obsSrc, /known\.facts/);
 });
 
-test("7. Declared and measured observation types remain visually distinct", () => {
+test("7. Declared observations and source-classified snapshots remain visually distinct", () => {
   const obsSrc = read(OBSERVATION_PANEL);
   assert.match(obsSrc, /Deklarált megfigyelések/);
-  assert.match(obsSrc, /Mért pillanatképek/);
+  assert.match(obsSrc, /Folyamatpillanatképek/);
+  assert.match(obsSrc, /sourceBasisLabelHu\(snap.sourceBasis\)/);
+  assert.doesNotMatch(obsSrc, /Mért pillanatképek/);
   assert.match(obsSrc, /Még nincs deklarált megfigyelés\./);
-  assert.match(obsSrc, /Még nincs mért folyamatadat\./);
+  assert.match(obsSrc, /Még nincs folyamatpillanatkép\./);
   assert.doesNotMatch(obsSrc, /rawPayload/);
 });
 
 test("8. Estimated and measured time are not conflated", () => {
   const obsSrc = read(OBSERVATION_PANEL);
-  assert.match(obsSrc, /nem azonos a becsült lépésidőkkel/);
+  assert.match(obsSrc, /Becsült vagy alapértelmezett időkből számított érték nem empirikus mérés/);
+  assert.match(obsSrc, /snap.metricSourceBasis/);
 
   const metricVal: ProcessMetricValue = {
     code: "TOTAL_ACTIVE_MINUTES",

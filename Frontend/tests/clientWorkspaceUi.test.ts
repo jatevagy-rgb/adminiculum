@@ -62,7 +62,8 @@ describe('W1C Company Workspace Convergence (structural)', () => {
     assert.match(src, /Ismeretlen/);
     assert.match(src, /Nincs még adat/);
     assert.match(src, /Becsült értékek/);
-    assert.match(src, /Mért pillanatkép/);
+    assert.match(src, /sourceBasisLabelHu\(process.latestMeasuredSnapshot.sourceBasis\)/);
+    assert.match(src, /nem empirikus mérés/);
     assert.match(src, /documents\.documentCount/);
     assert.match(src, /complianceSummary\.currentOnly|complianceSummary\.evaluatedCount/);
     assert.match(src, /Feltételezett/);

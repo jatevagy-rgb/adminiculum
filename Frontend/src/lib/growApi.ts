@@ -10,6 +10,18 @@ export type SufficiencyDecision =
   | "OUT_OF_SCOPE"
   | "HUMAN_DOMAIN_REVIEW";
 export type EvidenceStrength = "STRONG" | "MODERATE" | "WEAK";
+export type GrowSourceBasis = "DECLARED" | "ESTIMATED" | "DERIVED" | "MEASURED" | "EXTERNAL";
+
+export function sourceBasisLabelHu(basis: GrowSourceBasis | null | undefined): string {
+  const labels: Record<GrowSourceBasis, string> = {
+    DECLARED: "Deklarált adat",
+    ESTIMATED: "Becslésen alapuló adat",
+    DERIVED: "Számított / modellből származtatott adat",
+    MEASURED: "Mért működési megfigyelés",
+    EXTERNAL: "Külső kutatási forrás",
+  };
+  return basis ? labels[basis] : "Az adat forrásalapja nem igazolt";
+}
 
 export type RoiProvenanceType =
   | "MEASURED"
@@ -39,6 +51,7 @@ export interface GrowOpportunityItem {
 }
 
 export interface GrowEvidenceItem {
+  sourceBasis?: GrowSourceBasis | null;
   id: string;
   clientId: string | null;
   corpusKey: string | null;
@@ -159,6 +172,8 @@ export interface BusinessProcessDTO {
 
 /** Canonical process observation snapshot (T2B) returned by the server. */
 export interface ProcessObservationSnapshotDTO {
+  sourceBasis?: GrowSourceBasis | null;
+  metricSourceBasis?: Array<{ code: string; sourceBasis: GrowSourceBasis | null; sourceFields: string[] }>;
   id: string;
   clientId: string;
   businessProcessId: string;
@@ -178,6 +193,17 @@ export interface ProcessObservationSnapshotDTO {
 
 /** Canonical snapshot/observation references recorded on a diagnosis. */
 export interface DiagnosisSourceRefs {
+  sourceBasis?: GrowSourceBasis | null;
+  assessmentFindings?: Array<{
+    packKey: string;
+    packVersion: number;
+    findingKey: string;
+    titleHu: string;
+    summaryHu: string;
+    nextCheckHu: string;
+    suggestedInterventionCodes: string[];
+    polarity: "INVESTIGATION" | "PROBLEM";
+  }>;
   snapshotIds?: string[];
   observationIds?: string[];
   businessProcessId?: string | null;
@@ -351,7 +377,7 @@ export const growApi = {
     );
   },
   listOpportunityPublicationWorkspaces(clientId: string) {
-    return fetchApi<{ items: OpportunityPublicationWorkspaceDTO[] }>(url(clientId, "/grow/opportunity-publication-workspaces"));
+    return fetchApi<{ items: OpportunityPublicationWorkspaceDTO[]; organizationMode: boolean }>(url(clientId, "/grow/opportunity-publication-workspaces"));
   },
   createOpportunityPublicationDraft(clientId: string, input: OpportunityPublicationDraftInput) {
     return fetchApi<OpportunityPublicationDTO>(url(clientId, "/grow/opportunity-publications"), {
@@ -487,10 +513,17 @@ export function publicationStatusLabelHu(status: string): string {
 }
 
 /** Evidence category for the workforce "Mi alapján?" explanation. */
-export type EvidenceBasisCategory = "MEASURED_COMPANY" | "DECLARED_COMPANY" | "RESEARCH";
+export type EvidenceBasisCategory = "MEASURED_COMPANY" | "DECLARED_COMPANY" | "ESTIMATED_COMPANY" | "DERIVED_COMPANY" | "UNKNOWN_COMPANY" | "RESEARCH";
 
 export function evidenceBasisCategory(item: GrowEvidenceItem): EvidenceBasisCategory {
-  if (item.kind === "INTERNAL_MEASUREMENT" || item.evidenceType === "INTERNAL_MEASUREMENT") return "MEASURED_COMPANY";
+  if (item.sourceBasis === "MEASURED") return "MEASURED_COMPANY";
+  if (item.sourceBasis === "ESTIMATED") return "ESTIMATED_COMPANY";
+  if (item.sourceBasis === "DERIVED") return "DERIVED_COMPANY";
+  if (item.sourceBasis === "DECLARED") return "DECLARED_COMPANY";
+  if (item.sourceBasis === "EXTERNAL") return "RESEARCH";
+  if (item.sourceBasis === null && item.origin === "CLIENT_INTERNAL") return "UNKNOWN_COMPANY";
+  // Legacy kind alone never proves that the inputs were empirically measured.
+  if (item.kind === "INTERNAL_MEASUREMENT" || item.evidenceType === "INTERNAL_MEASUREMENT") return "UNKNOWN_COMPANY";
   if (item.kind === "INTERNAL_OBSERVATION" || item.evidenceType === "INTERNAL_OBSERVATION") return "DECLARED_COMPANY";
   if (item.origin === "CLIENT_INTERNAL") return "DECLARED_COMPANY";
   return "RESEARCH";
@@ -500,6 +533,9 @@ export function evidenceBasisLabelHu(category: EvidenceBasisCategory): string {
   const labels: Record<EvidenceBasisCategory, string> = {
     MEASURED_COMPANY: "Ügyfél-mérési bizonyíték",
     DECLARED_COMPANY: "Deklarált felmérés / megfigyelés",
+    ESTIMATED_COMPANY: "Becslésen alapuló folyamatadat",
+    DERIVED_COMPANY: "Számított / modellből származtatott adat",
+    UNKNOWN_COMPANY: "Nem igazolt forrásalapú belső adat",
     RESEARCH: "Kutatási háttér (nem ügyféladat)",
   };
   return labels[category];
@@ -509,6 +545,9 @@ export function evidenceBasisExplanationHu(category: EvidenceBasisCategory): str
   const labels: Record<EvidenceBasisCategory, string> = {
     MEASURED_COMPANY: "A cég saját folyamat-mérési pillanatképéből származó, mért adat.",
     DECLARED_COMPANY: "A cég által kitöltött felmérésből vagy bejelentésből származó, deklarált adat.",
+    ESTIMATED_COMPANY: "Becsült bemenetekből származó adat. A determinisztikus számítás nem teszi empirikus méréssé.",
+    DERIVED_COMPANY: "Meglévő adatokból vagy modellből számított érték; önmagában nem empirikus működési mérés.",
+    UNKNOWN_COMPANY: "A mentett forrásból nem igazolható a mérési alap. Nem tekinthető mért működési bizonyítéknak.",
     RESEARCH: "Külső szakirodalmi/módszertani háttér. Ez nem a cég saját tényadata, csak alátámasztó kontextus.",
   };
   return labels[category];

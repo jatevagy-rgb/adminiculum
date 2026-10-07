@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   domainTitleHu,
   evidenceBasisCategory,
@@ -15,7 +16,7 @@ import {
   outcomeBasisLabelHu,
   publicationStatusLabelHu,
   reviewDecisionLabelHu,
-  roiProvenanceLabelHu,
+  sourceBasisLabelHu,
   sufficiencyExplanationHu,
   sufficiencyLabelHu,
   type BusinessProcessDTO,
@@ -29,7 +30,8 @@ import {
   type OutcomeMeasurementDTO,
   type SufficiencyDecision,
 } from "@/lib/growApi";
-import { getCurrentUser } from "@/lib/api";
+import { GrowOutcomeComparison } from "@/components/clients/GrowOutcomeComparison";
+import { workbenchReadFailure } from "@/components/clients/growWorkbenchState";
 import {
   clientCompanyApi,
   companyMilestoneStatusLabel,
@@ -48,6 +50,18 @@ import {
 } from "@/lib/diagnosticWorkbenchApi";
 
 type GrowScreen = "home" | "feed" | "detail" | "progress" | "results";
+type JourneyReads = "home" | "opportunities" | "accepted" | "outcomes" | "processes" | "initiatives" | "milestones" | "tasks" | "workbench";
+type JourneyReadErrors = Partial<Record<JourneyReads, string>>;
+
+function readError(reason: unknown): string {
+  return workbenchReadFailure(reason) === "UNAUTHORIZED"
+    ? "Nincs jogosultság az adatok megtekintéséhez."
+    : "Az adatok jelenleg nem érhetők el. Próbálja újra.";
+}
+
+function ReadFailure({ message }: { message?: string }) {
+  return message ? <p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">{message}</p> : null;
+}
 
 const sufficiencyTone: Record<SufficiencyDecision, string> = {
   SUPPORTED: "border-[#2d5a43]/40 bg-[#2d5a43]/10 text-[#1b382b]",
@@ -111,7 +125,17 @@ function repeatsComparableText(a: string | null | undefined, b: string | null | 
   return left.length > 0 && left === right;
 }
 
-export function GrowJourney({ clientId, clientName }: { clientId: string; clientName: string }) {
+type GrowJourneyProps = { clientId: string; clientName: string; canManage?: boolean; canPublish?: boolean; canPreparePublication?: boolean };
+
+export function GrowJourney(props: GrowJourneyProps) {
+  // Client navigation must not reuse the previous client's state or forms.
+  return <GrowJourneyContent key={props.clientId} {...props} />;
+}
+
+function GrowJourneyContent({ clientId, clientName, canManage = false, canPublish = false, canPreparePublication = false }: GrowJourneyProps) {
+  const searchParams = useSearchParams();
+  const destination = searchParams.get("destination");
+  const requestedOpportunity = searchParams.get("opportunity");
   const [screen, setScreen] = useState<GrowScreen>("home");
   const [home, setHome] = useState<GrowHomeSummary | null>(null);
   const [opportunities, setOpportunities] = useState<GrowOpportunityItem[]>([]);
@@ -121,7 +145,6 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
   const [milestones, setMilestones] = useState<CompanyMilestone[]>([]);
   const [acceptedOpportunities, setAcceptedOpportunities] = useState<GrowOpportunityItem[]>([]);
   const [tasks, setTasks] = useState<TaskLifecycleListItem[]>([]);
-  const [canPublishOpportunities, setCanPublishOpportunities] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<GrowOpportunityDetail | null>(null);
   const [workbench, setWorkbench] = useState<DiagnosticWorkbenchDto | null>(null);
@@ -129,51 +152,48 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
   const [loading, setLoading] = useState(true);
   const [researchBusy, setResearchBusy] = useState(false);
   const [researchNote, setResearchNote] = useState<string | null>(null);
-
-  // Publication authority mirrors the backend publisher allowlist
-  // (client-publication PUBLISHER_ROLES); the server remains authoritative.
+  const [readErrors, setReadErrors] = useState<JourneyReadErrors>({});
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const loadVersion = useRef(0);
+  const detailVersion = useRef(0);
+  const selectedRef = useRef<string | null>(null);
+  const mounted = useRef(false);
   useEffect(() => {
-    let cancelled = false;
-    void getCurrentUser()
-      .then((user) => {
-        if (cancelled) return;
-        setCanPublishOpportunities(["ADMIN", "PARTNER", "LAWYER"].includes(String(user?.role || "")));
-      })
-      .catch(() => {
-        if (!cancelled) setCanPublishOpportunities(false);
-      });
+    mounted.current = true;
     return () => {
-      cancelled = true;
+      mounted.current = false;
+      loadVersion.current += 1;
+      detailVersion.current += 1;
     };
   }, []);
 
   const load = useCallback(async () => {
+    if (!mounted.current) return;
+    const version = ++loadVersion.current;
     setLoading(true);
     setError(null);
-    try {
-      const [homeRes, oppRes, acceptedRes, outcomeRes, processRes, initiativeRes, milestoneRes, taskRes, workbenchRes] = await Promise.all([
-        growApi.getHome(clientId),
-        growApi.listOpportunities(clientId),
-        growApi.listOpportunities(clientId, "ACCEPTED").catch(() => ({ items: [] as GrowOpportunityItem[] })),
-        growApi.listOutcomes(clientId),
-        growApi.listProcesses(clientId).catch(() => [] as BusinessProcessDTO[]),
-        clientCompanyApi.listInitiatives(clientId).catch(() => ({ items: [] as DevelopmentInitiative[] })),
-        clientCompanyApi.listMilestones(clientId).catch(() => ({ items: [] as CompanyMilestone[] })),
-        listTaskLifecycleItems().catch(() => [] as TaskLifecycleListItem[]),
-        getDiagnosticWorkbench(clientId).catch(() => null),
-      ]);
-      setHome(homeRes);
-      setOpportunities(oppRes.items);
-      setAcceptedOpportunities(acceptedRes.items);
-      setOutcomes(outcomeRes.items);
-      setProcesses(processRes);
-      setInitiatives(initiativeRes.items);
-      setMilestones(milestoneRes.items);
-      setTasks(taskRes.filter((t) => t.case.clientId === clientId));
-      setWorkbench(workbenchRes);
-    } catch {
-      setError("A Grow felület adatai jelenleg nem tölthetők be.");
-    } finally {
+    const errors: JourneyReadErrors = {};
+    const read = async <T,>(key: JourneyReads, request: Promise<T>, assign: (value: T) => void) => {
+      try {
+        const value = await request;
+        if (mounted.current && version === loadVersion.current) assign(value);
+      } catch (reason) {
+        errors[key] = readError(reason);
+      }
+    };
+    await Promise.all([
+      read("home", growApi.getHome(clientId), setHome),
+      read("opportunities", growApi.listOpportunities(clientId), (res) => setOpportunities(res.items)),
+      read("accepted", growApi.listOpportunities(clientId, "ACCEPTED"), (res) => setAcceptedOpportunities(res.items)),
+      read("outcomes", growApi.listOutcomes(clientId), (res) => setOutcomes(res.items)),
+      read("processes", growApi.listProcesses(clientId), setProcesses),
+      read("initiatives", clientCompanyApi.listInitiatives(clientId), (res) => setInitiatives(res.items)),
+      read("milestones", clientCompanyApi.listMilestones(clientId), (res) => setMilestones(res.items)),
+      read("tasks", listTaskLifecycleItems(), (res) => setTasks(res.filter((t) => t.case.clientId === clientId))),
+      read("workbench", getDiagnosticWorkbench(clientId), setWorkbench),
+    ]);
+    if (mounted.current && version === loadVersion.current) {
+      setReadErrors(errors);
       setLoading(false);
     }
   }, [clientId]);
@@ -184,35 +204,59 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
 
   const openDetail = useCallback(
     async (recommendationId: string) => {
+      const version = ++detailVersion.current;
+      selectedRef.current = recommendationId;
       setSelectedId(recommendationId);
       setDetail(null);
+      setDetailError(null);
       setScreen("detail");
       try {
-        setDetail(await growApi.getOpportunity(clientId, recommendationId));
-      } catch {
-        setError("A lehetőség részletei nem tölthetők be.");
+        const result = await growApi.getOpportunity(clientId, recommendationId);
+        if (mounted.current && version === detailVersion.current) setDetail(result);
+      } catch (reason) {
+        if (mounted.current && version === detailVersion.current) setDetailError(readError(reason));
       }
     },
     [clientId],
   );
 
+  useEffect(() => {
+    if (requestedOpportunity) {
+      void openDetail(requestedOpportunity);
+    } else {
+      ++detailVersion.current;
+      selectedRef.current = null;
+      setSelectedId(null);
+      setDetail(null);
+      setDetailError(null);
+    }
+    setScreen(destination === "home" || destination === "feed" || destination === "progress" || destination === "results"
+      ? destination : destination === "detail" || requestedOpportunity ? "detail" : "home");
+  }, [destination, requestedOpportunity, openDetail]);
+
   // A review decision or initiative handoff changes the same recommendation, so
   // the open detail must be re-read instead of trusting the stale pre-decision DTO.
   const refreshDetail = useCallback(async () => {
-    if (!selectedId) return;
+    if (!selectedId || !mounted.current || selectedRef.current !== selectedId) return;
+    const version = ++detailVersion.current;
+    setDetail(null);
+    setDetailError(null);
     try {
-      setDetail(await growApi.getOpportunity(clientId, selectedId));
-    } catch {
-      setError("A lehetőség részletei nem tölthetők be.");
+      const result = await growApi.getOpportunity(clientId, selectedId);
+      if (mounted.current && version === detailVersion.current) setDetail(result);
+    } catch (reason) {
+      if (mounted.current && version === detailVersion.current) setDetailError(readError(reason));
     }
   }, [clientId, selectedId]);
 
   const runResearch = async () => {
+    if (!canManage || researchBusy || readErrors.home || !home?.canRunResearch) return;
     setResearchBusy(true);
     setResearchNote(null);
     setError(null);
     try {
       const result = await growApi.runResearch(clientId, { idempotencyKey: crypto.randomUUID() });
+      if (!mounted.current) return;
       setResearchNote(
         result.replayed
           ? "A kutatási futás ismétlése — korábbi eredmény visszaadva."
@@ -220,9 +264,9 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
       );
       await load();
     } catch {
-      setError("A kutatási futás nem indítható el.");
+      if (mounted.current) setError("A kutatási futás nem indítható el.");
     } finally {
-      setResearchBusy(false);
+      if (mounted.current) setResearchBusy(false);
     }
   };
 
@@ -313,7 +357,7 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
                   active ? "text-white/75" : "text-[#788274]"
                 }`}
               >
-                {item.hint}
+                {loading ? "Betöltés…" : (item.id === "home" && readErrors.home) || (item.id === "feed" && readErrors.opportunities) || (item.id === "progress" && readErrors.initiatives) || (item.id === "results" && readErrors.outcomes) ? "Nem elérhető" : item.hint}
               </span>
             </button>
           );
@@ -336,11 +380,16 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
         </div>
       ) : null}
 
-      {!loading && !error ? (
+      {!loading ? (
         <>
+          {Object.keys(readErrors).length > 0 ? (
+            <button type="button" onClick={() => void load()} className="text-xs font-semibold underline">Adatok újratöltése</button>
+          ) : null}
           {screen === "home" ? (
             <GrowHomeScreen
               home={home}
+              readErrors={readErrors}
+              canManage={canManage}
               workbench={workbench}
               onShowFeed={() => setScreen("feed")}
               onShowProgress={() => setScreen("progress")}
@@ -354,32 +403,38 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
               milestones={milestones}
               outcomes={outcomes}
               acceptedOpportunities={acceptedOpportunities}
-              canRunResearch={home?.canRunResearch ?? false}
+              canRunResearch={canManage && !readErrors.home && (home?.canRunResearch ?? false)}
               onSubmitted={load}
               onOpenDetail={(id) => void openDetail(id)}
             />
           ) : null}
           {screen === "feed" ? (
-            <GrowFeedScreen
+            readErrors.opportunities ? <ReadFailure message={readErrors.opportunities} /> : <GrowFeedScreen
               opportunities={opportunities}
               onOpenDetail={(id) => void openDetail(id)}
             />
           ) : null}
           {screen === "detail" ? (
             <GrowDetailScreen
+              key={selectedId ?? "unselected"}
               clientId={clientId}
               detail={detail}
               selectedId={selectedId}
+              detailError={detailError}
               onChanged={load}
               onRefreshDetail={refreshDetail}
               onShowFeed={() => setScreen("feed")}
               onShowProgress={() => setScreen("progress")}
-              processes={processes}
-              canPublishOpportunities={canPublishOpportunities}
+              processes={readErrors.processes ? [] : processes}
+              processError={readErrors.processes}
+              canManage={canManage}
+              canPublishOpportunities={canPublish}
+              canPreparePublication={canPreparePublication}
             />
           ) : null}
           {screen === "progress" ? (
             <GrowProgressScreen
+              readErrors={readErrors}
               initiatives={initiatives}
               milestones={milestones}
               acceptedOpportunities={acceptedOpportunities}
@@ -389,7 +444,7 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
             />
           ) : null}
           {screen === "results" ? (
-            <GrowResultsScreen outcomes={outcomes} />
+            readErrors.outcomes ? <ReadFailure message={readErrors.outcomes} /> : <GrowResultsScreen outcomes={outcomes} />
           ) : null}
         </>
       ) : null}
@@ -453,7 +508,7 @@ function CausalChainTracker({
       num: 3,
       title: "3. Támogató jelek",
       question: "Miért gondoljuk ezt?",
-      stat: `${snapshotsCount} mért · ${observationsCount} deklarált`,
+      stat: `${snapshotsCount} pillanatkép · ${observationsCount} deklarált`,
       href: `/clients/${clientId}/grow?view=diagnostics`,
       actionLabel: "Megfigyelések →",
     },
@@ -796,7 +851,7 @@ function DiagnosticOverviewCard({
 
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">
-              Mért folyamatpillanatképek ({snapshots.length})
+              Folyamatpillanatképek ({snapshots.length})
             </p>
             {snapshots.length === 0 ? (
               <p className="mt-1 text-xs text-[#788274]">
@@ -813,7 +868,7 @@ function DiagnosticOverviewCard({
                       </span>
                     </div>
                     <span className="mt-1 inline-block rounded bg-teal-50 text-teal-800 border border-teal-200 px-1.5 py-0.5 text-[10px]">
-                      {snap.metrics?.length ?? 0} mért mutató
+                      {snap.metrics?.length ?? 0} mutató · {sourceBasisLabelHu(snap.sourceBasis)}
                     </span>
                   </div>
                 ))}
@@ -841,6 +896,8 @@ function DiagnosticOverviewCard({
 
 function GrowHomeScreen({
   home,
+  readErrors,
+  canManage,
   workbench,
   onShowFeed,
   onShowProgress,
@@ -859,6 +916,8 @@ function GrowHomeScreen({
   onOpenDetail,
 }: {
   home: GrowHomeSummary | null;
+  readErrors: JourneyReadErrors;
+  canManage: boolean;
   workbench: DiagnosticWorkbenchDto | null;
   onShowFeed: () => void;
   onShowProgress: () => void;
@@ -926,7 +985,7 @@ function GrowHomeScreen({
           </div>
         </div>
 
-        {counts ? (
+        {readErrors.home ? <ReadFailure message={readErrors.home} /> : counts ? (
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             <StatTile label="Nyitott lehetőség" value={counts.total} />
             <StatTile label="Alátámasztott" value={counts.supported} highlight />
@@ -951,7 +1010,7 @@ function GrowHomeScreen({
       </div>
 
       {/* Causal Chain Stepper */}
-      <CausalChainTracker
+      {Object.keys(readErrors).length === 0 ? <CausalChainTracker
         knownFactsCount={knownFactsCount}
         diagnosesCount={diagnosesCount}
         snapshotsCount={snapshotsCount}
@@ -967,26 +1026,26 @@ function GrowHomeScreen({
         onShowProgress={onShowProgress}
         onShowResults={onShowResults}
         clientId={clientId}
-      />
+      /> : <ReadFailure message={`Az összesített folyamatlánc nem teljes. ${[...new Set(Object.values(readErrors))].join(" ")}`} />}
 
       {/* Two Columns: Company Foundation & Diagnostic Overview */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <CompanyStateCard
+        {readErrors.workbench || readErrors.processes ? <ReadFailure message={readErrors.workbench || readErrors.processes} /> : <CompanyStateCard
           workbench={workbench}
           processes={processes}
           clientId={clientId}
-        />
-        <DiagnosticOverviewCard
+        />}
+        {readErrors.workbench ? <ReadFailure message={readErrors.workbench} /> : <DiagnosticOverviewCard
           workbench={workbench}
           clientId={clientId}
-        />
+        />}
       </div>
 
       {/* Two Columns: Left = Opportunities / Findings, Right = Grow Method Journey & Process Map */}
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="space-y-6">
           <Panel title="Legfontosabb lehetőségek" kicker="Kutatási és felmérési szintézis">
-            {home && home.topOpportunities.length > 0 ? (
+            {readErrors.home ? <ReadFailure message={readErrors.home} /> : home && home.topOpportunities.length > 0 ? (
               <ul className="space-y-3">
                 {home.topOpportunities.map((opp) => (
                   <li
@@ -1027,7 +1086,7 @@ function GrowHomeScreen({
 
           {/* Process Map panel */}
           <Panel title="Folyamatok lépésről lépésre" kicker="Működési kontextus">
-            {processes.length === 0 ? (
+            {readErrors.processes ? <ReadFailure message={readErrors.processes} /> : processes.length === 0 ? (
               <p className="text-sm text-[#788274]">Még nincs rögzített üzleti folyamat ehhez a céghez.</p>
             ) : processWithSteps ? (
               <div>
@@ -1037,7 +1096,7 @@ function GrowHomeScreen({
             ) : (
               <p className="text-sm text-[#788274]">A folyamatokban még nincs rögzített lépés.</p>
             )}
-            {processes.length > 1 ? (
+            {!readErrors.processes && processes.length > 1 ? (
               <p className="mt-3 text-[11px] text-[#788274]">
                 További folyamatok: {processes.filter((p) => p.id !== processWithSteps?.id).map((p) => p.name).join(", ")}
               </p>
@@ -1111,7 +1170,7 @@ function GrowHomeScreen({
       </div>
 
       {/* Operational Pain Intake */}
-      <GrowIntake clientId={clientId} onSubmitted={onSubmitted} />
+      {canManage ? <GrowIntake clientId={clientId} onSubmitted={onSubmitted} /> : null}
     </div>
   );
 }
@@ -1233,22 +1292,30 @@ function GrowDetailScreen({
   clientId,
   detail,
   selectedId,
+  detailError,
   onChanged,
   onRefreshDetail,
   onShowFeed,
   onShowProgress,
   processes,
+  processError,
+  canManage,
   canPublishOpportunities,
+  canPreparePublication,
 }: {
   clientId: string;
   detail: GrowOpportunityDetail | null;
   selectedId: string | null;
+  detailError: string | null;
   onChanged: () => Promise<void>;
   onRefreshDetail: () => Promise<void>;
   onShowFeed: () => void;
   onShowProgress: () => void;
   processes: BusinessProcessDTO[];
+  processError?: string;
+  canManage: boolean;
   canPublishOpportunities: boolean;
+  canPreparePublication: boolean;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [note, setNote] = useState("");
@@ -1262,13 +1329,13 @@ function GrowDetailScreen({
   );
 
   const evidenceCategoryCounts = useMemo(() => {
-    const counts: Record<EvidenceBasisCategory, number> = { MEASURED_COMPANY: 0, DECLARED_COMPANY: 0, RESEARCH: 0 };
+    const counts: Record<EvidenceBasisCategory, number> = { MEASURED_COMPANY: 0, DECLARED_COMPANY: 0, ESTIMATED_COMPANY: 0, DERIVED_COMPANY: 0, UNKNOWN_COMPANY: 0, RESEARCH: 0 };
     for (const item of detail?.evidence ?? []) counts[evidenceBasisCategory(item)] += 1;
     return counts;
   }, [detail]);
 
   const sourceRefs = detail?.diagnosis?.sourceRefs ?? null;
-  const measuredRefCount = sourceRefs?.snapshotIds?.length ?? 0;
+  const snapshotRefCount = sourceRefs?.snapshotIds?.length ?? 0;
   const declaredRefCount = sourceRefs?.observationIds?.length ?? 0;
 
   if (!selectedId) {
@@ -1291,7 +1358,7 @@ function GrowDetailScreen({
   if (!detail) {
     return (
       <Panel title="Részletek" kicker="Kiválasztott lehetőség kontextusa">
-        <p className="text-sm text-[#788274]">Betöltés…</p>
+        {detailError ? <><ReadFailure message={detailError} /><button type="button" onClick={() => void onRefreshDetail()} className="mt-3 text-xs underline">Újrapróbálás</button></> : <p className="text-sm text-[#788274]">Betöltés…</p>}
       </Panel>
     );
   }
@@ -1306,6 +1373,7 @@ function GrowDetailScreen({
   const problemStatementAlreadyShown = problemRepeatsTitle || !diagnosisSummary;
 
   const decide = async (decision: "ACCEPT" | "DECLINE" | "REQUEST_MORE_INFO") => {
+    if (!canManage || busy || (decision === "ACCEPT" && detail.sufficiency !== "SUPPORTED")) return;
     setBusy(decision);
     setLocalError(null);
     setMessage(null);
@@ -1328,7 +1396,7 @@ function GrowDetailScreen({
   };
 
   const startInitiative = async () => {
-    if (!detail.opportunity) return;
+    if (!canManage || busy || !detail.opportunity) return;
     setBusy("initiative");
     setLocalError(null);
     try {
@@ -1364,6 +1432,7 @@ function GrowDetailScreen({
       ) : null}
 
       <Panel title="Mit látunk?">
+        <ReadFailure message={processError} />
         {diagnosisSummary || !problemRepeatsTitle ? (
           <p className="text-sm text-[#1b382b] leading-relaxed">{diagnosisSummary ?? detail.problemStatement}</p>
         ) : (
@@ -1425,10 +1494,10 @@ function GrowDetailScreen({
           <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">Mi alapján állítja ezt a rendszer?</p>
           <ul className="mt-2 space-y-1.5 text-xs text-[#1b382b]">
             <li>
-              <span className="font-semibold">Mért ügyféldata:</span>{" "}
-              {measuredRefCount > 0
-                ? `${measuredRefCount} folyamat-mérési pillanatkép`
-                : "nincs csatolt mérési pillanatkép"}
+              <span className="font-semibold">Folyamatadat: {sourceBasisLabelHu(sourceRefs?.sourceBasis)}</span>{" "}
+              {snapshotRefCount > 0
+                ? `${snapshotRefCount} folyamatpillanatkép`
+                : "nincs csatolt folyamatpillanatkép"}
             </li>
             <li>
               <span className="font-semibold">Deklarált ügyféladat:</span>{" "}
@@ -1464,7 +1533,7 @@ function GrowDetailScreen({
       </Panel>
 
       <Panel title="Döntés">
-        {pending ? (
+        {pending && canManage ? (
           <>
             <label className="block text-xs font-semibold text-[#556052]">
               Megjegyzés a döntéshez (opcionális)
@@ -1524,7 +1593,7 @@ function GrowDetailScreen({
                 ? "Fejlesztési kezdeményezés létezik ehhez a lehetőséghez."
                 : "Még nincs fejlesztési kezdeményezés — a kezdeményezés indítása külön, kifejezett lépés."}
             </p>
-            {detail.opportunity && detail.opportunity.status === "OPEN" ? (
+            {canManage && detail.opportunity && detail.opportunity.status === "OPEN" ? (
               <button
                 type="button"
                 disabled={busy !== null}
@@ -1551,12 +1620,14 @@ function GrowDetailScreen({
 
       {accepted && detail.opportunity ? (
         <OpportunityPublicationPanel
+          key={detail.opportunity.id}
           clientId={clientId}
           opportunityId={detail.opportunity.id}
           internalTitle={detail.title}
           internalProblem={detail.problemStatement}
           internalDirection={detail.direction}
           canPublish={canPublishOpportunities}
+          canPreparePublication={canPreparePublication}
         />
       ) : null}
     </div>
@@ -1613,13 +1684,13 @@ function EvidenceItemCard({ item }: { item: GrowEvidenceItem }) {
   );
 }
 
-const EVIDENCE_CATEGORY_ORDER: EvidenceBasisCategory[] = ["MEASURED_COMPANY", "DECLARED_COMPANY", "RESEARCH"];
+const EVIDENCE_CATEGORY_ORDER: EvidenceBasisCategory[] = ["MEASURED_COMPANY", "DECLARED_COMPANY", "ESTIMATED_COMPANY", "DERIVED_COMPANY", "UNKNOWN_COMPANY", "RESEARCH"];
 
 function EvidenceDrawer({ evidence }: { evidence: GrowEvidenceItem[] }) {
   if (!evidence.length) {
     return <p className="mt-3 text-sm text-[#788274]">Ehhez a javaslathoz nincs csatolt bizonyíték.</p>;
   }
-  const grouped: Record<EvidenceBasisCategory, GrowEvidenceItem[]> = { MEASURED_COMPANY: [], DECLARED_COMPANY: [], RESEARCH: [] };
+  const grouped: Record<EvidenceBasisCategory, GrowEvidenceItem[]> = { MEASURED_COMPANY: [], DECLARED_COMPANY: [], ESTIMATED_COMPANY: [], DERIVED_COMPANY: [], UNKNOWN_COMPANY: [], RESEARCH: [] };
   for (const item of evidence) grouped[evidenceBasisCategory(item)].push(item);
   return (
     <div className="mt-4 space-y-5" data-testid="evidence-drawer">
@@ -1656,6 +1727,7 @@ function OpportunityPublicationPanel({
   internalProblem,
   internalDirection,
   canPublish,
+  canPreparePublication,
 }: {
   clientId: string;
   opportunityId: string;
@@ -1663,6 +1735,7 @@ function OpportunityPublicationPanel({
   internalProblem: string;
   internalDirection: string;
   canPublish: boolean;
+  canPreparePublication: boolean;
 }) {
   const [publications, setPublications] = useState<OpportunityPublicationDTO[]>([]);
   const [workspaces, setWorkspaces] = useState<OpportunityPublicationWorkspaceDTO[]>([]);
@@ -1674,25 +1747,35 @@ function OpportunityPublicationPanel({
   const [safeTitle, setSafeTitle] = useState("");
   const [safeSummary, setSafeSummary] = useState("");
   const [safeDirection, setSafeDirection] = useState("");
+  const [publicationError, setPublicationError] = useState<string | null>(null);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const requestVersion = useRef(0);
+  const mounted = useRef(false);
 
   const reload = useCallback(async () => {
+    if (!mounted.current) return;
+    const version = ++requestVersion.current;
     setLoading(true);
-    try {
-      const [pubRes, wsRes] = await Promise.all([
-        growApi.listOpportunityPublications(clientId, opportunityId),
-        growApi.listOpportunityPublicationWorkspaces(clientId).catch(() => ({ items: [] as OpportunityPublicationWorkspaceDTO[] })),
-      ]);
-      setPublications(pubRes.items);
-      setWorkspaces(wsRes.items);
-    } catch {
-      setLocalError("A közzétételi állapot nem tölthető be.");
-    } finally {
-      setLoading(false);
-    }
+    const [pubRes, wsRes] = await Promise.allSettled([
+      growApi.listOpportunityPublications(clientId, opportunityId),
+      growApi.listOpportunityPublicationWorkspaces(clientId),
+    ]);
+    if (!mounted.current || version !== requestVersion.current) return;
+    setPublicationError(pubRes.status === "rejected" ? readError(pubRes.reason) : null);
+    setWorkspaceError(wsRes.status === "rejected" ? readError(wsRes.reason) : null);
+    setPublications(pubRes.status === "fulfilled" ? pubRes.value.items : []);
+    setWorkspaces(wsRes.status === "fulfilled" ? wsRes.value.items : []);
+    setWorkspaceId((id) => wsRes.status === "fulfilled" && wsRes.value.items.some((w) => w.id === id) ? id : "");
+    setLoading(false);
   }, [clientId, opportunityId]);
 
   useEffect(() => {
+    mounted.current = true;
     void reload();
+    return () => {
+      mounted.current = false;
+      ++requestVersion.current;
+    };
   }, [reload]);
 
   const latestByWorkspace = useMemo(() => {
@@ -1705,6 +1788,7 @@ function OpportunityPublicationPanel({
   }, [publications]);
 
   const prepare = async () => {
+    if (!canPreparePublication || busy || loading || publicationError || workspaceError) return;
     setBusy("prepare");
     setMessage(null);
     setLocalError(null);
@@ -1720,24 +1804,27 @@ function OpportunityPublicationPanel({
         direction: safeDirection.trim() || undefined,
         expectedRevision: existing?.revision,
       });
+      if (!mounted.current) return;
       setMessage("Előkészítés rögzítve. A közzététel külön jóváhagyási és publikálási lépés.");
       setSafeTitle("");
       setSafeSummary("");
       setSafeDirection("");
       await reload();
     } catch {
-      setLocalError("Az előkészítés nem sikerült. Ellenőrizze a munkaterületet és a szövegeket.");
+      if (mounted.current) setLocalError("Az előkészítés nem sikerült. Ellenőrizze a munkaterületet és a szövegeket.");
     } finally {
-      setBusy(null);
+      if (mounted.current) setBusy(null);
     }
   };
 
   const transition = async (publication: OpportunityPublicationDTO, action: "submit" | "approve" | "publish" | "revoke") => {
+    if (!(action === "submit" ? canPreparePublication : canPublish) || busy || loading || publicationError) return;
     setBusy(`${publication.id}:${action}`);
     setMessage(null);
     setLocalError(null);
     try {
       await growApi.transitionOpportunityPublication(clientId, publication.id, action, publication.revision);
+      if (!mounted.current) return;
       setMessage(
         action === "submit"
           ? "Jóváhagyásra elküldve."
@@ -1749,9 +1836,9 @@ function OpportunityPublicationPanel({
       );
       await reload();
     } catch {
-      setLocalError("A művelet nem sikerült.");
+      if (mounted.current) setLocalError("A művelet nem sikerült.");
     } finally {
-      setBusy(null);
+      if (mounted.current) setBusy(null);
     }
   };
 
@@ -1766,7 +1853,7 @@ function OpportunityPublicationPanel({
 
       {!loading ? (
         <div className="mt-4 space-y-4">
-          {publications.length === 0 ? (
+          {publicationError ? <ReadFailure message={publicationError} /> : publications.length === 0 ? (
             <p className="rounded-2xl border border-[#e8ded1] bg-[#faf6ee]/50 p-4 text-xs text-[#556052]">
               Ehhez a lehetőséghez még nincs közzététel. Az ügyfél jelenleg semmit nem lát ebből.
             </p>
@@ -1798,25 +1885,25 @@ function OpportunityPublicationPanel({
                         </div>
                       ) : null}
                       <div className="mt-3 flex flex-wrap gap-2">
-                        {publication.status === "DRAFT" ? (
+                        {canPreparePublication && publication.status === "DRAFT" ? (
                           <button type="button" disabled={busy !== null} onClick={() => void transition(publication, "submit")}
                             className="rounded-xl border border-[#e8ded1] bg-white px-3.5 py-1.5 text-xs font-semibold text-[#1b382b] hover:bg-[#faf6ee] disabled:opacity-40 transition-colors">
                             {busy === `${publication.id}:submit` ? "Küldés…" : "Jóváhagyásra küldöm"}
                           </button>
                         ) : null}
-                        {publication.status === "READY_FOR_APPROVAL" ? (
+                        {canPublish && publication.status === "READY_FOR_APPROVAL" ? (
                           <button type="button" disabled={busy !== null || !canPublish} onClick={() => void transition(publication, "approve")}
                             className="rounded-xl bg-[#1b382b] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-[#2d5a43] disabled:cursor-not-allowed disabled:opacity-40 transition-colors">
                             {busy === `${publication.id}:approve` ? "Jóváhagyás…" : "Jóváhagyom"}
                           </button>
                         ) : null}
-                        {publication.status === "APPROVED" ? (
+                        {canPublish && publication.status === "APPROVED" ? (
                           <button type="button" disabled={busy !== null || !canPublish} onClick={() => void transition(publication, "publish")}
                             className="rounded-xl bg-[#1b382b] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-[#2d5a43] disabled:cursor-not-allowed disabled:opacity-40 transition-colors">
                             {busy === `${publication.id}:publish` ? "Közzététel…" : "Közzéteszem az ügyfélnek"}
                           </button>
                         ) : null}
-                        {publication.status === "PUBLISHED" ? (
+                        {canPublish && publication.status === "PUBLISHED" ? (
                           <button type="button" disabled={busy !== null || !canPublish} onClick={() => void transition(publication, "revoke")}
                             className="rounded-xl border border-[#c85a32]/40 bg-white px-3.5 py-1.5 text-xs font-semibold text-[#a03d19] hover:bg-[#faf6ee] disabled:opacity-40 transition-colors">
                             {busy === `${publication.id}:revoke` ? "Visszavonás…" : "Visszavonom a közzétételt"}
@@ -1833,7 +1920,9 @@ function OpportunityPublicationPanel({
             ) : null
           )}
 
-          <div className="rounded-2xl border border-[#e8ded1] bg-[#fcfbf9] p-4">
+          <ReadFailure message={workspaceError ?? undefined} />
+          {publicationError || workspaceError ? <button type="button" onClick={() => void reload()} className="text-xs underline">Közzétételi adatok újratöltése</button> : null}
+          {canPreparePublication && !publicationError && !workspaceError ? <div className="rounded-2xl border border-[#e8ded1] bg-[#fcfbf9] p-4">
             <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">Új közzététel előkészítése</p>
             <p className="mt-1 text-[11px] text-[#788274]">
               Belső szöveg (csak belső referencia, nem kerül automatikusan az ügyfélhez): „{internalTitle}”
@@ -1845,7 +1934,15 @@ function OpportunityPublicationPanel({
                 Munkaterület (ügyfél-audience)
                 <select
                   value={workspaceId}
-                  onChange={(e) => setWorkspaceId(e.target.value)}
+                  disabled={busy !== null}
+                  onChange={(e) => {
+                    setWorkspaceId(e.target.value);
+                    setSafeTitle("");
+                    setSafeSummary("");
+                    setSafeDirection("");
+                    setMessage(null);
+                    setLocalError(null);
+                  }}
                   className="mt-1.5 w-full rounded-xl border border-[#e8ded1] bg-white px-3 py-2 text-xs text-[#1b382b] focus:border-[#2d5a43] focus:outline-none"
                 >
                   <option value="">Válasszon munkaterületet</option>
@@ -1897,7 +1994,7 @@ function OpportunityPublicationPanel({
             <p className="mt-2 text-[11px] text-[#788274]">
               Az előkészítés nem tesz közzé semmit. A jóváhagyás és a közzététel külön, kifejezett lépés.
             </p>
-          </div>
+          </div> : null}
 
           {message ? <p className="text-xs font-semibold text-[#2d5a43]" role="status">{message}</p> : null}
           {localError ? <p className="text-xs text-[#c85a32]" role="alert">{localError}</p> : null}
@@ -1910,6 +2007,7 @@ function OpportunityPublicationPanel({
 /* ---------------------------------- Screen 4: Progress ------------------------------ */
 
 function GrowProgressScreen({
+  readErrors,
   initiatives,
   milestones,
   acceptedOpportunities,
@@ -1917,6 +2015,7 @@ function GrowProgressScreen({
   tasks,
   onOpenDetail,
 }: {
+  readErrors: JourneyReadErrors;
   initiatives: DevelopmentInitiative[];
   milestones: CompanyMilestone[];
   acceptedOpportunities: GrowOpportunityItem[];
@@ -1931,7 +2030,7 @@ function GrowProgressScreen({
   return (
     <div className="space-y-6">
       <Panel title="Elfogadott lehetőségek" kicker="Emberi döntés után — kezdeményezés és közzététel">
-        {acceptedOpportunities.length === 0 ? (
+        {readErrors.accepted ? <ReadFailure message={readErrors.accepted} /> : acceptedOpportunities.length === 0 ? (
           <p className="text-sm text-[#788274]">
             Még nincs elfogadott javítási lehetőség. A lehetőség a javaslat kifejezett „Elfogadom” döntése után jön létre.
           </p>
@@ -1970,7 +2069,7 @@ function GrowProgressScreen({
       </Panel>
 
       <Panel title="Fejlesztés folyamatban" kicker="Kezdeményezések, mérföldkövek és feladatok">
-        {active.length === 0 && closed.length === 0 ? (
+        {readErrors.initiatives ? <ReadFailure message={readErrors.initiatives} /> : active.length === 0 && closed.length === 0 ? (
           <p className="text-sm text-[#788274]">Még nincs fejlesztési kezdeményezés ehhez a céghez.</p>
         ) : (
           <div className="space-y-4">
@@ -1981,7 +2080,7 @@ function GrowProgressScreen({
                 .sort((a, b) => (a.milestoneDate ?? a.targetDate ?? "9999").localeCompare(b.milestoneDate ?? b.targetDate ?? "9999"));
               const nextMilestone = initiativeMilestones.find((m) => !["ACHIEVED", "CANCELLED"].includes(String(m.status)));
               const relatedOutcomes = outcomes.filter((o) => o.initiative?.id === initiative.id);
-              const relatedOpportunity = acceptedOpportunities.find(
+              const relatedOpportunity = !readErrors.accepted && acceptedOpportunities.find(
                 (o) => o.opportunity?.developmentInitiativeId === initiative.id,
               );
               const responsible = initiative.lawFirmOwnerName || initiative.clientOwnerDisplay || null;
@@ -1995,8 +2094,9 @@ function GrowProgressScreen({
                   </div>
 
                   <div className="mt-2.5 rounded-xl border border-[#e8ded1] bg-[#faf6ee] p-2.5 text-xs text-[#556052]">
+                    <ReadFailure message={readErrors.accepted} />
                     <span className="font-semibold text-[#1b382b]">Oksági lánc:</span>{" "}
-                    Diagnózis → Javítási lehetőség: <span className="font-semibold text-[#1b382b]">{relatedOpportunity ? relatedOpportunity.title : "Nincs közvetlen kapcsolat"}</span> → Kezdeményezés → Mérföldkövek → Eredmény
+                    Diagnózis → Javítási lehetőség: <span className="font-semibold text-[#1b382b]">{readErrors.accepted ? "Nem elérhető" : relatedOpportunity ? relatedOpportunity.title : "Nincs közvetlen kapcsolat"}</span> → Kezdeményezés → Mérföldkövek → Eredmény
                   </div>
 
                   <dl className="mt-3 grid grid-cols-1 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-[minmax(120px,auto)_1fr]">
@@ -2009,17 +2109,17 @@ function GrowProgressScreen({
                     <dt className="text-[#667062]">Céldátum</dt>
                     <dd className="text-[#1b382b]">{initiative.targetAt ? new Date(initiative.targetAt).toLocaleDateString("hu-HU") : "Nincs adat."}</dd>
                     <dt className="text-[#667062]">Kapcsolódó lehetőség</dt>
-                    <dd className="text-[#1b382b]">{relatedOpportunity ? relatedOpportunity.title : "Nincs adat."}</dd>
+                    <dd className="text-[#1b382b]">{readErrors.accepted ? "Nem elérhető" : relatedOpportunity ? relatedOpportunity.title : "Nincs adat."}</dd>
                     <dt className="text-[#667062]">Következő mérföldkő</dt>
                     <dd className="text-[#1b382b]">
-                      {nextMilestone
+                      {readErrors.milestones ? "Nem elérhető" : nextMilestone
                         ? `${nextMilestone.title} · ${companyMilestoneStatusLabel(nextMilestone.status)}${nextMilestone.targetDate ? ` (${new Date(nextMilestone.targetDate).toLocaleDateString("hu-HU")})` : ""}`
                         : "Nincs adat."}
                     </dd>
                   </dl>
 
                   <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-[#788274]">
-                    <span>{linkedTasks.length} nyitott kapcsolódó feladat</span>
+                    {readErrors.tasks ? <ReadFailure message={readErrors.tasks} /> : <span>{linkedTasks.length} nyitott kapcsolódó feladat</span>}
                     {initiative.caseId ? (
                       <Link
                         href={`/cases/${encodeURIComponent(initiative.caseId)}`}
@@ -2039,7 +2139,7 @@ function GrowProgressScreen({
                         A határidő lejárta nem azonos elért üzleti hatással
                       </span>
                     </div>
-                    {initiativeMilestones.length === 0 ? (
+                    {readErrors.milestones ? <ReadFailure message={readErrors.milestones} /> : initiativeMilestones.length === 0 ? (
                       <p className="mt-1.5 text-xs text-[#788274]">Ehhez a kezdeményezéshez még nincsenek mérföldkövek rögzítve.</p>
                     ) : (
                       <ul className="mt-2 space-y-1.5">
@@ -2056,7 +2156,7 @@ function GrowProgressScreen({
                     )}
                   </div>
 
-                  {relatedOutcomes.length ? (
+                  {readErrors.outcomes ? <ReadFailure message={readErrors.outcomes} /> : relatedOutcomes.length ? (
                     <div className="mt-4 border-t border-[#f0ece1] pt-3">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">Kapcsolódó eredmények</p>
                       <ul className="mt-2 space-y-1">
@@ -2072,7 +2172,7 @@ function GrowProgressScreen({
                     </div>
                   ) : null}
 
-                  {linkedTasks.length ? (
+                  {!readErrors.tasks && linkedTasks.length ? (
                     <ul className="mt-4 space-y-1.5 border-t border-[#f0ece1] pt-3">
                       {linkedTasks.slice(0, 5).map((task) => (
                         <li key={task.id} className="text-xs text-[#1b382b]">
@@ -2119,14 +2219,7 @@ function OutcomeCard({ outcome }: { outcome: OutcomeMeasurementDTO }) {
           ) : null}
         </div>
       </div>
-      {outcome.metricsSummary?.before ? (
-        <BeforeAfterTable summary={outcome.metricsSummary} />
-      ) : (
-        <p className="mt-3 text-xs text-[#788274]" data-testid="outcome-no-measurement">
-          Nincs mérési adat.
-        </p>
-      )}
-      {outcome.roi ? <RoiBlock roi={outcome.roi} /> : null}
+      <GrowOutcomeComparison outcome={outcome} />
       {outcome.note ? <p className="mt-3 text-xs text-[#556052]">{outcome.note}</p> : null}
       <p className="mt-3 text-[11px] text-[#788274]">
         Rögzítette: {outcome.recordedBy?.name ?? "—"} · {new Date(outcome.createdAt).toLocaleDateString("hu-HU")}
@@ -2193,118 +2286,6 @@ function GrowResultsScreen({ outcomes }: { outcomes: OutcomeMeasurementDTO[] }) 
             ))}
           </div>
         </Panel>
-      ) : null}
-    </div>
-  );
-}
-
-function BeforeAfterTable({ summary }: { summary: NonNullable<OutcomeMeasurementDTO["metricsSummary"]> }) {
-  const before = summary.before ?? {};
-  const after = summary.after ?? null;
-  const rows = ["TOTAL_ACTIVE_MINUTES", "TOTAL_WAITING_MINUTES", "TOTAL_CYCLE_MINUTES"].filter(
-    (k) => before[k] != null || after?.[k] != null,
-  );
-  if (!rows.length) return null;
-  const labels: Record<string, string> = {
-    TOTAL_ACTIVE_MINUTES: "Aktív idő",
-    TOTAL_WAITING_MINUTES: "Várakozási idő",
-    TOTAL_CYCLE_MINUTES: "Teljes átfutási idő",
-  };
-  return (
-    <div className="mt-4 overflow-x-auto">
-      <table className="w-full text-left text-xs">
-        <thead>
-          <tr className="border-b border-[#f0ece1] text-[10px] font-bold uppercase tracking-wider text-[#667062]">
-            <th className="pb-2">Mutató</th>
-            <th className="pb-2 text-right">Előtte</th>
-            <th className="pb-2 text-right">Most</th>
-            <th className="pb-2 text-right">Változás</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-[#f0ece1]">
-          {rows.map((key) => {
-            const b = before[key];
-            const a = after?.[key];
-            const hasDelta = b != null && a != null;
-            const delta = hasDelta ? b - a : null;
-            return (
-              <tr key={key}>
-                <td className="py-2 text-[#556052]">{labels[key]}</td>
-                <td className="py-2 text-right font-medium text-[#1b382b]">{b != null ? `${Math.round(b)} p` : "—"}</td>
-                <td className="py-2 text-right font-medium text-[#1b382b]">{a != null ? `${Math.round(a)} p` : "—"}</td>
-                <td
-                  className={`py-2 text-right font-semibold ${
-                    delta != null && delta > 0
-                      ? "text-[#2d5a43]"
-                      : delta != null && delta < 0
-                        ? "text-[#c85a32]"
-                        : "text-[#788274]"
-                  }`}
-                >
-                  {delta == null ? "—" : delta === 0 ? "0 p" : `${delta > 0 ? "−" : "+"}${Math.abs(Math.round(delta))} p`}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-        {summary.comparable === false ? (
-          <tfoot>
-            <tr>
-              <td colSpan={4} className="pt-2 text-[10px] text-amber-900">
-                A két mérés mérőszám-verziója eltér — a különbség óvatosan értelmezhető.
-              </td>
-            </tr>
-          </tfoot>
-        ) : null}
-      </table>
-    </div>
-  );
-}
-
-function RoiBlock({ roi }: { roi: NonNullable<OutcomeMeasurementDTO["roi"]> }) {
-  const [open, setOpen] = useState(false);
-  const time = roi.timeSavedMinutesPerMonth;
-  const cash = roi.cashSavedHufPerMonth;
-  const fmt = (v: { low: number; base: number; high: number } | null | undefined, unit: string) =>
-    v ? `${Math.round(v.low)}–${Math.round(v.base)}–${Math.round(v.high)} ${unit}` : "—";
-
-  return (
-    <div className="mt-4 rounded-2xl border border-[#e8ded1] bg-[#faf6ee]/70 p-4">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">
-        Becsült hatás (alacsony / közép / magas)
-      </p>
-      <div className="mt-2 grid gap-1 text-xs text-[#1b382b]">
-        <p>
-          Megtakarított idő / hónap: <span className="font-bold">{fmt(time, "perc")}</span>
-        </p>
-        <p>
-          Megtakarított költség / hónap: <span className="font-bold">{cash ? fmt(cash, "Ft") : "nem becsülhető"}</span>
-        </p>
-      </div>
-      <p className="mt-2 text-[10.5px] font-semibold text-amber-950">
-        A megtakarított idő nem egyenlő pénzmegtakarítással.
-      </p>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="mt-2 text-xs font-semibold text-[#2d5a43] hover:text-[#1b382b] hover:underline"
-        aria-expanded={open}
-      >
-        Hogyan számoltuk?
-      </button>
-      {open && roi.provenance ? (
-        <dl className="mt-3 grid grid-cols-[minmax(90px,auto)_1fr] gap-x-3 gap-y-1.5 border-t border-[#e8ded1] pt-3 text-[11px]">
-          <dt className="text-[#667062]">Alap</dt>
-          <dd className="text-[#1b382b]">{outcomeBasisLabelHu(roi.basis)}</dd>
-          <dt className="text-[#667062]">Származás</dt>
-          <dd className="text-[#1b382b]">{roiProvenanceLabelHu(roi.provenanceType ?? roi.provenance?.type)}</dd>
-          <dt className="text-[#667062]">Képlet</dt>
-          <dd className="text-[#1b382b]">{roi.provenance.formulaVersion}</dd>
-          <dt className="text-[#667062]">Számítva</dt>
-          <dd className="text-[#1b382b]">{new Date(roi.provenance.computedAt).toLocaleString("hu-HU")}</dd>
-          <dt className="text-[#667062]">Magyarázat</dt>
-          <dd className="text-[#1b382b]">{roi.provenance.explanationHu}</dd>
-        </dl>
       ) : null}
     </div>
   );

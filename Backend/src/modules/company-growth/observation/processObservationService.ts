@@ -20,6 +20,7 @@ import { canonicalDigest } from '../../compliance/canonicalDigest';
 import { InteractionError, InternalActor, assertClientReadAccess } from '../../client-interaction/base';
 import { calculateProcessMetrics, sortStepsDeterministically } from '../metrics/calculateProcessMetrics';
 import { GROW_PROCESS_METRICS_V1, ProcessMetricInput, ProcessMetricStepInput, ProcessMetricValue } from '../metrics/metricTypes';
+import { projectSnapshotSourceBasis } from './sourceBasis';
 import {
   CanonicalMeasuredProcessInput,
   CaptureProcessObservationInput,
@@ -90,6 +91,7 @@ function toSnapshotDTO(row: any): ProcessObservationSnapshotDTO {
     snapshotDigest: row.snapshotDigest,
     metrics: row.metrics as ProcessMetricValue[],
     provenance: (row.provenance as ProcessObservationProvenance) ?? null,
+    ...projectSnapshotSourceBasis(row.provenance, row.metrics),
     createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
   };
 }

@@ -1,4 +1,11 @@
 import { GROW_ASSESSMENT_SCHEMA, GROW_ASSESSMENT_V2_SCHEMA, isAssessmentSchema, evaluateAssessmentAnswers } from '../assessments/registry';
+import type { AssessmentFindingResult } from '../assessments/registry';
+
+export interface GrowAssessmentFinding extends AssessmentFindingResult {
+  packKey: string;
+  packVersion: number;
+  polarity: 'INVESTIGATION' | 'PROBLEM';
+}
 
 /**
  * GROW — fail-closed Observation → GrowSignal normalization boundary.
@@ -94,6 +101,7 @@ export interface GrowSignalProvenance {
   /** Canonical source record reference, when present. */
   sourceRecordId?: string | null;
   defersAutomation?: boolean;
+  assessmentFinding?: GrowAssessmentFinding;
 }
 
 /**
@@ -140,7 +148,7 @@ function readProvenanceChannel(record: Record<string, unknown>): string | null {
  * - Findings without a canonical category (e.g. strategy/leadership/culture)
  *   remain assessment-level and NEVER enter Grow research. There is no
  *   GENERAL_FLOW fallback.
- * - One signal per canonical category per observation (deterministic dedupe).
+ * - V1 retains category dedupe; V2 retains each bounded finding identity.
  */
 function assessmentObservationToGrowSignals(
   observation: NormalizableObservation,
@@ -170,7 +178,7 @@ function assessmentObservationToGrowSignals(
   const seenCategories = new Set<string>();
   for (const finding of evaluation.findings) {
     const categoryKey = finding.surveyCategoryKey;
-    if (!categoryKey || seenCategories.has(categoryKey)) continue;
+    if (!categoryKey || (packVersion === 1 && seenCategories.has(categoryKey))) continue;
     const domainKey = SURVEY_CATEGORY_TO_DOMAIN[categoryKey];
     if (!domainKey) continue; // fail-closed: never guess a domain
     seenCategories.add(categoryKey);
@@ -186,6 +194,14 @@ function assessmentObservationToGrowSignals(
         categoryKey,
         channel,
         sourceRecordId: observation.sourceRecordId ?? null,
+        ...(packVersion === 2 ? {
+          assessmentFinding: {
+            ...finding,
+            packKey,
+            packVersion,
+            polarity: finding.findingKey === 'v2_repeatable_candidate' ? 'INVESTIGATION' as const : 'PROBLEM' as const,
+          },
+        } : {}),
         ...(evaluation.findings.some(f => f.defersAutomation) ? { defersAutomation: true } : {}),
       },
     });

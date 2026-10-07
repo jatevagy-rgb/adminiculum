@@ -212,6 +212,8 @@ export function deriveProcessSignals(input: {
   surveyCategories?: string[];
   measured: boolean;
   declared: boolean;
+  /** Snapshot availability is distinct from a claim of measured values. */
+  hasSnapshot?: boolean;
 }): ProcessSignal[] {
   const m = input.metrics ?? {};
   const num = (code: string): number | null => {
@@ -244,7 +246,7 @@ export function deriveProcessSignals(input: {
 
   if (categories.has('REWORK')) signals.add('REWORK_PRESENT');
   if (categories.has('UNCLEAR_OWNERSHIP')) signals.add('UNCLEAR_PROCESS_OWNERSHIP');
-  if (categories.has('GENERAL_CONCERN') && !input.measured) signals.add('PROCESS_VARIABILITY');
+  if (categories.has('GENERAL_CONCERN') && !input.measured && !input.hasSnapshot) signals.add('PROCESS_VARIABILITY');
 
   return [...signals];
 }

@@ -28,6 +28,7 @@ import {
 } from '../src/modules/company-growth/observation/processObservationService';
 import { GROW_PROCESS_METRICS_V1 } from '../src/modules/company-growth/metrics/metricTypes';
 import { calculateProcessMetrics } from '../src/modules/company-growth/metrics/calculateProcessMetrics';
+import { projectSnapshotSourceBasis } from '../src/modules/company-growth/observation/sourceBasis';
 
 const databaseUrl =
   process.env.CLIENT_INTERACTION_TEST_DATABASE_URL ||
@@ -39,6 +40,25 @@ const describeDb = databaseUrl ? describe : describe.skip;
 
 describe('Grow With Us V2 T2B — Process Observation Unit Invariants', () => {
   const adminActor = { userId: 'user-admin', role: 'ADMIN' };
+
+  it('projects estimates and structural derivations without changing historical metrics or digests', () => {
+    const metrics = calculateProcessMetrics({ id: 'proc', steps: [{ id: 'step', position: 1, estimatedActiveMinutes: 0 }] });
+    const before = JSON.stringify(metrics);
+    const digest = computeSnapshotDigest('input', GROW_PROCESS_METRICS_V1, metrics);
+    const projected = projectSnapshotSourceBasis({
+      calculatedBy: GROW_PROCESS_METRICS_V1,
+      inputFieldInventory: ['steps.estimatedActiveMinutes', 'steps.estimatedWaitingMinutes', 'ownerPersonId', 'steps.stepType'],
+    }, metrics);
+    expect(projected.sourceBasis).toBe('ESTIMATED');
+    expect(projected.metricSourceBasis).toEqual(expect.arrayContaining([
+      { code: 'TOTAL_ACTIVE_MINUTES', sourceBasis: 'ESTIMATED', sourceFields: ['steps.estimatedActiveMinutes'] },
+      { code: 'PROCESS_OWNER_PRESENT', sourceBasis: 'DERIVED', sourceFields: ['ownerPersonId'] },
+    ]));
+    expect(projectSnapshotSourceBasis(null, metrics).sourceBasis).toBeNull();
+    expect(projectSnapshotSourceBasis({ inputFieldInventory: ['steps.measuredMinutes'] }, metrics).sourceBasis).toBeNull();
+    expect(JSON.stringify(metrics)).toBe(before);
+    expect(computeSnapshotDigest('input', GROW_PROCESS_METRICS_V1, metrics)).toBe(digest);
+  });
 
   it('2, 3 & 4. exact T2A metric values, metricVersion, and timestamp preserved', () => {
     const rawProcess = { id: 'proc-1', ownerPersonId: 'person-owner' };

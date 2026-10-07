@@ -761,6 +761,7 @@ export type PortalGrowOutcome = {
   id: string;
   basis: 'MEASURED' | 'CALCULATED' | 'ESTIMATED';
   basisLabel: string;
+  initiativeId: string | null;
   initiativeTitle: string | null;
   processName: string | null;
 };

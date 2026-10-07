@@ -20,6 +20,7 @@
 import { EvidenceVerificationStatus, Prisma, PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../../prisma/prisma.service';
 import { assertClientReadAccess, InternalActor } from '../../client-interaction/base';
+import { projectSnapshotSourceBasis, SourceBasis } from '../observation/sourceBasis';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -533,6 +534,7 @@ export const SEEDED_CORPUS: readonly CorpusSeedEntry[] = [
 ];
 
 export interface EvidenceDTO {
+  sourceBasis: SourceBasis | null;
   id: string;
   clientId: string | null;
   corpusKey: string | null;
@@ -565,6 +567,7 @@ export function toEvidenceDTO(row: {
   applicabilityNotes: string | null; limitations: string | null; createdAt: Date;
 }): EvidenceDTO {
   return {
+    sourceBasis: row.clientId === null ? 'EXTERNAL' : row.locator?.startsWith('observation:') ? 'DECLARED' : null,
     id: row.id,
     clientId: row.clientId,
     corpusKey: row.corpusKey,
@@ -587,6 +590,53 @@ export function toEvidenceDTO(row: {
     limitations: row.limitations,
     createdAt: row.createdAt.toISOString(),
   };
+}
+
+/** Resolve old snapshot evidence on reads without rewriting its stored history. */
+export async function projectEvidenceSourceBasis<T extends Pick<EvidenceDTO, 'clientId' | 'locator' | 'kind' | 'title' | 'strength'>>(
+  rows: T[], clientId: string, db: Db,
+): Promise<Array<T & { sourceBasis: SourceBasis | null }>> {
+  const projected = rows.map(row => ({
+    ...row,
+    sourceBasis: (row.clientId === null ? 'EXTERNAL' : row.locator?.startsWith('observation:') ? 'DECLARED' : null) as SourceBasis | null,
+  }));
+  const snapshotIds = rows.filter(row => row.clientId === clientId && row.locator?.startsWith('snapshot:'))
+    .map(row => row.locator!.slice('snapshot:'.length));
+  if (!snapshotIds.length) return projected;
+  const snapshots = await db.processObservationSnapshot.findMany({
+    where: { clientId, id: { in: snapshotIds } },
+    select: { id: true, provenance: true, metrics: true },
+  });
+  const bases = new Map(snapshots.map(snapshot => [snapshot.id, projectSnapshotSourceBasis(snapshot.provenance, snapshot.metrics).sourceBasis]));
+  return projected.map(row => {
+    if (row.clientId !== clientId || !row.locator?.startsWith('snapshot:')) return row;
+    const sourceBasis = bases.get(row.locator.slice('snapshot:'.length)) ?? null;
+    return {
+      ...row, sourceBasis,
+      kind: 'INTERNAL_OBSERVATION',
+      evidenceType: 'INTERNAL_OBSERVATION',
+      title: 'Folyamatadat-pillanatkép (nem tényleges mérés)',
+      strength: row.strength === 'STRONG' ? 'MODERATE' : row.strength,
+    };
+  });
+}
+
+/** Replace only the old engine-generated measurement claim on read. */
+export function projectSnapshotEvidenceSummary(
+  summary: string | null,
+  evidence: Array<{ locator: string | null; sourceBasis: SourceBasis | null }>,
+): string | null {
+  const snapshots = evidence.filter(item => item.locator?.startsWith('snapshot:'));
+  if (!summary || !snapshots.length || snapshots.every(item => item.sourceBasis === 'MEASURED')) return summary;
+  const claim = snapshots.some(item => item.sourceBasis === 'ESTIMATED')
+    ? 'becsült folyamatadat támasztja alá; nem tényleges mérés.'
+    : snapshots.every(item => item.sourceBasis === 'DERIVED')
+      ? 'rögzített folyamatadatból levezetett jelzés támasztja alá.'
+      : 'folyamatadat-pillanatkép; a mérési alap nincs igazolva.';
+  return summary.replace(
+    'Ellenőrzött szakirodalmi bizonyíték + ügyfél-mérési pillanatkép támasztja alá.',
+    `Ellenőrzött szakirodalmi bizonyíték + ${claim}`,
+  );
 }
 
 /**
@@ -666,7 +716,7 @@ export async function listEvidence(
     where: { OR: [{ clientId: null }, { clientId }] },
     orderBy: [{ verificationStatus: 'asc' }, { createdAt: 'asc' }],
   });
-  return rows.map(toEvidenceDTO);
+  return projectEvidenceSourceBasis(rows.map(toEvidenceDTO), clientId, db);
 }
 
 /**

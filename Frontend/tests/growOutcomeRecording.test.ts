@@ -136,8 +136,10 @@ test("11. basis/provenance is displayed truthfully where returned", () => {
   assert.match(api, /CALCULATED: "Számított"/);
   assert.match(api, /ESTIMATED: "Becsült"/);
   assert.match(api, /ASSUMED: "Feltételezés"/);
-  // An unmeasured (no after-snapshot) result is explicitly described as not measured.
-  assert.match(src, /Utána mérés nélkül az eredmény nem mért, hanem becsült alapon rögzül/);
+  // Even an after-snapshot cannot turn estimated inputs into measured benefit.
+  assert.match(src, /Az utána pillanatkép önmagában nem teszi mértté az eredményt/);
+  assert.match(src, /A becsült bemenetből számított változás becslés marad, nem igazolt megvalósult haszon/);
+  assert.match(src, /sourceBasisLabelHu\(s.sourceBasis\)/);
 });
 
 test("12. the client portal receives no new internal/cash ROI data", () => {

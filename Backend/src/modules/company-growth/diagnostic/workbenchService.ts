@@ -3,6 +3,8 @@ import { prisma as defaultPrisma } from '../../../prisma/prisma.service';
 import { InteractionError, InternalActor, assertClientReadAccess } from '../../client-interaction/base';
 import { DECLARED_SURVEY_OBSERVATION_TYPE } from '../research/observationSignals';
 import { ProcessMetricCode, ProcessMetricUnit, ProcessMetricValue } from '../metrics/metricTypes';
+import { projectSnapshotSourceBasis, SnapshotSourceProjection, SourceBasis } from '../observation/sourceBasis';
+import { projectEvidenceSourceBasis, projectSnapshotEvidenceSummary } from '../research/corpus';
 
 type Prisma = typeof defaultPrisma;
 
@@ -10,6 +12,9 @@ export type DiagnosticProvenanceClass =
   | 'CANONICAL_STATE'
   | 'DECLARED_OBSERVATION'
   | 'MEASURED_SNAPSHOT'
+  | 'ESTIMATED_SNAPSHOT'
+  | 'DERIVED_SNAPSHOT'
+  | 'PROCESS_SNAPSHOT'
   | 'EVIDENCE_RECORD'
   | 'RESEARCH_EVIDENCE'
   | 'DERIVED_DIAGNOSIS'
@@ -91,9 +96,9 @@ export interface DiagnosticWorkbenchDto {
       source: { id: string; sourceType: string; name: string };
       discoveryRun: { id: string; status: string; startedAt: string } | null;
     }>;
-    processSnapshots: Array<{
+    processSnapshots: Array<SnapshotSourceProjection & {
       id: string;
-      provenanceClass: 'MEASURED_SNAPSHOT';
+      provenanceClass: 'MEASURED_SNAPSHOT' | 'ESTIMATED_SNAPSHOT' | 'DERIVED_SNAPSHOT' | 'PROCESS_SNAPSHOT';
       businessProcess: { id: string; name: string };
       metricVersion: string;
       observedAt: string;
@@ -118,7 +123,7 @@ export interface DiagnosticWorkbenchDto {
       status: string;
       problemDomain: { id: string; key: string; name: string } | null;
       businessProcess: { id: string; name: string } | null;
-      evidence: Array<{ id: string; title: string; verificationStatus: string; strength: string }>;
+      evidence: Array<{ id: string; title: string; verificationStatus: string; strength: string; sourceBasis: SourceBasis | null }>;
     }>;
     sufficiency: Array<{
       recommendationId: string;
@@ -142,7 +147,7 @@ export interface DiagnosticWorkbenchDto {
       diagnosisId: string | null;
       domain: { key: string; name: string } | null;
       businessProcess: { id: string; name: string } | null;
-      evidence: Array<{ id: string; title: string; verificationStatus: string; strength: string }>;
+      evidence: Array<{ id: string; title: string; verificationStatus: string; strength: string; sourceBasis: SourceBasis | null }>;
     }>;
   };
   evidence: {
@@ -161,6 +166,7 @@ export interface DiagnosticWorkbenchDto {
     }>;
     research: Array<{
       id: string;
+      sourceBasis: SourceBasis | null;
       provenanceClass: 'RESEARCH_EVIDENCE';
       kind: string;
       title: string;
@@ -183,12 +189,13 @@ function iso(value: Date | null | undefined): string | null {
   return value ? value.toISOString() : null;
 }
 
-function evidenceSummary(row: { id: string; title: string; verificationStatus: string; strength: string }) {
+function evidenceSummary(row: { id: string; title: string; verificationStatus: string; strength: string; sourceBasis: SourceBasis | null }) {
   return {
     id: row.id,
     title: row.title,
     verificationStatus: row.verificationStatus,
     strength: row.strength,
+    sourceBasis: row.sourceBasis,
   };
 }
 
@@ -393,7 +400,7 @@ export async function getDiagnosticWorkbench(
         businessProcess: { select: { id: true, name: true } },
         evidenceLinks: {
           select: {
-            evidence: { select: { id: true, title: true, verificationStatus: true, strength: true } },
+            evidence: { select: { id: true, clientId: true, locator: true, kind: true, title: true, verificationStatus: true, strength: true } },
           },
         },
       },
@@ -421,7 +428,7 @@ export async function getDiagnosticWorkbench(
         },
         evidenceLinks: {
           select: {
-            evidence: { select: { id: true, title: true, verificationStatus: true, strength: true } },
+            evidence: { select: { id: true, clientId: true, locator: true, kind: true, title: true, verificationStatus: true, strength: true } },
           },
         },
       },
@@ -449,6 +456,8 @@ export async function getDiagnosticWorkbench(
       take: 200,
       select: {
         id: true,
+        clientId: true,
+        locator: true,
         kind: true,
         title: true,
         origin: true,
@@ -468,15 +477,24 @@ export async function getDiagnosticWorkbench(
     throw new InteractionError(404, 'CLIENT_NOT_FOUND', 'Client not found.');
   }
 
+  // Linked evidence may be older than the bounded research/snapshot lists.
+  // Resolve all displayed evidence by its own tenant-scoped snapshot locator.
+  const projectedEvidence = await projectEvidenceSourceBasis([
+    ...researchEvidence,
+    ...diagnoses.flatMap(row => row.evidenceLinks.map(link => link.evidence)),
+    ...recommendations.flatMap(row => row.evidenceLinks.map(link => link.evidence)),
+  ], clientId, prisma);
+  const evidenceById = new Map(projectedEvidence.map(row => [row.id, row]));
+
   const diagnosisDtos = diagnoses.map((row) => ({
     id: row.id,
     provenanceClass: 'DERIVED_DIAGNOSIS' as const,
     title: row.title,
-    summary: row.summary,
+    summary: projectSnapshotEvidenceSummary(row.summary, row.evidenceLinks.map(({ evidence }) => evidenceById.get(evidence.id)!)),
     status: row.status,
     problemDomain: row.problemDomain,
     businessProcess: row.businessProcess,
-    evidence: row.evidenceLinks.map(({ evidence }) => evidenceSummary(evidence)),
+    evidence: row.evidenceLinks.map(({ evidence }) => evidenceSummary(evidenceById.get(evidence.id)!)),
   }));
 
   const recommendationDtos = recommendations.map((row) => ({
@@ -493,7 +511,7 @@ export async function getDiagnosticWorkbench(
     diagnosisId: row.diagnosisId,
     domain: row.diagnosis?.problemDomain ?? null,
     businessProcess: row.diagnosis?.businessProcess ?? null,
-    evidence: row.evidenceLinks.map(({ evidence }) => evidenceSummary(evidence)),
+    evidence: row.evidenceLinks.map(({ evidence }) => evidenceSummary(evidenceById.get(evidence.id)!)),
   }));
 
   const hasUnknownFacts =
@@ -590,17 +608,24 @@ export async function getDiagnosticWorkbench(
             }
           : null,
       })),
-      processSnapshots: snapshots.map((snapshot) => ({
-        id: snapshot.id,
-        provenanceClass: 'MEASURED_SNAPSHOT' as const,
-        businessProcess: snapshot.businessProcess,
-        metricVersion: snapshot.metricVersion,
-        observedAt: snapshot.observedAt.toISOString(),
-        inputDigest: snapshot.inputDigest,
-        snapshotDigest: snapshot.snapshotDigest,
-        metrics: projectMetrics(snapshot.metrics),
-        provenance: projectProvenance(snapshot.provenance),
-      })),
+      processSnapshots: snapshots.map((snapshot) => {
+        const basis = projectSnapshotSourceBasis(snapshot.provenance, snapshot.metrics);
+        return {
+          id: snapshot.id,
+          provenanceClass: basis.sourceBasis === 'ESTIMATED'
+            ? 'ESTIMATED_SNAPSHOT' as const
+            : basis.sourceBasis === 'DERIVED'
+              ? 'DERIVED_SNAPSHOT' as const : 'PROCESS_SNAPSHOT' as const,
+          ...basis,
+          businessProcess: snapshot.businessProcess,
+          metricVersion: snapshot.metricVersion,
+          observedAt: snapshot.observedAt.toISOString(),
+          inputDigest: snapshot.inputDigest,
+          snapshotDigest: snapshot.snapshotDigest,
+          metrics: projectMetrics(snapshot.metrics),
+          provenance: projectProvenance(snapshot.provenance),
+        };
+      }),
     },
     problems: {
       domains: domains.map((domain) => ({
@@ -636,13 +661,14 @@ export async function getDiagnosticWorkbench(
       })),
       research: researchEvidence.map((record) => ({
         id: record.id,
+        sourceBasis: evidenceById.get(record.id)!.sourceBasis,
         provenanceClass: 'RESEARCH_EVIDENCE' as const,
-        kind: record.kind,
-        title: record.title,
+        kind: evidenceById.get(record.id)!.kind,
+        title: evidenceById.get(record.id)!.title,
         origin: record.origin,
         boundedClaim: record.boundedClaim,
         verificationStatus: record.verificationStatus,
-        strength: record.strength,
+        strength: evidenceById.get(record.id)!.strength,
         domainKeys: record.domainKeys,
       })),
     },

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { sourceBasisLabelHu } from "@/lib/growApi";
 import type { DiagnosticWorkbenchDto } from "@/lib/diagnosticWorkbenchApi";
 import {
   PROVENANCE_LABELS_HU,
@@ -311,6 +312,7 @@ export function EvidenceSufficiencyPanel({
                       ) : null}
 
                       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] text-[var(--adm-text-muted)] pt-1">
+                        <span data-testid="diagnostic-evidence-source-basis">{sourceBasisLabelHu(res.sourceBasis)}</span>
                         <span>Eredet: {res.origin || "—"}</span>
                         <span>Hitelesítés: {verificationStatusLabelHu(res.verificationStatus)}</span>
                         <span>Erősség: {res.strength}</span>
@@ -372,6 +374,7 @@ export function EvidenceSufficiencyPanel({
                       ) : null}
 
                       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] text-[var(--adm-text-muted)] pt-1">
+                        <span data-testid="diagnostic-evidence-source-basis">{sourceBasisLabelHu(res.sourceBasis)}</span>
                         <span>Eredet: {res.origin || "—"}</span>
                         <span>Hitelesítés: {verificationStatusLabelHu(res.verificationStatus)}</span>
                         <span>Erősség: {res.strength}</span>

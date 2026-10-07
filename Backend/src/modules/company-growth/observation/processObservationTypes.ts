@@ -5,6 +5,7 @@
  */
 
 import { ProcessMetricValue } from '../metrics/metricTypes';
+import { SnapshotSourceProjection } from './sourceBasis';
 
 export interface CaptureProcessObservationInput {
   clientId: string;
@@ -20,7 +21,7 @@ export interface ProcessObservationProvenance {
   inputFieldInventory: string[];
 }
 
-export interface ProcessObservationSnapshotDTO {
+export interface ProcessObservationSnapshotDTO extends SnapshotSourceProjection {
   id: string;
   clientId: string;
   businessProcessId: string;

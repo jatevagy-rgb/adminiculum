@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { clientWorkspaceApi, type CompanyDataRoom } from "@/lib/clientWorkspaceApi";
-import { growApi } from "@/lib/growApi";
+import { growApi, sourceBasisLabelHu } from "@/lib/growApi";
 import { companyFactTypeLabel, factVerificationLabel } from "@/lib/clientCompanyApi";
 import { GrowProcessMap } from "@/components/clients/GrowProcessMap";
 import { ClientCompanyOperationsLegacy } from "@/components/clients/ClientCompanyOperationsLegacy";
@@ -406,10 +406,10 @@ function ProcessSnapshotCapture({
     setCaptureError(null);
     try {
       await growApi.captureProcessObservation(clientId, processId);
-      setMessage("Mérés rögzítve.");
+      setMessage("Folyamatpillanatkép rögzítve.");
       onCaptured();
     } catch {
-      setCaptureError("A mérés rögzítése nem sikerült.");
+      setCaptureError("A folyamatpillanatkép rögzítése nem sikerült.");
     } finally {
       setBusy(false);
     }
@@ -424,7 +424,7 @@ function ProcessSnapshotCapture({
         data-testid={`capture-process-snapshot-${processId}`}
         className="rounded-xl border border-[var(--adm-green-800)] bg-white px-3.5 py-1.5 text-xs font-semibold text-[#014337] shadow-xs transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-[#014337]"
       >
-        {busy ? "Rögzítés…" : "Mérés rögzítése"}
+        {busy ? "Rögzítés…" : "Folyamatpillanatkép rögzítése"}
       </button>
       {message ? (
         <span className="text-xs font-semibold text-emerald-800" role="status">
@@ -736,7 +736,7 @@ export function ClientCompanyWorkspace({
                     </p>
                     <p>
                       Módszertan: <span className="font-medium text-stone-800">Becsült értékek</span> a lépéseknél,{" "}
-                      <span className="font-medium text-stone-800">Mért pillanatkép</span> a lezárt mérési periódusokból.
+                      <span className="font-medium text-stone-800">Folyamatpillanatkép</span> a rögzített folyamatállapotból, a bemenetek forrásalapjának megőrzésével.
                     </p>
                     {room.processes.length === 0 ? (
                       <p className="text-stone-500">Nincs rögzített folyamat.</p>
@@ -1197,10 +1197,10 @@ export function ClientCompanyWorkspace({
                     {process.latestMeasuredSnapshot ? (
                       <div className="mt-4 rounded-xl border border-emerald-200/80 bg-emerald-50/40 p-3.5">
                         <p className="text-xs font-semibold text-emerald-950">
-                          Mért pillanatkép · {dateText(process.latestMeasuredSnapshot.observedAt)}
+                          {sourceBasisLabelHu(process.latestMeasuredSnapshot.sourceBasis)} · {dateText(process.latestMeasuredSnapshot.observedAt)}
                         </p>
                         <p className="mt-1 text-[11px] text-emerald-900">
-                          Kanonikus mérési verzió: {process.latestMeasuredSnapshot.metricVersion}
+                          Számítási verzió: {process.latestMeasuredSnapshot.metricVersion}
                           {process.latestMeasuredSnapshot.provenanceSource
                             ? ` · forrás: ${process.latestMeasuredSnapshot.provenanceSource}`
                             : ""}
@@ -1221,12 +1221,12 @@ export function ClientCompanyWorkspace({
                         </ul>
                         <p className="mt-2 text-[11px] text-emerald-900">
                           A pillanatkép a rögzített folyamatállapotból determinisztikusan számított,
-                          digest-ellenőrzött mérés; a lépésszintű percek becslések maradnak. A kettő nem
-                          mosódik össze.
+                          értékeket tartalmaz. A becsült vagy alapértelmezett időkből számított érték
+                          nem empirikus mérés; a tartalmi ujjlenyomat ezt nem változtatja meg.
                         </p>
                       </div>
                     ) : (
-                      <p className="mt-3 text-xs text-stone-500">Ehhez a folyamathoz nincs mért pillanatkép.</p>
+                      <p className="mt-3 text-xs text-stone-500">Ehhez a folyamathoz nincs folyamatpillanatkép.</p>
                     )}
 
                     <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 pt-3">
@@ -1236,7 +1236,7 @@ export function ClientCompanyWorkspace({
                         onCaptured={() => void refreshDataRoom()}
                       />
                       <p className="text-[11px] text-stone-500">
-                        A mérés a rögzített folyamatlépésekből determinisztikusan számított pillanatképet rögzít.
+                        A rögzítés a folyamatlépésekből számított pillanatképet készít; a becsült bemenet becslés marad.
                       </p>
                     </div>
                   </article>

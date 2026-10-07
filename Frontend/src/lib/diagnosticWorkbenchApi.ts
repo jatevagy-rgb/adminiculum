@@ -1,10 +1,13 @@
 import { fetchApi } from "./api";
-import { interventionLabelHu } from "./growApi";
+import { interventionLabelHu, type GrowSourceBasis } from "./growApi";
 
 export type DiagnosticProvenanceClass =
   | "CANONICAL_STATE"
   | "DECLARED_OBSERVATION"
   | "MEASURED_SNAPSHOT"
+  | "ESTIMATED_SNAPSHOT"
+  | "DERIVED_SNAPSHOT"
+  | "PROCESS_SNAPSHOT"
   | "EVIDENCE_RECORD"
   | "RESEARCH_EVIDENCE"
   | "DERIVED_DIAGNOSIS"
@@ -111,7 +114,9 @@ export interface DiagnosticWorkbenchDto {
     }>;
     processSnapshots: Array<{
       id: string;
-      provenanceClass: "MEASURED_SNAPSHOT";
+      provenanceClass: "MEASURED_SNAPSHOT" | "ESTIMATED_SNAPSHOT" | "DERIVED_SNAPSHOT" | "PROCESS_SNAPSHOT";
+      sourceBasis?: GrowSourceBasis | null;
+      metricSourceBasis?: Array<{ code: string; sourceBasis: GrowSourceBasis | null; sourceFields: string[] }>;
       businessProcess: { id: string; name: string };
       metricVersion: string;
       observedAt: string;
@@ -187,6 +192,7 @@ export interface DiagnosticWorkbenchDto {
     research: Array<{
       id: string;
       provenanceClass: "RESEARCH_EVIDENCE";
+      sourceBasis?: GrowSourceBasis | null;
       kind: string;
       title: string;
       origin: string | null;
@@ -216,6 +222,18 @@ export const PROVENANCE_LABELS_HU: Record<DiagnosticProvenanceClass, { label: st
   MEASURED_SNAPSHOT: {
     label: "Mért folyamatpillanatkép",
     tone: "border-teal-200 bg-teal-50 text-teal-800",
+  },
+  ESTIMATED_SNAPSHOT: {
+    label: "Becslésen alapuló folyamatpillanatkép",
+    tone: "border-amber-200 bg-amber-50 text-amber-800",
+  },
+  DERIVED_SNAPSHOT: {
+    label: "Számított folyamatpillanatkép",
+    tone: "border-slate-200 bg-slate-50 text-slate-800",
+  },
+  PROCESS_SNAPSHOT: {
+    label: "Nem igazolt forrásalapú folyamatpillanatkép",
+    tone: "border-slate-200 bg-slate-50 text-slate-800",
   },
   DERIVED_DIAGNOSIS: {
     label: "Levezetett diagnózis",
