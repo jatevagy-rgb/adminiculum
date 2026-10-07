@@ -90,6 +90,9 @@ test("DW06 writes version identity only as documentId plus explicit historical v
   assert.match(source, /const selectVersion = \(version: DocumentVersionItem/);
   assert.match(source, /versionId: version\.isCurrent \? null : version\.id/);
   assert.match(source, /onClick=\{\(\) => selectVersion\(version\)\}/);
+  assert.match(source, /onClick=\{\(\) => selectVersion\(version, "push", "document"\)\}/);
+  assert.doesNotMatch(source, /selectVersion\(version\); syncWorkspaceModeToUrl/);
+  assert.match(source, /if \(mode === "document"\) params\.delete\("mode"\)/);
   // Promoting or uploading a new current version canonicalizes back to document-only.
   assert.match(source, /syncWorkspaceIdentityToUrl\(\{ documentId: version\.documentId, versionId: null \}, "replace"\)/);
   assert.match(source, /syncWorkspaceIdentityToUrl\(\{ documentId: selectedUploadedDocument\.id, versionId: null \}, "replace"\)/);

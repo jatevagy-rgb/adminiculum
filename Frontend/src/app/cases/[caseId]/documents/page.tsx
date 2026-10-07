@@ -599,8 +599,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const syncWorkspaceIdentityToUrl = useCallback((
     identity: { documentId: string | null; versionId: string | null },
     history: "push" | "replace",
+    mode?: WorkspaceMode,
   ) => {
     const params = new URLSearchParams(searchParams?.toString() || (typeof window !== "undefined" ? window.location.search : ""));
+    if (mode === "document") params.delete("mode");
+    else if (mode) params.set("mode", mode);
     if (identity.documentId) {
       params.set("documentId", identity.documentId);
     } else {
@@ -1513,11 +1516,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   // Explicit version selection keeps the document identity, writes the
   // immutable version id for a historical version, and canonicalizes the
   // current/default version back to the implicit document-only identity.
-  const selectVersion = (version: DocumentVersionItem, history: "push" | "replace" = "push") => {
+  const selectVersion = (version: DocumentVersionItem, history: "push" | "replace" = "push", mode?: WorkspaceMode) => {
     setSelectedVersionId(version.id);
     const documentId = selectedUploadedDocument?.id ?? null;
     if (!documentId) return;
-    syncWorkspaceIdentityToUrl({ documentId, versionId: version.isCurrent ? null : version.id }, history);
+    syncWorkspaceIdentityToUrl({ documentId, versionId: version.isCurrent ? null : version.id }, history, mode);
   };
   const selectedAnnotation = annotations.find((annotation) => annotation.id === selectedAnnotationId) || null;
   const selectedVersionFileType = getFileType(selectedVersion?.originalFileName || selectedUploadedDocument?.fileName);
@@ -3125,7 +3128,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                           <p className="mt-0.5 text-[10px] text-[var(--adm-text-muted)]">{formatShortDate(version.uploadedAt)} · {version.uploadedBy.name} · {getFileType(version.originalFileName)}</p>
                                         </div>
                                         <div className="flex flex-wrap items-center gap-2">
-                                          <AdminButton variant="neutral" size="xs" onClick={() => { selectVersion(version); syncWorkspaceModeToUrl('document', 'push'); }} disabled={isSelected}>{isSelected ? "Megnyitva" : "Megnyitás"}</AdminButton>
+                                          <AdminButton variant="neutral" size="xs" onClick={() => selectVersion(version, "push", "document")} disabled={isSelected}>{isSelected ? "Megnyitva" : "Megnyitás"}</AdminButton>
                                           <AdminButton variant="neutral" size="xs" onClick={() => handleDownloadVersion(version)} disabled={isDownloading === version.id || version.securityScanStatus !== 'CLEAN'}>{isDownloading === version.id ? "Letöltés..." : "Letöltés"}</AdminButton>
                                         </div>
                                       </div>
