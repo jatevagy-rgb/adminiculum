@@ -666,6 +666,7 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
     const otherCaseDocumentId = uuidv4();
     const instructionOnlyId = uuidv4();
     const versionId = uuidv4();
+    const draftVersionId = uuidv4();
     const reviewId = uuidv4();
     const draftReviewId = uuidv4();
     const dueAt = new Date('2026-07-08T10:00:00.000Z');
@@ -681,9 +682,12 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
       await db.documentVersion.create({ data: {
         id: versionId, documentId, version: 1, name: 'Agreement version 1', isCurrent: true, uploadedById: ids.lawyerA,
       } });
+      await db.documentVersion.create({ data: {
+        id: draftVersionId, documentId: instructionOnlyId, version: 1, name: 'Instruction version 1', isCurrent: true, uploadedById: ids.lawyerA,
+      } });
       await db.documentReview.createMany({ data: [
         { id: reviewId, documentId, documentVersionId: versionId, status: 'IN_REVIEW', assignedReviewerId: ids.admin, ownerId: ids.lawyerA, dueAt, createdById: ids.lawyerA },
-        { id: draftReviewId, documentId, documentVersionId: versionId, status: 'DRAFT', dueAt, createdById: ids.lawyerA },
+        { id: draftReviewId, documentId: instructionOnlyId, documentVersionId: draftVersionId, status: 'DRAFT', dueAt, createdById: ids.lawyerA },
       ] });
 
       const caseAgenda = await getWorkflowAgenda({
