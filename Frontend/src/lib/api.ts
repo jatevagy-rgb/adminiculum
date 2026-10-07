@@ -5789,10 +5789,11 @@ export interface ReviewLawyerHandoffPackagePayload {
 }
 
 export async function listCaseHandoffPackages(
-  caseId: string
+  caseId: string,
+  options?: { includeArchived?: boolean }
 ): Promise<LawyerHandoffPackageRecord[]> {
   return fetchApi<LawyerHandoffPackageRecord[]>(
-    `/cases/${encodeURIComponent(caseId)}/handoff-packages`
+    `/cases/${encodeURIComponent(caseId)}/handoff-packages${options?.includeArchived ? '?includeArchived=true' : ''}`
   );
 }
 

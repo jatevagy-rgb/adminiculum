@@ -31,6 +31,7 @@ jest.mock('../src/prisma/prisma.service', () => ({ prisma: prismaDouble }));
 
 import { TaskSubmissionService } from '../src/modules/tasks/taskSubmission.service';
 import { TaskReviewDecisionService } from '../src/modules/tasks/taskReviewDecision.service';
+import { closeCase, getCaseLifecycle } from '../src/modules/cases/lifecycleService';
 import { transitionReview, actorCanDecideReview } from '../src/modules/documents/review/reviewService';
 
 const IDS = {
@@ -158,7 +159,7 @@ function wireSubmissionMocks(options: {
   });
 
   prismaDouble.$transaction = jest.fn().mockImplementation(async (cb: any) => cb(prismaDouble));
-  prismaDouble.$queryRaw = jest.fn().mockResolvedValue([]);
+  prismaDouble.$queryRaw = jest.fn().mockResolvedValue([{ status: 'IN_REVIEW' }]);
   prismaDouble.task = {
     findUnique: jest.fn().mockResolvedValue(task),
     update: jest.fn().mockResolvedValue({}),
@@ -429,6 +430,7 @@ describe('Document review self-approval guard', () => {
   function wireDocReview(actorRole: string) {
     const review = makeDocReview('IN_REVIEW');
     prismaDouble.$transaction = jest.fn().mockImplementation(async (cb: any) => cb(prismaDouble));
+    prismaDouble.$queryRaw = jest.fn().mockResolvedValue([{ status: 'IN_REVIEW' }]);
     prismaDouble.documentReview = {
       findUnique: jest.fn().mockImplementation(async () => {
         if (review.status === 'APPROVED') review.approvedVersionId = IDS.ver2;
@@ -548,7 +550,7 @@ describe('Review decision ETag and idempotency contract', () => {
     decisionCreates = [];
     taskMock = {
       $transaction: jest.fn().mockImplementation(async (cb: any) => cb(taskMock)),
-      $queryRaw: jest.fn().mockResolvedValue([]),
+      $queryRaw: jest.fn().mockResolvedValue([{ status: 'IN_REVIEW' }]),
       task: {
         findUnique: jest.fn().mockResolvedValue({ ...reviewTaskRecord }),
         update: jest.fn().mockResolvedValue({}),
@@ -608,10 +610,82 @@ describe('Review decision ETag and idempotency contract', () => {
       .rejects.toMatchObject({ statusCode: 409, code: 'REVIEW_ALREADY_DECIDED' });
   });
 
+  it.each([
+    ['DRAFT', true], ['PREPARED', true], ['SUBMITTED', true], ['IN_REVIEW', true],
+    ['APPROVED', false], ['REJECTED', false], ['ARCHIVED', false],
+  ])('canonical approval leaves legacy %s and its independent closure count unchanged', async (status, blocksClosure) => {
+    wireDecisionMocks();
+    const legacy = {
+      id: 'legacy-package', caseId: IDS.case, status, packageType: 'FINAL_APPROVAL',
+      preparedById: ids.worker, preparerSummary: 'Unrelated legacy work',
+      sourceDocumentId: IDS.doc, anonymizedDocumentId: 'anon-1', generatedContractId: 'generation-1',
+      legalAnalysisId: 'analysis-1', reviewNotesId: 'notes-1', reviewDecision: null,
+    };
+    const original = { ...legacy };
+    const currentTask = { ...reviewTaskRecord };
+    taskMock.task.findUnique.mockImplementation(async () => currentTask);
+    taskMock.task.update.mockImplementation(async ({ data }: any) => Object.assign(currentTask, data));
+    taskMock.task.count = jest.fn(async ({ where }: any) => {
+      if (where.dueDate) return 0;
+      return Number(where.status.in
+        ? where.status.in.includes(currentTask.status)
+        : !where.status.notIn.includes(currentTask.status));
+    });
+    taskMock.taskSubmission.count = jest.fn(async ({ where }: any) =>
+      Number(submission.status === where.status && (!where.externalActionRequired || submission.externalActionRequired)));
+    taskMock.lawyerHandoffPackage = {
+      count: jest.fn(async ({ where }: any) => Number(where.caseId === legacy.caseId && where.status.in.includes(legacy.status))),
+      create: jest.fn(), update: jest.fn(), updateMany: jest.fn(), upsert: jest.fn(), delete: jest.fn(), deleteMany: jest.fn(),
+    };
+    taskMock.case = {
+      findUnique: jest.fn().mockResolvedValue({
+        ...reviewTaskRecord.case, status: 'IN_REVIEW', completedAt: null,
+        createdAt: new Date('2026-09-30T07:00:00Z'), updatedAt: new Date('2026-09-30T08:00:00Z'),
+        receivedAt: null, assignedLawyer: { id: ids.reviewer, name: 'Reviewer' },
+      }),
+      count: jest.fn().mockResolvedValue(0), update: jest.fn(),
+    };
+    taskMock.documentReview = { count: jest.fn().mockResolvedValue(0) };
+    taskMock.reviewPoint = { count: jest.fn().mockResolvedValue(0) };
+    taskMock.taskSubmissionDocument = { findMany: jest.fn().mockResolvedValue([]) };
+    taskMock.timeEntry = { count: jest.fn().mockResolvedValue(0) };
+    taskMock.billingPreparationItem = { count: jest.fn().mockResolvedValue(0) };
+    taskMock.clientDocumentPublication = { count: jest.fn().mockResolvedValue(0) };
+    Object.assign(prismaDouble, taskMock);
+    const actor = { userId: ids.reviewer, role: 'LAWYER' };
+    const before = await getCaseLifecycle(IDS.case, actor);
+    const service = new TaskReviewDecisionService(taskMock);
+    const detail = await service.getReviewDetail(ids.task, 'sub-1', ids.reviewer);
+    expect(detail.permittedActions.approve).toBe(true);
+    await service.approveSubmission(ids.task, 'sub-1', ids.reviewer, 'legacy-independent-approval', detail.reviewVersion, {});
+    expect(submission.status).toBe('APPROVED');
+    expect(currentTask.status).toBe('DONE');
+    expect(legacy).toEqual(original);
+    for (const method of ['create', 'update', 'updateMany', 'upsert', 'delete', 'deleteMany']) {
+      expect(taskMock.lawyerHandoffPackage[method]).not.toHaveBeenCalled();
+    }
+    const after = await getCaseLifecycle(IDS.case, actor);
+    const handoffBlocker = (dto: any) => dto.blockers.find((blocker: any) => blocker.code === 'ACTIVE_HANDOFF');
+    expect(handoffBlocker(after)).toEqual(handoffBlocker(before));
+    expect(after?.closureReadiness.ready).toBe(!blocksClosure);
+    expect(taskMock.lawyerHandoffPackage.count).toHaveBeenCalledWith({
+      where: { caseId: IDS.case, status: { in: ['DRAFT', 'PREPARED', 'SUBMITTED', 'IN_REVIEW'] } },
+    });
+    if (blocksClosure) {
+      expect(handoffBlocker(after)).toMatchObject({ count: 1 });
+      await expect(closeCase(IDS.case, actor)).rejects.toMatchObject({
+        statusCode: 409, code: 'CLOSURE_BLOCKED', blockers: [expect.objectContaining({ code: 'ACTIVE_HANDOFF', count: 1 })],
+      });
+      expect(taskMock.case.update).not.toHaveBeenCalled();
+    } else {
+      expect(handoffBlocker(after)).toBeUndefined();
+    }
+  });
+
   it('14. revise pins the newly selected exact version through explicit attach', async () => {
     const attachMock: any = {
       $transaction: jest.fn().mockImplementation(async (cb: any) => cb(attachMock)),
-      $queryRaw: jest.fn().mockResolvedValue([]),
+      $queryRaw: jest.fn().mockResolvedValue([{ status: 'IN_REVIEW' }]),
       task: { findUnique: jest.fn().mockResolvedValue(taskRecord()) },
       user: { findUnique: jest.fn().mockImplementation(async ({ where }: any) => USERS[where.id] || null) },
       case: { findUnique: jest.fn().mockResolvedValue({ id: IDS.case, assignedLawyerId: IDS.lawyer, createdById: IDS.supervisor }) },

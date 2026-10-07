@@ -64,9 +64,9 @@ test("No auto-approval or automatic decision is performed", () => {
   assert.match(src, /onClick=\{\(\) => handleReviewDecision\(pkg, "REJECTED_BLOCKING"\)\}/);
 });
 
-test("Existing preparation, submit and archive behaviour stays intact", () => {
+test("Legacy continuation preserves preparation, submit and archive but never creates", () => {
   const src = handoffPanel();
-  assert.match(src, /createCaseHandoffPackage/);
+  assert.doesNotMatch(src, /createCaseHandoffPackage|handleCreateDraft/);
   assert.match(src, /updateHandoffPackage\(pkgId, \{ preparerSummary: summaryDraft \}\)/);
   assert.match(src, /updateHandoffPackage\(pkgId, \{ status: "SUBMITTED" \}\)/);
   assert.match(src, /archiveHandoffPackage\(pkg\.id\)/);
