@@ -744,7 +744,7 @@ export function Dashboard() {
                     Review sor
                   </Link>
                   <Link href="/tasks" className="adm-link-button adm-action-secondary px-3.5 py-2.5">
-                    Mai sor
+                    Munkasor
                   </Link>
                 </div>
               </div>
@@ -793,8 +793,8 @@ export function Dashboard() {
         {/* 3 — Work-section tile dock: fully colored semantic navigation tiles */}
         <section className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6">
           <KpiCard label="Nyitott ügyek" value={openCasesCount} tone="petrol" zeroHint="Nincs betöltött nyitott ügy" href="/cases" />
-          <KpiCard label="Mai teendők" value={openTasks.length} tone="amber" zeroHint="Nincs nyitott teendő" href="/tasks" />
-          <KpiCard label="Közeli határidők" value={upcomingDeadlines.length} tone="yellow" zeroHint="Nincs közeli határidő" href="/deadlines" />
+          <KpiCard label="Nyitott teendők" value={openTasks.length} tone="amber" zeroHint="Nincs nyitott teendő" href="/tasks" />
+          <KpiCard label="Következő határidők" value={upcomingDeadlines.length} tone="yellow" zeroHint="Nincs következő határidő" href="/deadlines" />
           <KpiCard label="Review tételek" value={reviewDocumentCount} tone="navy" zeroHint="Nincs review tétel" href="/reviews" />
           <KpiCard label="Külső kommunikáció" value={externalComms.length} tone="cyan" zeroHint="Nincs új külső jelzés" href="/communications?view=external" />
           <KpiCard label="Belső kommunikáció" value={internalComms.length} tone="petrol" zeroHint="Nincs új belső jelzés" href="/communications?view=internal" />
@@ -851,13 +851,13 @@ export function Dashboard() {
 
           <aside className="grid content-start gap-3">
             <article className="adm-panel adm-panel-accent-amber adm-daily-panel p-3.5">
-              <p className="adm-kicker text-[var(--adm-warm-600)]">Mai sor</p>
+              <p className="adm-kicker text-[var(--adm-warm-600)]">Figyelmet kérő sor</p>
               <h3 className="adm-heading mt-1 text-[24px]">Review · határidő · kommunikáció</h3>
               {loading ? <p className="mt-3 text-xs text-[var(--adm-text-muted)]">Betöltés...</p> : null}
               {!loading && maiSorItems.length === 0 ? (
                 <div className="mt-3 space-y-2">
                   <div className="adm-board-empty adm-board-empty-compact">
-                    <p className="text-xs font-semibold text-[var(--adm-text)]">Üres a mai sor</p>
+                    <p className="text-xs font-semibold text-[var(--adm-text)]">Nincs kiemelt tétel</p>
                     <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Review-, határidős és fontos kommunikációs tételek itt jelennek meg.</p>
                   </div>
                 </div>
