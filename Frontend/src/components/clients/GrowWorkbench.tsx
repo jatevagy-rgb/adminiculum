@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { GrowAssessmentSummaries } from './GrowAssessmentSummaries';
 import {
   AdminButton,
   AdminPanel,
@@ -1470,6 +1471,7 @@ function GrowDataSourcesTab({
         )}
       </AdminPanel>
 
+      <GrowAssessmentSummaries key={clientId} clientId={clientId} />
       <GrowIntake clientId={clientId} onSubmitted={onSubmitted} />
 
       <p className="text-[11px] text-[var(--adm-text-muted)]">

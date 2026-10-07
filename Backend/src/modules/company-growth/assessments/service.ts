@@ -152,7 +152,7 @@ function summaryStatement(attentionAreaCount: number, unknownAreaCount: number):
   return parts.join(' ');
 }
 
-function buildResultDto(
+export function buildResultDto(
   packKey: string,
   packVersion: number,
   answers: readonly AssessmentAnswerInput[],

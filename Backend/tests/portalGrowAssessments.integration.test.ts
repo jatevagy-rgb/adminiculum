@@ -1005,4 +1005,57 @@ d('GROW CUSTOMER ASSESSMENT JOURNEY (PostgreSQL)', () => {
     // ...and the generic pain-intake survey is not displaced by assessment rows.
     expect(keys).toContain('REWORK');
   });
+
+  it('V2: pain routing, strict version, scope isolation, replay and workforce readback', async () => {
+    const headers = { 'x-client-portal-session': sessionAuthA, 'x-client-portal-workspace': wsARef };
+    const api = '/api/v1/client-portal/org/grow-assessments';
+    const journey = await httpRequest(app, 'GET', api + '/journey', headers);
+    expect(journey.status).toBe(200);
+    expect(journey.body.categories).toHaveLength(8);
+    expect(journey.body.branches).toHaveLength(6);
+    expect((await httpRequest(app, 'GET', api + '/journey', { ...headers, 'x-client-portal-workspace': wsBRef })).status).toBe(403);
+    const other = await httpRequest(app, 'GET', api + '/journey', { 'x-client-portal-session': sessionAuthB, 'x-client-portal-workspace': wsBRef });
+    expect(other.body.resumeScope).not.toBe(journey.body.resumeScope);
+    const pain = await httpRequest(app, 'POST', api + '/journey/pain', headers, { categories: ['REWORK', 'DUPLICATE_DATA'], idempotencyKey: crypto.randomUUID() });
+    expect(pain.status).toBe(200);
+    expect(pain.body.routes.map((r: any) => r.packKey)).toEqual(['PROCESS_STABILITY_REWORK_V2', 'DATA_FLOW_V2']);
+    for (const categories of [[], ['UNKNOWN'], ['REWORK', 'REWORK'], ['REWORK', 'DUPLICATE_DATA', 'GENERAL_CONCERN', 'MANUAL_ADMIN']]) {
+      expect((await httpRequest(app, 'POST', api + '/journey/pain', headers, { categories, idempotencyKey: crypto.randomUUID() })).status).toBe(400);
+    }
+    const quick = { answers: answersFor('QUICK_SCAN_V2', { qs_typical_system_count: 'FIVE_PLUS' }), idempotencyKey: crypto.randomUUID() };
+    expect((await httpRequest(app, 'POST', api + '/QUICK_SCAN_V2/submissions', headers, quick)).status).toBe(400);
+    const completed = await httpRequest(app, 'POST', api + '/QUICK_SCAN_V2/submissions', headers, { ...quick, packVersion: 2 });
+    expect(completed.status).toBe(201);
+    expect(completed.body.result.findings).toEqual([]);
+    expect(completed.body.result.routingOptions.map((r: any) => r.packKey)).toEqual(['DATA_FLOW_V2']);
+    const processId = crypto.randomUUID(); const foreignId = crypto.randomUUID(); const archivedId = crypto.randomUUID();
+    await db.businessProcess.createMany({ data: [
+      { id: processId, clientId: ids.clientA, name: 'V2 számlázás', status: 'ACTIVE' },
+      { id: foreignId, clientId: ids.clientB, name: 'Másik ügyfél', status: 'ACTIVE' },
+      { id: archivedId, clientId: ids.clientA, name: 'Archivált', status: 'ARCHIVED' },
+    ] as never });
+    const payload = { packVersion: 2, answers: answersFor('OWNERSHIP_V2', { v2_process_owner: 'NO' }), idempotencyKey: crypto.randomUUID(), processId };
+    const before = await Promise.all([db.recommendationCandidate.count({ where: { clientId: ids.clientA } }), db.improvementOpportunity.count({ where: { clientId: ids.clientA } }), db.developmentInitiative.count({ where: { clientId: ids.clientA } }), db.task.count({ where: { case: { clientId: ids.clientA } } })]);
+    for (const invalid of [undefined, foreignId, archivedId]) expect((await httpRequest(app, 'POST', api + '/OWNERSHIP_V2/submissions', headers, { ...payload, processId: invalid, idempotencyKey: crypto.randomUUID() })).status).toBe(400);
+    const saved = await httpRequest(app, 'POST', api + '/OWNERSHIP_V2/submissions', headers, payload);
+    expect(saved.status).toBe(201); expect(saved.body.result.packVersion).toBe(2);
+    expect(saved.body.result.findings[0].nextCheckHu).toBeTruthy(); expect(saved.body.result.findings[0].evidence.length).toBeGreaterThan(0);
+    const replay = await httpRequest(app, 'POST', api + '/OWNERSHIP_V2/submissions', headers, payload);
+    expect(replay.body.submission.replayed).toBe(true);
+    expect((await httpRequest(app, 'POST', api + '/OWNERSHIP_V2/submissions', headers, { ...payload, answers: answersFor('OWNERSHIP_V2') })).status).toBe(409);
+    const row = await db.observation.findFirstOrThrow({ where: { clientId: ids.clientA, idempotencyKey: payload.idempotencyKey } });
+    expect((row.rawPayload as any).schema).toBe('GROW_ASSESSMENT_V2');
+    const signals = observationToGrowSignals(row);
+    expect(signals.every(signal => signal.businessProcessId === processId && signal.declared && !signal.measured)).toBe(true);
+    expect(signals.some(signal => signal.provenance.defersAutomation)).toBe(true);
+    const read = await httpRequest(app, 'GET', api + '/OWNERSHIP_V2?processId=' + processId, headers);
+    expect(read.body.latestResult).toEqual(saved.body.result);
+    expect((await httpRequest(app, 'GET', api + '/OWNERSHIP_V2?processId=' + processId, { 'x-client-portal-session': sessionAuthB, 'x-client-portal-workspace': wsBRef })).status).toBe(404);
+    const { listGrowAssessmentSummaries } = await import('../src/modules/company-growth/assessments/workforce');
+    const workforce = await listGrowAssessmentSummaries(admin, ids.clientA, db);
+    const summary = workforce.items.find(item => item.id === row.id)!;
+    expect(summary.processName).toBe('V2 számlázás'); expect(summary.result).toEqual(saved.body.result); expect(summary.answers).toHaveLength(3);
+    await expect(listGrowAssessmentSummaries({ userId: ids.authorizedIdentity, role: 'CLIENT_PORTAL' }, ids.clientA, db)).rejects.toBeTruthy();
+    expect(await Promise.all([db.recommendationCandidate.count({ where: { clientId: ids.clientA } }), db.improvementOpportunity.count({ where: { clientId: ids.clientA } }), db.developmentInitiative.count({ where: { clientId: ids.clientA } }), db.task.count({ where: { case: { clientId: ids.clientA } } })])).toEqual(before);
+  });
 });

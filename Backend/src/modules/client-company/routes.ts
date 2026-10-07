@@ -19,6 +19,7 @@ import {
   captureProcessObservation,
 } from '../company-growth/observation/processObservationService';
 import { submitSurveyIntake, listSurveyIntakes } from '../company-observatory/intake';
+import { listGrowAssessmentSummaries } from '../company-growth/assessments/workforce';
 import { ObservatoryIngestionService } from '../company-observatory/ingestion/service';
 import {
   importExternalOpportunityBatch,
@@ -53,6 +54,10 @@ function fail(res: Response, error: unknown): void {
 }
 
 clientCompanyRouter.use(authenticate);
+
+clientCompanyRouter.get('/clients/:clientId/grow/assessment-summaries', async (req, res) => {
+  try { res.json(await listGrowAssessmentSummaries(actor(req), String(req.params.clientId))); } catch (e) { fail(res, e); }
+});
 
 // Operating profile
 clientCompanyRouter.get('/clients/:clientId/operating-profile', async (req, res) => {
