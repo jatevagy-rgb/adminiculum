@@ -88,3 +88,29 @@ test('old overdue dates never enter Today; tomorrow and this week share next sev
   tree = h.commit();
   assert.deepEqual(flatten(tree).filter((node) => node.props?.item).map((node) => node.props.item.id), ['tomorrow', 'week']);
 });
+
+test('canonical document work and exact-version review rows keep type and destination visible', async () => {
+  const { h, calls } = setup();
+  const common = { title: 'Határidős dokumentum', safeDescription: null, temporalType: 'TIMESTAMP', allDay: false,
+    responsibility: { assignee: null, responsibleLawyer: null }, capabilities: { canComplete: false, canReschedule: false } };
+  const work = { ...common, id: 'DOCUMENT_WORK:doc-a', sourceType: 'DOCUMENT_WORK', dueAt: '2026-10-07T12:00:00Z', urgency: 'TODAY', status: 'OPEN',
+    caseId: 'case-a', href: '/cases/case-a/documents?documentId=doc-a', source: { displayName: 'Dokumentummunka' } };
+  const review = { ...common, id: 'DOCUMENT_REVIEW:review-a', sourceType: 'DOCUMENT_REVIEW', dueAt: '2026-10-07T13:00:00Z', urgency: 'TODAY', status: 'OPEN',
+    caseId: 'case-a', href: '/cases/case-a/documents?documentId=doc-a&versionId=v2&mode=review', source: { displayName: 'Verziófelülvizsgálat' } };
+  h.commit();
+  calls[0].response.resolve({ ...result('unused'), days: [{ date: '2026-10-07', items: [
+    work, review,
+  ] }] });
+  calls[1].response.resolve(result('none'));
+  await settle();
+  const items = flatten(h.commit()).filter((node) => node.props?.item?.sourceType?.startsWith('DOCUMENT'));
+  assert.deepEqual(items.map((node) => node.props.item.href), [work.href, review.href]);
+  const card = createRaceHarness('src/app/deadlines/page.tsx', 'AgendaItemCard', {
+    'next/navigation': { useSearchParams: () => new URLSearchParams() },
+    'next/link': { default: 'a' },
+    '@/lib/businessDateTime': dates,
+    '@/components/ui': { Button: 'button', Alert: 'alert', PageHeader: 'header', EmptyState: 'empty', Badge: 'badge' },
+  });
+  assert.match(textOf(card.commit({ item: work, busyId: null, onComplete() {}, onReschedule() {} })), /Dokumentummunka határideje[\s\S]*Dokumentummunka megnyitása/);
+  assert.match(textOf(card.commit({ item: review, busyId: null, onComplete() {}, onReschedule() {} })), /Verziófelülvizsgálat határideje[\s\S]*Pontos verzió felülvizsgálata/);
+});
