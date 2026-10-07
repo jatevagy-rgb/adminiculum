@@ -151,7 +151,7 @@ export async function getComplianceCenterOverview(
   const [findings, staleEvidence, controlsDue, clients] = await Promise.all([
     prisma.assessmentFinding.findMany({
       where: { status: { not: 'RESOLVED' }, ...clientWhere(clientScope) },
-      select: { id: true, clientId: true, title: true, createdAt: true },
+      select: { id: true, clientId: true, title: true },
     }),
     prisma.evidenceRecord.findMany({
       where: {
@@ -260,7 +260,7 @@ export async function getComplianceCenterOverview(
       clientName: rows.get(finding.clientId)?.clientName ?? finding.clientId,
       refId: finding.id,
       title: finding.title,
-      dueAt: finding.createdAt.toISOString(),
+      dueAt: null,
     })),
     ...staleEvidence.map((evidence) => ({
       kind: 'STALE_EVIDENCE' as const,

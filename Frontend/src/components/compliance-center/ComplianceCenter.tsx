@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getCaseById, getDocumentById, getDocumentVersions } from "@/lib/api";
 import { resolveComplianceDocumentUrl } from "@/lib/complianceDocumentNavigation";
+import { portfolioAttention } from "@/lib/compliancePortfolioAttention";
 import {
   complianceCenterApi,
   type ComplianceCenterOverview,
@@ -44,16 +45,17 @@ function formatDate(value: string | null): string {
   }
 }
 
-function SummaryStrip({ overview }: { overview: ComplianceCenterOverview }) {
+function SummaryStrip({ overview, attentionClientsCount }: { overview: ComplianceCenterOverview; attentionClientsCount: number }) {
   const cells = [
-    { label: "Aktív ügyfelek", value: overview.summary.clientsWithOpenWork },
+    { label: "Jogosult ügyfelek", value: overview.clients.length },
+    { label: "Figyelmet kérő ügyfelek", value: attentionClientsCount },
     { label: "Nyitott megállapítás", value: overview.summary.openFindings },
     { label: "Elavult bizonyíték", value: overview.summary.staleEvidence },
     { label: "Lejárt kontroll-felülvizsgálat", value: overview.summary.controlsNeedingReview },
     { label: "Jogforrás felülvizsgálat", value: overview.summary.legalSourcesReviewRequired },
   ];
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
       {cells.map((cell) => (
         <AdminPanel key={cell.label} className="p-3">
           <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">{cell.label}</p>
@@ -208,6 +210,7 @@ export function ComplianceCenter() {
   );
 
   const reviewWork = overview?.reviewWork ?? [];
+  const attentionClients = overview ? portfolioAttention(overview) : [];
   const reviewRequiredSources = overview?.legalSources.filter((source) => source.reviewRequired) ?? [];
   const monitoredFamilies = families.filter((family) => family.legalSources.length > 0);
 
@@ -245,9 +248,42 @@ export function ComplianceCenter() {
           <SafePanelError onRetry={load} detail={error ?? "A megfelelőségi központ nem érhető el."} />
         ) : view === "overview" ? (
           <>
-            <SummaryStrip overview={overview} />
+            <SummaryStrip overview={overview} attentionClientsCount={attentionClients.length} />
             <section className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-4">
-              <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">Ügyfelek megfelelőségi állapota</h2>
+              <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">Figyelmet kérő ügyfelek</h2>
+              <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Csak rögzített megállapítás, lejárt bizonyíték és esedékes kontroll-felülvizsgálat szerepel itt. Ez nem megfelelőségi minősítés. Az aktív ügyfelek külön száma nem része a kimutatásnak.</p>
+              {attentionClients.length === 0 ? (
+                <p className="mt-3 text-sm text-[var(--adm-text-muted)]">A jogosult ügyfeleknél nincs rögzített, ebbe a listába tartozó teendő.</p>
+              ) : (
+                <div className="mt-4 space-y-3" data-testid="compliance-portfolio-attention">
+                  {attentionClients.map(({ client, work, attentionCount }) => (
+                    <article key={client.clientId} className="min-w-0 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <h3 className="break-words font-semibold text-[var(--adm-text)]">{client.clientName}</h3>
+                          <p className="mt-1 text-xs text-[var(--adm-text-muted)]">{attentionCount} rögzített figyelmi tétel · Felelős nincs rögzítve ebben a kimutatásban.</p>
+                        </div>
+                        <Link href={`/clients/${encodeURIComponent(client.clientId)}/compliance`} className="shrink-0 text-xs font-semibold text-[var(--adm-green-800)] hover:underline">Ügyfél megfelelősége →</Link>
+                      </div>
+                      <ul className="mt-3 grid gap-2 md:grid-cols-2">
+                        {work.map((item) => (
+                          <li key={`${item.kind}-${item.refId}`} className="min-w-0 border-l-2 border-[var(--adm-green-800)] pl-3 text-xs">
+                            <span className="font-semibold text-[var(--adm-text)]">{workKindLabels[item.kind]}: {item.title}</span>
+                            <span className="mt-1 block text-[var(--adm-text-muted)]">
+                              {item.kind === "FINDING" ? "Határidő nincs rögzítve"
+                                : item.kind === "STALE_EVIDENCE" ? `Bizonyíték érvényessége: ${formatDate(item.dueAt)}`
+                                  : `Kontroll felülvizsgálata: ${formatDate(item.dueAt)}`}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+            <details className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-4">
+              <summary className="cursor-pointer text-xs font-semibold text-[var(--adm-green-800)]">Teljes jogosult ügyféllista ({overview.clients.length})</summary>
               {overview.clients.length === 0 ? (
                 <p className="mt-3 text-sm text-[var(--adm-text-muted)]">Nincs jogosult ügyfél.</p>
               ) : (
@@ -278,7 +314,7 @@ export function ComplianceCenter() {
                   </DataTable>
                 </div>
               )}
-            </section>
+            </details>
           </>
         ) : view === "legal-sources" ? (
           <div className="space-y-5">
