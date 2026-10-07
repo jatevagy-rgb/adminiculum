@@ -555,7 +555,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const requestedDocumentId = searchParams?.get("documentId") ?? null;
-  const requestedVersionId = searchParams?.get("versionId") ?? null;
+  const requestedVersionId = searchParams?.get("versionId") ?? (!requestedDocumentId && typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("versionId")
+    : null);
   const requestedMode = searchParams?.get("mode") ?? null;
   // Canonical four-mode key. `mode` absent => document. Only known keys bind;
   // anything else falls back to the default document mode.
@@ -598,7 +600,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     identity: { documentId: string | null; versionId: string | null },
     history: "push" | "replace",
   ) => {
-    const params = new URLSearchParams(searchParams?.toString());
+    const params = new URLSearchParams(searchParams?.toString() || (typeof window !== "undefined" ? window.location.search : ""));
     if (identity.documentId) {
       params.set("documentId", identity.documentId);
     } else {

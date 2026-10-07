@@ -76,6 +76,10 @@ test("DW01 resolves every selectable ledger kind from the URL and clears a delet
 
 test("DW06 writes version identity only as documentId plus explicit historical versionId", () => {
   assert.match(source, /const requestedVersionId = searchParams\?\.get\("versionId"\)/);
+  assert.match(source, /!requestedDocumentId && typeof window !== "undefined"[\s\S]*?new URLSearchParams\(window\.location\.search\)\.get\("versionId"\)/);
+  assert.match(source, /const requestedVersionIdRef = useRef<string \| null>\(requestedVersionId\)/);
+  assert.match(source, /const params = new URLSearchParams\(searchParams\?\.toString\(\) \|\| \(typeof window !== "undefined" \? window\.location\.search : ""\)\)/);
+  assert.match(source, /versionId: requestedVersionIdRef\.current/);
   assert.match(source, /params\.set\("versionId", identity\.versionId\)/);
   assert.match(source, /params\.delete\("versionId"\)/);
   // A versionId is only ever written together with its documentId.
