@@ -14,7 +14,7 @@
 export const VERSION_TEXT_NO_EXTRACTABLE_TEXT =
   'Ehhez a verzióhoz nem érhető el géppel kinyerhető szöveg.';
 export const VERSION_TEXT_REQUEST_FAILED =
-  'A szöveges előnézet jelenleg nem tölthető be. A dokumentum és a verzió letöltése továbbra is elérhető.';
+  'A szöveges előnézet jelenleg nem tölthető be. A letöltés elérhetősége külön ellenőrizhető.';
 export const VERSION_TEXT_VERSION_NOT_FOUND =
   'A kiválasztott verzió szövege nem érhető el.';
 export const VERSION_TEXT_SCAN_BLOCKED =

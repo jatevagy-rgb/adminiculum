@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { VERSION_TEXT_REQUEST_FAILED, versionTextRequestFailureMessage } from "../src/lib/documents/versionTextAvailability";
 
 const read = (file: string) => readFileSync(path.resolve(process.cwd(), file), "utf8");
 
@@ -82,6 +83,18 @@ test("Current and historical DOCX/PDF versions load exact version text (B + C)",
   assert.match(source, /setVersionTextUnavailableReason\(outcome\.unavailableReason \|\| VERSION_TEXT_NO_EXTRACTABLE_TEXT\)/);
   assert.match(source, /versionTextRequestFailureMessage\(error\)/);
   assert.doesNotMatch(source, /Nincs elérhető szöveg/);
+});
+
+test("unavailable exact-version preview never guarantees download or substitutes another version", () => {
+  const page = documentPage();
+  assert.equal(versionTextRequestFailureMessage({ status: 503 }), VERSION_TEXT_REQUEST_FAILED);
+  assert.match(VERSION_TEXT_REQUEST_FAILED, /letöltés elérhetősége külön ellenőrizhető/);
+  for (const source of [page, VERSION_TEXT_REQUEST_FAILED]) {
+    assert.doesNotMatch(source, /verziók továbbra is elérhetők; próbáld letölteni|letöltése továbbra is elérhető/);
+  }
+  assert.match(page, /setActionResult\(\{ type: 'error', message: 'Verzió letöltése sikertelen\.' \}\)/);
+  assert.match(page, /getDocumentVersionText\(selectedVersionDocumentId, selectedVersionStableId\)/);
+  assert.doesNotMatch(page, /setVersionText\(documentTextPreview\)/);
 });
 
 test("Legacy non-extractable current versions keep the document-level preview", () => {
