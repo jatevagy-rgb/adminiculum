@@ -70,6 +70,10 @@ function makeCaseHarness() {
     },
     '@/components/adminiculum/OperationalPrimitives': { SafePanelError: 'div' },
     '@/components/documents/AnonymizeModal': { AnonymizeModal: 'div' },
+    '@/components/documents/anonymizationCapability': {
+      useAnonymizationCapability: () => ({ status: 'DISABLED', retry: () => {} }),
+      AnonymizationCapabilityNotice: 'div',
+    },
     '@/components/documents/RehydrateModal': { RehydrateModal: 'div' },
     '@/components/cases/CaseWorkspaceNav': { CaseWorkspaceNav: 'div' },
     '@/components/cases/CaseWorkspaceOverview': { CaseWorkspaceOverview: 'div' },
