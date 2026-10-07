@@ -38,6 +38,8 @@ function deadlineGroup(urgency: WorkflowDeadlineUrgency): DeadlineGroup {
 const SOURCE_LABELS: Record<string, string> = {
   TASK: "Feladat-határidő",
   CASE_DEADLINE: "Ügyhatáridő",
+  DOCUMENT_WORK: "Dokumentummunka határideje",
+  DOCUMENT_REVIEW: "Verziófelülvizsgálat határideje",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -50,6 +52,8 @@ const STATUS_LABELS: Record<string, string> = {
 function openCtaLabel(item: WorkflowDeadlineItem, caseHref: string): string {
   if (item.href === caseHref || item.sourceType === "CASE_DEADLINE") return "Ügy megnyitása";
   if (item.sourceType === "TASK") return "Feladat megnyitása";
+  if (String(item.sourceType) === "DOCUMENT_WORK") return "Dokumentummunka megnyitása";
+  if (String(item.sourceType) === "DOCUMENT_REVIEW") return "Pontos verzió felülvizsgálata";
   return "Megnyitás";
 }
 

@@ -1,6 +1,6 @@
 import { addCalendarDays, businessDateKey } from './businessTime';
 
-export type WorkflowDeadlineSourceType = 'TASK' | 'CASE_DEADLINE';
+export type WorkflowDeadlineSourceType = 'TASK' | 'CASE_DEADLINE' | 'DOCUMENT_WORK' | 'DOCUMENT_REVIEW';
 export type WorkflowDeadlineStatus = 'OPEN' | 'COMPLETED' | 'CANCELLED' | 'SUPERSEDED';
 export type WorkflowDeadlineUrgency = 'OVERDUE' | 'TODAY' | 'TOMORROW' | 'THIS_WEEK' | 'LATER';
 export type WorkflowDeadlineImportance = 'CRITICAL' | 'HIGH' | 'NORMAL' | 'LOW' | 'UNSPECIFIED';
@@ -35,7 +35,7 @@ export interface WorkflowDeadlineDto {
     responsibleLawyer?: { id: string; displayName: string } | null;
   };
   source: {
-    type: 'TASK' | 'CASE';
+    type: 'TASK' | 'CASE' | 'DOCUMENT';
     id: string;
     displayName?: string | null;
     href?: string | null;
@@ -137,6 +137,8 @@ const IMPORTANCE_RANK: Record<WorkflowDeadlineImportance, number> = {
 const SOURCE_RANK: Record<WorkflowDeadlineSourceType, number> = {
   TASK: 0,
   CASE_DEADLINE: 1,
+  DOCUMENT_WORK: 2,
+  DOCUMENT_REVIEW: 3,
 };
 
 export function compareDeadlines(left: WorkflowDeadlineDto, right: WorkflowDeadlineDto, currentUserId?: string): number {
