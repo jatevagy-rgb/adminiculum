@@ -9,7 +9,7 @@ export function GrowOutcomeComparison({ outcome }: { outcome: OutcomeMeasurement
       {outcome.metricsSummary?.before ? (
         <BeforeAfterTable summary={outcome.metricsSummary} />
       ) : (
-        <p className="mt-3 text-xs text-[#788274]" data-testid="outcome-no-measurement">
+        <p className="mt-3 text-xs text-[var(--adm-text-muted)]" data-testid="outcome-no-measurement">
           Nincs mérési adat.
         </p>
       )}
@@ -34,14 +34,14 @@ function BeforeAfterTable({ summary }: { summary: NonNullable<OutcomeMeasurement
     <div className="mt-4 overflow-x-auto">
       <table className="w-full text-left text-xs">
         <thead>
-          <tr className="border-b border-[#f0ece1] text-[10px] font-bold uppercase tracking-wider text-[#667062]">
+          <tr className="border-b border-[var(--adm-border)] text-[10px] font-bold uppercase tracking-wider text-[var(--adm-text-muted)]">
             <th className="pb-2">Mutató</th>
             <th className="pb-2 text-right">Előtte</th>
             <th className="pb-2 text-right">Most</th>
             <th className="pb-2 text-right">Változás</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-[#f0ece1]">
+        <tbody className="divide-y divide-[var(--adm-border)]">
           {rows.map((key) => {
             const b = before[key];
             const a = after?.[key];
@@ -49,16 +49,16 @@ function BeforeAfterTable({ summary }: { summary: NonNullable<OutcomeMeasurement
             const delta = hasDelta ? b - a : null;
             return (
               <tr key={key}>
-                <td className="py-2 text-[#556052]">{labels[key]}</td>
-                <td className="py-2 text-right font-medium text-[#1b382b]">{b != null ? `${Math.round(b)} p` : "—"}</td>
-                <td className="py-2 text-right font-medium text-[#1b382b]">{a != null ? `${Math.round(a)} p` : "—"}</td>
+                <td className="py-2 text-[var(--adm-text-muted)]">{labels[key]}</td>
+                <td className="py-2 text-right font-medium text-[var(--adm-text)]">{b != null ? `${Math.round(b)} p` : "—"}</td>
+                <td className="py-2 text-right font-medium text-[var(--adm-text)]">{a != null ? `${Math.round(a)} p` : "—"}</td>
                 <td
                   className={`py-2 text-right font-semibold ${
                     delta != null && delta > 0
-                      ? "text-[#2d5a43]"
+                      ? "text-[var(--adm-green-800)]"
                       : delta != null && delta < 0
-                        ? "text-[#c85a32]"
-                        : "text-[#788274]"
+                        ? "text-[var(--adm-terracotta-700)]"
+                        : "text-[var(--adm-text-muted)]"
                   }`}
                 >
                   {delta == null ? "—" : delta === 0 ? "0 p" : `${delta > 0 ? "−" : "+"}${Math.abs(Math.round(delta))} p`}
@@ -89,11 +89,11 @@ function RoiBlock({ roi }: { roi: NonNullable<OutcomeMeasurementDTO["roi"]> }) {
     v ? `${Math.round(v.low)}–${Math.round(v.base)}–${Math.round(v.high)} ${unit}` : "—";
 
   return (
-    <div className="mt-4 rounded-2xl border border-[#e8ded1] bg-[#faf6ee]/70 p-4">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">
+    <div className="mt-4 rounded-[var(--adm-radius-lg)] border border-[var(--adm-border)] bg-[var(--adm-surface)]/70 p-4">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--adm-text-muted)]">
         Becsült hatás (alacsony / közép / magas)
       </p>
-      <div className="mt-2 grid gap-1 text-xs text-[#1b382b]">
+      <div className="mt-2 grid gap-1 text-xs text-[var(--adm-text)]">
         <p>
           Megtakarított idő / hónap: <span className="font-bold">{fmt(time, "perc")}</span>
         </p>
@@ -107,23 +107,23 @@ function RoiBlock({ roi }: { roi: NonNullable<OutcomeMeasurementDTO["roi"]> }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="mt-2 text-xs font-semibold text-[#2d5a43] hover:text-[#1b382b] hover:underline"
+        className="mt-2 text-xs font-semibold text-[var(--adm-green-800)] hover:text-[var(--adm-text)] hover:underline"
         aria-expanded={open}
       >
         Hogyan számoltuk?
       </button>
       {open && roi.provenance ? (
-        <dl className="mt-3 grid grid-cols-[minmax(90px,auto)_1fr] gap-x-3 gap-y-1.5 border-t border-[#e8ded1] pt-3 text-[11px]">
-          <dt className="text-[#667062]">Alap</dt>
-          <dd className="text-[#1b382b]">{outcomeBasisLabelHu(roi.basis)}</dd>
-          <dt className="text-[#667062]">Származás</dt>
-          <dd className="text-[#1b382b]">{roiProvenanceLabelHu(roi.provenanceType ?? roi.provenance?.type)}</dd>
-          <dt className="text-[#667062]">Képlet</dt>
-          <dd className="text-[#1b382b]">{roi.provenance.formulaVersion}</dd>
-          <dt className="text-[#667062]">Számítva</dt>
-          <dd className="text-[#1b382b]">{new Date(roi.provenance.computedAt).toLocaleString("hu-HU")}</dd>
-          <dt className="text-[#667062]">Magyarázat</dt>
-          <dd className="text-[#1b382b]">{roi.provenance.explanationHu}</dd>
+        <dl className="mt-3 grid grid-cols-[minmax(90px,auto)_1fr] gap-x-3 gap-y-1.5 border-t border-[var(--adm-border)] pt-3 text-[11px]">
+          <dt className="text-[var(--adm-text-muted)]">Alap</dt>
+          <dd className="text-[var(--adm-text)]">{outcomeBasisLabelHu(roi.basis)}</dd>
+          <dt className="text-[var(--adm-text-muted)]">Származás</dt>
+          <dd className="text-[var(--adm-text)]">{roiProvenanceLabelHu(roi.provenanceType ?? roi.provenance?.type)}</dd>
+          <dt className="text-[var(--adm-text-muted)]">Képlet</dt>
+          <dd className="text-[var(--adm-text)]">{roi.provenance.formulaVersion}</dd>
+          <dt className="text-[var(--adm-text-muted)]">Számítva</dt>
+          <dd className="text-[var(--adm-text)]">{new Date(roi.provenance.computedAt).toLocaleString("hu-HU")}</dd>
+          <dt className="text-[var(--adm-text-muted)]">Magyarázat</dt>
+          <dd className="text-[var(--adm-text)]">{roi.provenance.explanationHu}</dd>
         </dl>
       ) : null}
     </div>
