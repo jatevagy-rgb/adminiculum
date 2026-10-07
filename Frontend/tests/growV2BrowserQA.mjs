@@ -63,7 +63,8 @@ try {
     await journey.getByRole('button', { name: 'Elmondom, hol akad el a munka' }).click();
     await journey.getByRole('checkbox', { name: 'Ugyanazokat az adatokat többször rögzítjük' }).check();
     await shot('pain');
-    await journey.getByRole('button', { name: 'Mutassa a következő lépést' }).click();
+    await journey.getByText('A kiválasztott témákat és a megadott kiegészítést mentjük a visszajelzéséhez', { exact: false }).waitFor();
+    await journey.getByRole('button', { name: 'Mentés és folytatás' }).click();
     await journey.getByRole('button', { name: /Adatok és rendszerek közötti munka/ }).click();
     await journey.getByLabel('Folyamat', { exact: true }).selectOption('qa-process');
     await shot('process');
