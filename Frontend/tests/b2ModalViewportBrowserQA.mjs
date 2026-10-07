@@ -30,7 +30,7 @@ function Harness() {
   const [open, setOpen] = useState(false);
   const [nested, setNested] = useState(false);
   const close = () => setOpen(false);
-  const contract = { id: "qa-document", title: "Viewport QA", fileName: "qa.docx", templateName: "QA", revisionNumber: 1, status: "DRAFT" };
+  const contract = { id: "qa-document", title: "ViewportQAVeryLongUnbrokenDocumentTitleForNarrowDialog", fileName: "qa.docx", templateName: "QA", revisionNumber: 1, status: "DRAFT" };
   return <><button id="trigger" onClick={() => { setWhich(window.qaNext); setOpen(true); }}>Open dialog</button>
     {open && which === "anon" && <AnonymizeModal isOpen onClose={close} contract={contract} />}
     {open && which === "time" && <CaseTimeEntryDialog caseId="qa-case" tasks={[]} onClose={close} onSaved={close} />}
@@ -68,9 +68,9 @@ const html = `<!doctype html><meta charset="utf-8"><style>
 *{box-sizing:border-box}html,body{margin:0;font:14px Arial,sans-serif}body{min-width:0}
 .app-shell-content{backdrop-filter:saturate(105%);min-height:2400px;padding:20px}
 #trigger{margin-top:1850px}.fixed{position:fixed}.inset-0{inset:0}.z-50{z-index:50}
-.flex{display:flex}.flex-col{flex-direction:column}.flex-1{flex:1 1 0%}.shrink-0{flex-shrink:0}
+.flex{display:flex}.flex-col{flex-direction:column}.flex-1{flex:1 1 0%}.flex-wrap{flex-wrap:wrap}.shrink-0{flex-shrink:0}
 .items-center{align-items:center}.items-start{align-items:flex-start}.justify-center{justify-content:center}.justify-between{justify-content:space-between}.justify-end{justify-content:flex-end}
-.overflow-hidden{overflow:hidden}.overflow-y-auto{overflow-y:auto}.min-h-0{min-height:0}.w-full{width:100%}
+.overflow-hidden{overflow:hidden}.overflow-y-auto{overflow-y:auto}.overflow-x-hidden{overflow-x:hidden}.min-h-0{min-height:0}.min-w-0{min-width:0}.w-full{width:100%}.break-words{overflow-wrap:break-word}
 .max-w-2xl{max-width:672px}.max-w-lg{max-width:512px}.border{border:1px solid #ddd}.bg-white{background:white}.shadow-2xl{box-shadow:0 20px 40px #0003}
 .max-h-\\[calc\\(100dvh-2rem\\)\\]{max-height:calc(100dvh - 2rem)}
 .px-4{padding-left:16px;padding-right:16px}.py-4{padding-top:16px;padding-bottom:16px}.p-4{padding:16px}.p-5{padding:20px}.p-6{padding:24px}
@@ -137,6 +137,8 @@ try {
           scroller: scroller && {
             scrollHeight: scroller.scrollHeight,
             clientHeight: scroller.clientHeight,
+            scrollWidth: scroller.scrollWidth,
+            clientWidth: scroller.clientWidth,
             overflowY: getComputedStyle(scroller).overflowY,
           },
           focusInsideOnOpen: d.contains(document.activeElement),
@@ -161,6 +163,11 @@ try {
         `portaledToBody=${measurement.portaledToBody} insideShell=${measurement.insideAppShellContent}`);
       check(`${tag} DEEP_SCROLL_STILL_PASS`, measurement.scrollY > 1000);
       check(`${tag} HORIZONTAL_OVERFLOW=NO`, measurement.documentScrollWidth === width);
+      if (which === 'anon' && width === 390) {
+        check(`${tag} INTERNAL_HORIZONTAL_OVERFLOW=NO`, measurement.scroller.scrollWidth <= measurement.scroller.clientWidth,
+          `scrollWidth=${measurement.scroller.scrollWidth} clientWidth=${measurement.scroller.clientWidth}`);
+        check(`${tag} ICON_LIGATURES=NO`, !(await dialog.locator('.material-symbols-outlined').count()));
+      }
       check(`${tag} INTERNAL_SCROLL_STILL_PASS`, !!measurement.scroller && ["auto", "scroll"].includes(measurement.scroller.overflowY),
         `overflowY=${measurement.scroller?.overflowY}`);
 
