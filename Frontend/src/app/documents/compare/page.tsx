@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
 import { DocumentEditorShell } from "@/components/documents/DocumentEditorShell";
-import { HandoffPackagePanel } from "@/components/handoff/HandoffPackagePanel";
 import {
   TipTapEditorExperimental,
   type TipTapEditorActiveState,
@@ -2339,7 +2338,7 @@ return (
                 </AdminButton>
                 {activeCaseId ? (
                   <Link
-                    href={`/cases/${encodeURIComponent(activeCaseId)}/handoff`}
+                    href={`/cases/${encodeURIComponent(activeCaseId)}#ck-tasks`}
                     className="inline-flex items-center justify-center rounded-[5px] border border-[var(--adm-border)] bg-white px-4 py-2 text-[13px] font-semibold leading-none text-[var(--adm-text)] transition-colors hover:border-[var(--adm-text)] hover:bg-[var(--adm-surface)]"
                   >
                     Leadás
@@ -3393,18 +3392,16 @@ return (
                 </details>
 
                 {activeCaseId ? (
-                  <HandoffPackagePanel
-                    caseId={activeCaseId}
-                    sourceDocumentId={selectedDocument?.kind === "document" ? selectedDocument.id : null}
-                    generatedContractId={selectedDocument?.kind === "contract" ? selectedDocument.id : null}
-                    initialSummary={reviewHandoffDraft.trim() || generatedReviewHandoffText}
-                    contextLabel={selectedDocument?.fileName || selectedDocument?.title || undefined}
-                  />
+                  <section data-testid="compare-canonical-handoff" className="space-y-3 rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-sm text-[var(--adm-text)]">
+                    <p>Új Leadás az ügy feladatainál indítható. Válaszd ki a megfelelő feladatot; az összehasonlítás munkaszövege itt továbbra is másolható.</p>
+                    <Link href={`/cases/${encodeURIComponent(activeCaseId)}#ck-tasks`} className="adm-link-button">Leadás az ügy feladatainál</Link>
+                    <Link href={`/cases/${encodeURIComponent(activeCaseId)}/handoff`} className="adm-link-button">Korábbi leadások és előzmények</Link>
+                  </section>
                 ) : (
                   <section className="rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-[var(--adm-text)]">
                     <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Átadási csomagok</p>
                     <p className="mt-2 text-[11px] leading-5 text-[var(--adm-text-muted)]">
-                      Ügykörnyezet nélkül csak a helyi átadási munkaszöveg használható. Válassz ügyhöz tartozó dokumentumot a leadási csomaghoz.
+                      Ügykörnyezet nélkül csak a helyi átadási munkaszöveg használható. Új Leadáshoz nyisd meg a megfelelő ügy feladatait.
                     </p>
                   </section>
                 )}

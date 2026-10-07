@@ -62,12 +62,9 @@ import {
   finalizeContractGeneration,
   getCommunications,
   createCommunication,
-  createCaseHandoffPackage,
   ApiError,
   safeUploadErrorMessage,
-  getAnonymousDocumentsBySource,
   getCaseClientHouseStyle,
-  listDocumentLegalAnalyses,
   type CaseContractListItem,
   type DocumentItem,
   type DocumentVersionItem,
@@ -84,7 +81,6 @@ import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/Ano
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import { AIPromptPreparationModal } from "@/components/ai-prompts/AIPromptPreparationModal";
 import { useDocumentWorkContext } from "@/components/documents/workContext/useDocumentWorkContext";
-import { HandoffPackagePanel } from "@/components/handoff/HandoffPackagePanel";
 import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePanel";
 import { AdminBadge, AdminButton, AdminDocumentRow, AdminPanel, AdminStatusPill } from "@/components/adminiculum/ui";
 import { DocumentWorkspaceHeader as WordDocumentWorkspaceHeader } from "@/components/cases/word-workflow/layout/DocumentWorkspaceHeader";
@@ -481,11 +477,6 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   // left untouched and nothing else is selected.
   const [requestedDocumentUnresolved, setRequestedDocumentUnresolved] = useState(false);
 
-  // Handoff package creation state
-  const [isCreatingHandoffPackage, setIsCreatingHandoffPackage] = useState(false);
-  const [handoffPackageMessage, setHandoffPackageMessage] = useState<string | null>(null);
-  const [handoffPackageError, setHandoffPackageError] = useState<string | null>(null);
-  const [handoffPanelRefreshKey, setHandoffPanelRefreshKey] = useState(0);
   const [clientHouseStyle, setClientHouseStyle] = useState<ClientHouseStyleProfile | null>(null);
   const [isLoadingHouseStyle, setIsLoadingHouseStyle] = useState(false);
   const [showHouseStylePanel, setShowHouseStylePanel] = useState(false);
@@ -1188,68 +1179,6 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const handleRehydrateSaveSuccess = (_documentId: string, _fileName: string) => {
     setRehydrateModalOpen(false);
     setRehydrateModalDoc(null);
-  };
-
-  const resolveHandoffPackageLinks = async (
-    ledgerItem: SelectedLedgerItem,
-    caseId: string,
-  ): Promise<{ anonymizedDocumentId?: string; legalAnalysisId?: string }> => {
-    try {
-      if (ledgerItem.kind === 'uploaded') {
-        const [anonDocs, analyses] = await Promise.all([
-          getAnonymousDocumentsBySource(ledgerItem.item.id).catch(() => []),
-          listDocumentLegalAnalyses(ledgerItem.item.id, {
-            caseId,
-            documentSourceType: 'DOCUMENT',
-          }).catch(() => []),
-        ]);
-        return {
-          anonymizedDocumentId: anonDocs[0]?.id,
-          legalAnalysisId: analyses[0]?.id,
-        };
-      } else {
-        const analyses = await listDocumentLegalAnalyses(ledgerItem.item.id, {
-          caseId,
-          documentSourceType: 'CONTRACT_GENERATION',
-        }).catch(() => []);
-        return {
-          legalAnalysisId: analyses[0]?.id,
-        };
-      }
-    } catch {
-      return {};
-    }
-  };
-
-  const handleCreateHandoffPackage = async () => {
-    if (!caseRecord?.id || !selectedLedgerItem) return;
-    setHandoffPackageMessage(null);
-    setHandoffPackageError(null);
-    setIsCreatingHandoffPackage(true);
-    try {
-      const resolved = await resolveHandoffPackageLinks(selectedLedgerItem, caseRecord.id);
-      const payload = {
-        packageType: 'STANDARD' as const,
-        preparerSummary: '',
-        ...(selectedLedgerItem.kind === 'uploaded'
-          ? {
-              sourceDocumentId: selectedLedgerItem.item.id,
-              anonymizedDocumentId: resolved.anonymizedDocumentId,
-              legalAnalysisId: resolved.legalAnalysisId,
-            }
-          : {
-              generatedContractId: selectedLedgerItem.item.id,
-              legalAnalysisId: resolved.legalAnalysisId,
-            }),
-      };
-      await createCaseHandoffPackage(caseRecord.id, payload);
-      setHandoffPackageMessage('Leadási piszkozat létrehozva. A meglévő anonimizált szöveg és jogi elemzés automatikusan csatolva lett, ha elérhető volt.');
-      setHandoffPanelRefreshKey((k) => k + 1);
-    } catch {
-      setHandoffPackageError('Nem sikerült létrehozni a leadási csomagot.');
-    } finally {
-      setIsCreatingHandoffPackage(false);
-    }
   };
 
   const openDeleteDocumentDialog = (document: DocumentItem) => {
@@ -2266,6 +2195,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
               <AdminPanel className="p-10 text-center text-sm text-[var(--adm-text-muted)]">Dokumentumok betöltése...</AdminPanel>
             ) : (
               <div className="space-y-3">
+                <div id="document-task-submission" tabIndex={-1} className="scroll-mt-4">
                 <WordDocumentWorkspaceHeader
                   key={`${canonicalCaseId}:${selectedUploadedDocument?.id || "none"}:${canonicalActiveVersion?.id || "none"}`}
                   caseId={canonicalCaseId}
@@ -2273,6 +2203,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   versionId={canonicalActiveVersion?.id ?? null}
                   versionNumber={canonicalActiveVersion?.versionNumber ?? null}
                 />
+                </div>
                 {activeMode === "document" && selectedUploadedDocument ? <DocumentInstructionCard key={selectedUploadedDocument.id} documentId={selectedUploadedDocument.id} /> : null}
                 {/* 1. CANONICAL TOP REGION — advanced modes only. The default document
                     reader owns its own restrained header (READER-UI-CONVERGENCE). */}
@@ -3143,23 +3074,20 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügyvédi leadás</p>
                             <h4 className="mt-1 font-sans text-lg font-semibold text-[var(--adm-text)]">
-                              Leadási csomag
+                              Feladathoz kapcsolódó Leadás
                             </h4>
                           </div>
                           {caseRecord ? (
-                            <HandoffPackagePanel
-                              key={`${caseRecord.id}-${selectedUploadedDocument?.id || 'none'}`}
-                              caseId={caseRecord.id}
-                              refreshKey={handoffPanelRefreshKey}
-                              sourceDocumentId={selectedUploadedDocument?.id || null}
-                              generatedContractId={!selectedUploadedDocument ? selectedGeneratedContract?.id || null : null}
-                              contextLabel={activeTitle || undefined}
-                              compact
-                            />
+                            <div className="space-y-3 text-sm">
+                              <p>Új Leadás a feladat munkafolyamatában készül. A fenti feladatválasztó a kijelölt dokumentumverziót kapcsolja a leadáshoz.</p>
+                              <a href="#document-task-submission" className="adm-link-button">Leadás a feladatnál</a>
+                              <Link href={`/cases/${encodeURIComponent(caseRecord.id)}#ck-tasks`} className="adm-link-button">Ugrás az ügy feladataihoz</Link>
+                              <Link href={`/cases/${encodeURIComponent(caseRecord.id)}/handoff`} className="adm-link-button">Korábbi leadások és előzmények</Link>
+                            </div>
                           ) : (
                             <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
                               <p><b>Ügy státusz:</b> Nincs kiválasztott ügy</p>
-                              <p className="text-[11px] text-[var(--adm-text-muted)]">A leadási csomag panel csak érvényes ügykontextusban érhető el.</p>
+                              <p className="text-[11px] text-[var(--adm-text-muted)]">A feladatleadás csak érvényes ügykontextusban érhető el.</p>
                             </div>
                           )}
                           </div>
@@ -3751,9 +3679,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               A peres munkatér feltöltött dokumentumból indítható.
                             </p>
                           ) : null}
-                          <AdminButton className="w-full justify-start" variant="gold" onClick={() => router.push(`/cases/${encodeURIComponent(canonicalCaseId)}/handoff`)}>
-                            Leadás
-                          </AdminButton>
+                          <a className="adm-link-button w-full justify-start" href="#document-task-submission">Leadás a feladatnál</a>
+                          <Link className="adm-link-button w-full justify-start" href={`/cases/${encodeURIComponent(canonicalCaseId)}#ck-tasks`}>Ugrás az ügy feladataihoz</Link>
                           <div className="grid gap-2 border-t border-[#E7DECB] pt-2">
                             {selectedUploadedDocument ? (
                               <AdminButton className="w-full justify-start" variant="neutral" onClick={() => handleDownloadUploadedDocument(selectedUploadedDocument)} disabled={isDownloading === selectedUploadedDocument.id || (selectedUploadedDocument.securityScanStatus && selectedUploadedDocument.securityScanStatus !== 'CLEAN')}>
@@ -3839,23 +3766,15 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Ügyvédi leadás</p>
-                          <h4 className="font-sans text-lg font-semibold text-[var(--adm-text)]">Leadási csomagok felülete</h4>
+                          <h4 className="font-sans text-lg font-semibold text-[var(--adm-text)]">Feladatleadás és korábbi előzmények</h4>
                           <p className="mt-1 text-sm text-[#3D4842]">
-                            A leadási csomagok kezelése, előkészítése és ügyvédi beküldése közvetlenül a fenti jobb oldali Jóváhagyás munkamód másodlagos átadási eszközei között érhető el.
+                            Új Leadáshoz használd a fenti feladatválasztót. A korábbi csomagok külön, megőrzött előzményként olvashatók és fejezhetők be.
                           </p>
                         </div>
-                        <AdminButton
-                          variant="primary"
-                          onClick={() => syncWorkspaceModeToUrl('review', 'push')}
-                          disabled={!caseRecord}
-                        >
-                          Megnyitás a Jóváhagyás felületén
-                        </AdminButton>
+                        <Link className="adm-link-button" href={`/cases/${encodeURIComponent(canonicalCaseId)}/handoff`}>Korábbi leadások</Link>
                       </div>
                     </div>
                   </div>
-                  {handoffPackageMessage && <p className="rounded bg-[var(--adm-sage-100)] p-2 text-[12px] font-semibold text-[var(--adm-green-800)]">{handoffPackageMessage}</p>}
-                  {handoffPackageError && <p className="rounded bg-[var(--adm-terracotta-100)] p-2 text-[12px] font-semibold text-[var(--adm-terracotta-700)]">{handoffPackageError}</p>}
                   </aside>
                 </section>
                 </details>

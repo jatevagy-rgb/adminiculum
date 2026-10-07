@@ -6,7 +6,7 @@ import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { OperationalPageHeader } from "@/components/adminiculum/OperationalPrimitives";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
 import { HandoffPackagePanel } from "@/components/handoff/HandoffPackagePanel";
-import { getCaseSummary } from "@/lib/api";
+import { ApiError, getCaseSummary } from "@/lib/api";
 
 type CaseHandoffPageProps = {
   params: Promise<{ caseId: string }>;
@@ -32,12 +32,15 @@ function CaseHandoffPageContent({ params }: CaseHandoffPageProps) {
 
   const [caseInfo, setCaseInfo] = useState<CaseHeaderInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     const loadCase = async () => {
       setIsLoading(true);
+      setCaseInfo(null);
+      setError(null);
       try {
         const summary = await getCaseSummary(caseId);
         if (!cancelled) {
@@ -51,6 +54,9 @@ function CaseHandoffPageContent({ params }: CaseHandoffPageProps) {
         console.error("Case handoff page summary load failed:", error);
         if (!cancelled) {
           setCaseInfo(null);
+          setError(error instanceof ApiError && (error.status === 403 || error.status === 404)
+            ? "Az ügy nem található vagy nem érhető el számodra."
+            : "Az ügyadatok betöltése nem sikerült. Próbáld újra az oldal frissítésével.");
         }
       } finally {
         if (!cancelled) {
@@ -78,26 +84,27 @@ function CaseHandoffPageContent({ params }: CaseHandoffPageProps) {
 
       <section className="mx-auto w-full max-w-[980px] space-y-4 p-4 lg:p-5">
         <OperationalPageHeader
-          title="Leadás"
+          title="Korábbi leadások"
           level="h2"
-          subtitle="A kiválasztott ügyirat előkészítése ügyvédi review-ra."
+          subtitle="A korábban indított leadások folytatása és teljes története. Új Leadás az ügy feladatainál indítható."
           secondaryActions={
             <Link href={`/cases/${encodeURIComponent(caseId)}/documents`} className="adm-link-button px-3 py-2 text-xs">
               Dokumentumtár
             </Link>
           }
           primaryAction={
-            <Link href="/reviews" className="adm-link-button adm-link-button-primary px-3 py-2 text-xs">
-              Review sor
+            <Link href={`/cases/${encodeURIComponent(caseId)}#ck-tasks`} data-testid="canonical-case-tasks-link" className="adm-link-button adm-link-button-primary px-3 py-2 text-xs">
+              Ugrás az ügy feladataihoz
             </Link>
           }
         />
 
         {isLoading ? (
-          <div className="adm-board-panel p-4 text-sm text-[var(--adm-text-muted)]">Ügyadatok betöltése…</div>
+          <div role="status" className="adm-board-panel p-4 text-sm text-[var(--adm-text-muted)]">Ügyadatok betöltése…</div>
         ) : null}
 
-        <HandoffPackagePanel caseId={caseId} />
+        {error ? <p role="alert" className="adm-board-panel p-4 text-sm text-[var(--adm-terracotta-700)]">{error}</p> : null}
+        {!isLoading && !error && caseInfo ? <HandoffPackagePanel key={caseId} caseId={caseId} mode="legacy-continuation" /> : null}
       </section>
     </main>
   );

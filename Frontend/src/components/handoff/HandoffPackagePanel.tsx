@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import {
   ApiError,
   archiveHandoffPackage,
-  createCaseHandoffPackage,
   getCaseResponsibility,
   getCurrentUser,
   listCaseHandoffPackages,
@@ -17,11 +16,8 @@ import {
 
 type HandoffPackagePanelProps = {
   caseId: string;
+  mode: "legacy-continuation";
   refreshKey?: number;
-  sourceDocumentId?: string | null;
-  generatedContractId?: string | null;
-  initialSummary?: string;
-  contextLabel?: string;
   compact?: boolean;
 };
 
@@ -165,19 +161,13 @@ function getReviewErrorMessage(error: unknown): string {
 
 export function HandoffPackagePanel({
   caseId,
+  mode,
   refreshKey = 0,
-  sourceDocumentId,
-  generatedContractId,
-  initialSummary,
-  contextLabel,
   compact = false,
 }: HandoffPackagePanelProps) {
   const [packages, setPackages] = useState<LawyerHandoffPackageRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isCreatingPackage, setIsCreatingPackage] = useState(false);
-  const [createMessage, setCreateMessage] = useState<string | null>(null);
-  const [createError, setCreateError] = useState<string | null>(null);
 
   const [editingPackageId, setEditingPackageId] = useState<string | null>(null);
   const [summaryDraft, setSummaryDraft] = useState("");
@@ -196,8 +186,6 @@ export function HandoffPackagePanel({
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewFeedback, setReviewFeedback] = useState<string | null>(null);
 
-  const hasDocumentContext = Boolean(sourceDocumentId || generatedContractId);
-  const activePackages = packages.filter((pkg) => pkg.status !== "ARCHIVED");
 
   useEffect(() => {
     if (!caseId) {
@@ -208,16 +196,17 @@ export function HandoffPackagePanel({
     let cancelled = false;
     setIsLoading(true);
     setError(null);
+    setPackages([]);
 
-    listCaseHandoffPackages(caseId)
+    listCaseHandoffPackages(caseId, { includeArchived: true })
       .then((data) => {
         if (!cancelled) {
-          setPackages(data.filter((pkg) => pkg.status !== "ARCHIVED"));
+          setPackages(data);
         }
       })
       .catch((err) => {
         if (!cancelled) {
-          setError("Nem sikerült betölteni a Leadásokat.");
+          setError(getHandoffErrorMessage(err));
           console.error("listCaseHandoffPackages error:", err);
         }
       })
@@ -241,6 +230,9 @@ export function HandoffPackagePanel({
     }
 
     let cancelled = false;
+    setCurrentUserId(null);
+    setCurrentUserRole(null);
+    setAssignedLawyerId(null);
 
     void Promise.allSettled([getCurrentUser(), getCaseResponsibility(caseId)]).then(
       ([userResult, responsibilityResult]) => {
@@ -284,7 +276,7 @@ export function HandoffPackagePanel({
     setSummaryError(null);
     try {
       const updated = await updateHandoffPackage(pkgId, { preparerSummary: summaryDraft });
-      setPackages((prev) => prev.map((p) => (p.id === pkgId ? updated : p)).filter((p) => p.status !== "ARCHIVED"));
+      setPackages((prev) => prev.map((p) => (p.id === pkgId ? updated : p)));
       setEditingPackageId(null);
       setSummaryDraft("");
       setSummaryMessage("Előkészítő összefoglaló mentve.");
@@ -295,41 +287,13 @@ export function HandoffPackagePanel({
     }
   };
 
-  const handleCreateDraft = async () => {
-    if (!hasDocumentContext) {
-      setCreateError("Válassz ügyhöz tartozó dokumentumot a Leadás létrehozásához.");
-      return;
-    }
-
-    setIsCreatingPackage(true);
-    setCreateMessage(null);
-    setCreateError(null);
-    setSummaryMessage(null);
-    setSummaryError(null);
-
-    try {
-      const created = await createCaseHandoffPackage(caseId, {
-        sourceDocumentId: sourceDocumentId || undefined,
-        generatedContractId: generatedContractId || undefined,
-        preparerSummary: initialSummary?.trim() || undefined,
-        packageType: "STANDARD",
-      });
-      setPackages((prev) => [created, ...prev.filter((pkg) => pkg.id !== created.id && pkg.status !== "ARCHIVED")]);
-      setCreateMessage("Leadás piszkozatként létrehozva.");
-    } catch (err) {
-      setCreateError(getHandoffErrorMessage(err));
-    } finally {
-      setIsCreatingPackage(false);
-    }
-  };
-
   const handleSubmitForReview = async (pkgId: string) => {
     setSummaryMessage(null);
     setSummaryError(null);
     setSubmittingPackageId(pkgId);
     try {
       const updated = await updateHandoffPackage(pkgId, { status: "SUBMITTED" });
-      setPackages((prev) => prev.map((p) => (p.id === pkgId ? updated : p)).filter((p) => p.status !== "ARCHIVED"));
+      setPackages((prev) => prev.map((p) => (p.id === pkgId ? updated : p)));
       setSummaryMessage("Leadás beküldve ügyvédi review-ra.");
     } catch (err) {
       setSummaryError(getHandoffErrorMessage(err));
@@ -340,7 +304,7 @@ export function HandoffPackagePanel({
 
   const handleArchivePackage = async (pkg: LawyerHandoffPackageRecord) => {
     const confirmed = window.confirm(
-      "Archiválod ezt a Leadást? Az audit miatt megmarad, de az aktív listából eltűnik."
+      "Archiválod ezt a korábbi Leadást? A rekord és minden hivatkozása megmarad az előzményekben, de kikerül az aktív munkából. Ez megváltoztathatja az ügy lezárhatóságát."
     );
     if (!confirmed) return;
 
@@ -348,9 +312,9 @@ export function HandoffPackagePanel({
     setSummaryMessage(null);
     setSummaryError(null);
     try {
-      await archiveHandoffPackage(pkg.id);
-      setPackages((prev) => prev.filter((item) => item.id !== pkg.id));
-      setSummaryMessage("Leadás archiválva. Az audit miatt megmarad, de az aktív listából eltűnt.");
+      const archived = await archiveHandoffPackage(pkg.id);
+      setPackages((prev) => prev.map((item) => item.id === pkg.id ? archived : item));
+      setSummaryMessage("Leadás archiválva. A rekord az előzményekben továbbra is olvasható; az aktív munkát és az ügy lezárhatóságát már nem blokkolja.");
     } catch (err) {
       setSummaryError(getHandoffErrorMessage(err));
     } finally {
@@ -390,7 +354,7 @@ export function HandoffPackagePanel({
         reviewComment: comment || undefined,
       });
       setPackages((prev) =>
-        prev.map((item) => (item.id === pkg.id ? updated : item)).filter((item) => item.status !== "ARCHIVED")
+        prev.map((item) => (item.id === pkg.id ? updated : item))
       );
       setReviewPackageId(null);
       setReviewCommentDraft("");
@@ -419,49 +383,25 @@ export function HandoffPackagePanel({
 
   return (
     <section
-      className={compact ? "min-w-0 w-full space-y-3" : "adm-board-panel p-4"}
-      aria-label="Leadások"
+      className={compact ? "min-w-0 w-full space-y-3 [overflow-wrap:anywhere]" : "adm-board-panel min-w-0 p-4 [overflow-wrap:anywhere]"}
+      aria-label="Korábbi leadások"
+      data-testid="legacy-handoff-history"
+      data-mode={mode}
     >
       <div className="mb-3 flex items-center justify-between gap-3 border-b border-[var(--adm-border)] pb-3">
         <span className="material-symbols-outlined text-lg text-[var(--adm-green-950)] hidden">folder_special</span>
         <h3 className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--adm-green-950)]">
-          Leadások
+          Korábbi leadások
         </h3>
         <span className="rounded-full border border-[#D8C58E] bg-[var(--adm-sand-100)] px-2.5 py-1 text-[10px] font-semibold text-[#6D5418]">
-          {activePackages.length} aktív
+          {packages.length} korábbi rekord
         </span>
       </div>
-      {contextLabel ? (
-        <p className="mb-2 rounded border border-[var(--adm-border)] bg-white px-2 py-1 text-[9px] text-[var(--adm-text-muted)]">
-          Kapcsolt munkadokumentum: <span className="font-semibold">{contextLabel}</span>
-        </p>
-      ) : null}
       <p className="mb-3 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-ivory-100)] px-3 py-2 text-[11px] leading-4 text-[var(--adm-text-muted)]">
-        Ez a Leadás előkészítő munkairat. Ügyvédi jóváhagyás nélkül nem minősül végleges jogi állásfoglalásnak.
+        Itt kizárólag a korábban létrehozott leadások folytathatók és olvashatók vissza. Új Leadást az ügy feladatainál lehet indítani. Az archivált rekordok is megmaradnak.
       </p>
-
-      <div className="mb-3 adm-board-panel-tight p-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-[11px] font-bold text-[var(--adm-text)]">Új Leadás</p>
-            <p className="mt-1 text-[10px] leading-4 text-[var(--adm-text-muted)]">
-              {hasDocumentContext
-                ? "A kiválasztott dokumentumból piszkozat készíthető."
-                : "Válassz munkadokumentumot a dokumentumtárban a létrehozáshoz."}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={handleCreateDraft}
-            disabled={!hasDocumentContext || isCreatingPackage}
-            className="rounded-[var(--adm-radius-sm)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {isCreatingPackage ? "Létrehozás..." : "Mentés piszkozatként"}
-          </button>
-        </div>
-        {createMessage ? <p className="mt-2 text-[9px] font-semibold text-[var(--adm-green-800)]">{createMessage}</p> : null}
-        {createError ? <p className="mt-2 text-[9px] font-semibold text-[var(--adm-terracotta-700)]">{createError}</p> : null}
-      </div>
+      {summaryMessage ? <p role="status" className="mb-3 text-sm text-[var(--adm-green-800)]">{summaryMessage}</p> : null}
+      {summaryError ? <p role="alert" className="mb-3 text-sm text-[var(--adm-terracotta-700)]">{summaryError}</p> : null}
 
       {reviewFeedback ? (
         <p className="mb-3 rounded-[var(--adm-radius-sm)] border border-[var(--adm-green-800)] bg-[var(--adm-sage-100)] px-3 py-2 text-[10px] font-semibold text-[var(--adm-green-800)]">
@@ -470,33 +410,34 @@ export function HandoffPackagePanel({
       ) : null}
 
       {isLoading && (
-        <p className="text-[10px] text-[var(--adm-text-muted)] italic py-2">Leadások betöltése…</p>
+        <p role="status" className="text-sm text-[var(--adm-text-muted)] py-2">Korábbi leadások betöltése…</p>
       )}
 
       {error && (
-        <p className="text-[10px] text-[var(--adm-terracotta-700)] py-2">{error}</p>
+        <p role="alert" className="text-sm text-[var(--adm-terracotta-700)] py-2">{error}</p>
       )}
 
-      {!isLoading && !error && activePackages.length === 0 && (
+      {!isLoading && !error && packages.length === 0 && (
         <div className="adm-board-empty px-4 py-4 text-center">
           <p className="text-[12px] font-semibold text-[var(--adm-text)]">
-            Nincs aktív Leadás ehhez az ügyhöz.
+            Nincs korábbi Leadás ehhez az ügyhöz.
           </p>
           <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">
-            {hasDocumentContext ? "Készíts piszkozatot a kiválasztott dokumentumból." : "Előbb válassz dokumentumot a Dokumentumtárban."}
+            Új munkához válassz feladatot az ügy feladatai között.
           </p>
         </div>
       )}
 
-      {!isLoading && !error && activePackages.length > 0 && (
+      {!isLoading && !error && packages.length > 0 && (
         <div className="space-y-3">
-          {activePackages.map((pkg) => {
+          {packages.map((pkg) => {
             const pkgMissing = getMissingItems(pkg);
             const hasMissingMandatory = pkgMissing.length > 0;
             const canPkgSubmit = canSubmit(pkg);
             const submitDisabled = isSubmitDisabled(pkg);
             const nextAction = getNextAction(pkg);
             const isPreparer = Boolean(currentUserId && pkg.preparedById === currentUserId);
+            const canWrite = Boolean(currentUserId && (isPreparer || REVIEW_PRIVILEGED_ROLES.has((currentUserRole || "").toUpperCase())));
             const canDecide = canReviewerDecide({
               currentUserId,
               currentUserRole,
@@ -509,6 +450,8 @@ export function HandoffPackagePanel({
             return (
               <div
                 key={pkg.id}
+                data-testid="legacy-handoff-record"
+                data-status={pkg.status}
                 className="adm-board-list-row p-3.5"
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
@@ -718,13 +661,14 @@ export function HandoffPackagePanel({
                   </div>
                 ) : null}
 
-                {editingPackageId === pkg.id ? (
+                {canWrite && pkg.status !== "ARCHIVED" && editingPackageId === pkg.id ? (
                   <div className="border-t border-[var(--adm-border)] pt-2">
-                    <p className="text-[10px] font-semibold text-[var(--adm-text)] mb-1">Előkészítő összefoglaló</p>
+                    <label htmlFor={`handoff-summary-${pkg.id}`} className="text-[10px] font-semibold text-[var(--adm-text)] mb-1">Előkészítő összefoglaló</label>
                     <p className="text-[9px] text-[var(--adm-text-muted)] mb-2">
                       Ide kerüljön, mit kell az ügyvédnek ellenőriznie, milyen döntési pontok vannak, és mi nem használható fel jóváhagyás nélkül.
                     </p>
                     <textarea
+                      id={`handoff-summary-${pkg.id}`}
                       value={summaryDraft}
                       onChange={(e) => setSummaryDraft(e.target.value)}
                       rows={3}
@@ -766,13 +710,13 @@ export function HandoffPackagePanel({
                       <p className="text-[10px] text-[var(--adm-text-muted)] italic">Nincs még előkészítő összefoglaló.</p>
                     )}
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
-                      <button
+                      {canWrite && pkg.status !== "ARCHIVED" ? <button
                         onClick={() => startEditing(pkg)}
                         className="text-[9px] font-bold uppercase tracking-widest text-[var(--adm-green-950)] hover:underline"
                       >
                         Szerkesztés
-                      </button>
-                      {canPkgSubmit && (
+                      </button> : null}
+                      {canWrite && canPkgSubmit && (
                         <button
                           onClick={() => handleSubmitForReview(pkg.id)}
                           disabled={submittingPackageId === pkg.id || submitDisabled}
@@ -781,27 +725,39 @@ export function HandoffPackagePanel({
                           {submittingPackageId === pkg.id ? "Beküldés..." : "Beküldés ügyvédi review-ra"}
                         </button>
                       )}
-                      <button
+                      {canWrite && pkg.status !== "ARCHIVED" ? <button
                         type="button"
                         onClick={() => handleArchivePackage(pkg)}
                         disabled={archivingPackageId === pkg.id}
                         className="rounded-[var(--adm-radius-sm)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest border border-[var(--adm-border)] bg-[var(--adm-surface)] text-[#7B5E2E] hover:bg-[var(--adm-ivory-100)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         {archivingPackageId === pkg.id ? "Archiválás..." : "Archiválás"}
-                      </button>
+                      </button> : null}
                     </div>
                     <details className="mt-1">
                       <summary className="text-[9px] text-[var(--adm-text-muted)] cursor-pointer">További műveletek</summary>
                       <div className="mt-1 space-y-1">
                         <p className="text-[9px] text-[var(--adm-text-muted)]">Az export nem érhető el.</p>
-                        <p className="text-[9px] text-[var(--adm-text-muted)]">A jóváhagyás a Review sorban követhető.</p>
+                        <p className="text-[9px] text-[var(--adm-text-muted)]">A korábbi leadás döntése ezen az adatlapon követhető; az új feladatleadások külön munkafolyamatot használnak.</p>
                       </div>
                     </details>
                     <details className="mt-1">
                       <summary className="text-[9px] text-[var(--adm-text-muted)] cursor-pointer">Technikai részletek</summary>
                       <div className="mt-1 space-y-1 text-[9px] text-[var(--adm-text-muted)]">
                         <p>Leadás azonosító: {pkg.id}</p>
+                        <p>Ügy azonosító: {pkg.caseId}</p>
+                        <p>Csomagtípus: {pkg.packageType === "FINAL_APPROVAL" ? "Végleges jóváhagyás" : "Standard leadás"}</p>
                         <p>Státusz: {getStatusLabel(pkg.status)}</p>
+                        <p>Forrásdokumentum: {pkg.sourceDocumentId || "—"}</p>
+                        <p>Anonimizált dokumentum: {pkg.anonymizedDocumentId || "—"}</p>
+                        <p>Generált szerződés: {pkg.generatedContractId || "—"}</p>
+                        <p>Jogi elemzés: {pkg.legalAnalysisId || "—"}</p>
+                        <p>Review jegyzetek: {pkg.reviewNotesId || "—"}</p>
+                        <p>Előkészítő: {pkg.preparedById || "—"}</p>
+                        <p>Beküldve: {pkg.submittedAt || "—"}</p>
+                        <p>Reviewer: {pkg.reviewedById || "—"}</p>
+                        <p>Döntés ideje: {pkg.reviewedAt || "—"}</p>
+                        <p>Döntés: {pkg.reviewDecision ? REVIEW_DECISION_LABELS[pkg.reviewDecision] || "Ismeretlen döntés" : "—"}</p>
                         <p>Létrehozva: {pkg.createdAt || "—"}</p>
                         <p>Frissítve: {pkg.updatedAt || "—"}</p>
                       </div>

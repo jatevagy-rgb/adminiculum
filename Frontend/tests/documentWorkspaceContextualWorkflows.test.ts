@@ -41,15 +41,16 @@ test("Requirement 2: Publication remains a secondary approval tool", () => {
   assert.match(shell, /activeMode === 'review' \? '' : 'hidden'/);
 });
 
-test("Requirement 3: Handoff remains a secondary approval tool", () => {
+test("Requirement 3: New handoff delegates to canonical task preparation", () => {
   const source = documentPage();
   const shellMatch = source.match(/<aside data-testid="canonical-right-shell"[\s\S]*?<\/aside>/);
   assert.ok(shellMatch, "Right shell must exist");
   const shell = shellMatch[0];
 
   assert.match(shell, /id="approval-handoff-tools"/);
-  assert.match(shell, /<HandoffPackagePanel/);
-  assert.match(shell, /compact/);
+  assert.doesNotMatch(source, /HandoffPackagePanel|createCaseHandoffPackage/);
+  assert.match(shell, /href="#document-task-submission"/);
+  assert.match(shell, /#ck-tasks/);
   assert.doesNotMatch(shell, /document\.getElementById\(['"]document-handoff['"]\)/);
   assert.doesNotMatch(shell, /scrollIntoView/);
   assert.match(shell, /activeMode === 'review' \? '' : 'hidden'/);
@@ -80,8 +81,9 @@ test("Requirement 4: Four primary modes switch contextual working content in rig
   // Ügyfél mounts ClientPublicationPanel
   assert.match(shell, /ClientPublicationPanel/);
 
-  // Leadás mounts HandoffPackagePanel
-  assert.match(shell, /HandoffPackagePanel/);
+  // New Leadás delegates to the existing exact-version task launcher.
+  assert.match(shell, /href="#document-task-submission"/);
+  assert.doesNotMatch(shell, /HandoffPackagePanel/);
 });
 
 test("Requirement 5: No duplicate legal-analysis editor is mounted simultaneously", () => {
@@ -130,9 +132,9 @@ test("Requirement 7: Selected document and version context is passed truthfully 
   // Publication panel props
   assert.match(shell, /selectedVersionId=\{canonicalActiveVersion\.id\}/);
 
-  // Handoff panel props
-  assert.match(shell, /caseId=\{caseRecord\.id\}/);
-  assert.match(shell, /sourceDocumentId=\{selectedUploadedDocument\?\.id \|\| null\}/);
+  // Canonical header keeps the exact document and version, without a legacy writer.
+  assert.match(source, /<WordDocumentWorkspaceHeader[\s\S]*?documentId=\{selectedUploadedDocument\?\.id \?\? null\}[\s\S]*?versionId=\{canonicalActiveVersion\?\.id \?\? null\}/);
+  assert.doesNotMatch(shell, /<HandoffPackagePanel/);
 });
 
 test("Requirement 8: Switching documents resets panel state via documentId key prop", () => {
