@@ -1,6 +1,7 @@
 import { prisma } from '../../prisma/prisma.service';
 import type { CaseStatus } from '@prisma/client';
 import { buildCaseReadScope } from '../cases/authorization';
+import { hrConfidentialReadAllowed } from '../documents/authorization';
 import { CLOSED_TASK_STATUSES } from '../tasks/taskStatus';
 import { BUSINESS_TIME_ZONE, addCalendarDays, businessDateKey, businessDayStart } from './businessTime';
 import {
@@ -56,6 +57,9 @@ const MAX_RANGE_DAYS = 45;
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 100;
 const CLOSED_STATUSES = new Set<WorkflowDeadlineStatus>(['COMPLETED', 'CANCELLED', 'SUPERSEDED']);
+const CLOSED_DOCUMENT_WORK_STATUSES = ['SENT', 'ARCHIVED'] as const;
+const OPEN_DOCUMENT_REVIEW_STATUSES = ['ASSIGNED', 'IN_REVIEW', 'RESUBMITTED', 'READY_FOR_REVIEW'] as const;
+const CLOSED_DOCUMENT_REVIEW_STATUSES = ['CHANGES_REQUESTED', 'APPROVED', 'READY_FOR_CLIENT', 'PUBLISHED', 'CLOSED', 'CANCELLED'] as const;
 
 function applicationTimezone(): string {
   return BUSINESS_TIME_ZONE;
@@ -216,6 +220,19 @@ export async function getWorkflowAgenda(params: {
       ...(caseReadScope ? { AND: [caseReadScope] } : {}),
     },
   };
+  const documentScope: any = {
+    ...(caseReadScope ? { case: caseReadScope } : {}),
+    ...(!hrConfidentialReadAllowed(params.userRole) ? { securityClassification: { not: 'HR_CONFIDENTIAL' } } : {}),
+  };
+  const documentWhere: any = { dueDate: dueWindow, ...documentScope, AND: [] };
+  const reviewWhere: any = { dueAt: dueWindow, document: documentScope, status: { not: 'DRAFT' }, AND: [] };
+  if (status === 'OPEN') {
+    documentWhere.AND.push({ workStatus: { notIn: CLOSED_DOCUMENT_WORK_STATUSES } }, { case: caseStatusFilter('OPEN') });
+    reviewWhere.AND.push({ status: { in: OPEN_DOCUMENT_REVIEW_STATUSES } }, { document: { case: caseStatusFilter('OPEN') } });
+  } else if (status === 'COMPLETED') {
+    documentWhere.AND.push({ OR: [{ workStatus: { in: CLOSED_DOCUMENT_WORK_STATUSES } }, { case: caseStatusFilter('COMPLETED') }] });
+    reviewWhere.AND.push({ OR: [{ status: { in: CLOSED_DOCUMENT_REVIEW_STATUSES } }, { document: { case: caseStatusFilter('COMPLETED') } }] });
+  }
 
   if (scope === 'MY_WORK') {
     taskWhere.assignedToId = params.userId;
@@ -227,13 +244,17 @@ export async function getWorkflowAgenda(params: {
       { responsibleId: params.userId },
       { case: { assignedLawyerId: params.userId } },
     ];
+    documentWhere.AND.push({ OR: [{ responsibleId: params.userId }, { reviewerId: params.userId }] });
+    reviewWhere.AND.push({ OR: [{ assignedReviewerId: params.userId }, { ownerId: params.userId }] });
   } else if (scope === 'CASE') {
     taskWhere.caseId = params.caseId;
     caseWhere.id = params.caseId;
     intakeWhere.caseId = params.caseId;
+    documentWhere.caseId = params.caseId;
+    reviewWhere.document = { ...documentScope, caseId: params.caseId };
   }
 
-  const [tasks, caseRows, intakeRows] = await Promise.all([
+  const [tasks, caseRows, intakeRows, documentRows, reviewRows] = await Promise.all([
     db.task.findMany({
       where: taskWhere,
       select: {
@@ -308,6 +329,31 @@ export async function getWorkflowAgenda(params: {
       orderBy: [{ dueAt: 'asc' }, { id: 'asc' }],
       take: MAX_LIMIT + offset + 1,
     }),
+    db.document.findMany({
+      where: documentWhere,
+      select: {
+        id: true, caseId: true, title: true, name: true, workInstruction: true,
+        workStatus: true, dueDate: true, updatedAt: true, responsibleId: true, reviewerId: true,
+        responsible: { select: { id: true, name: true, email: true } },
+        reviewer: { select: { id: true, name: true, email: true } },
+        case: { select: { status: true, completedAt: true, caseNumber: true, priority: true, assignedLawyerId: true, assignedLawyer: { select: { id: true, name: true, email: true } } } },
+      },
+      orderBy: [{ dueDate: 'asc' }, { id: 'asc' }],
+      take: MAX_LIMIT + offset + 1,
+    }),
+    db.documentReview.findMany({
+      where: reviewWhere,
+      select: {
+        id: true, documentId: true, documentVersionId: true, dueAt: true, updatedAt: true,
+        status: true, assignedReviewerId: true, ownerId: true,
+        assignedReviewer: { select: { id: true, name: true, email: true } },
+        owner: { select: { id: true, name: true, email: true } },
+        documentVersion: { select: { documentId: true } },
+        document: { select: { caseId: true, title: true, name: true, case: { select: { status: true, completedAt: true, caseNumber: true, priority: true, assignedLawyerId: true, assignedLawyer: { select: { id: true, name: true, email: true } } } } } },
+      },
+      orderBy: [{ dueAt: 'asc' }, { id: 'asc' }],
+      take: MAX_LIMIT + offset + 1,
+    }),
   ]);
 
   const taskItems: WorkflowDeadlineDto[] = tasks
@@ -349,6 +395,78 @@ export async function getWorkflowAgenda(params: {
         }),
         href: `/tasks?taskId=${encodeURIComponent(task.id)}`,
         updatedAt: toSafeIsoDate(task.updatedAt),
+      };
+    })
+    .filter(Boolean) as WorkflowDeadlineDto[];
+
+  const documentItems: WorkflowDeadlineDto[] = documentRows
+    .map((document) => {
+      const dueAt = toSafeIsoDate(document.dueDate);
+      if (!dueAt) return null;
+      const caseStatus = deriveCaseDeadlineStatus(document.case.status, document.case.completedAt);
+      const deadlineStatus = caseStatus !== 'OPEN' ? caseStatus
+        : ['SENT', 'ARCHIVED'].includes(document.workStatus) ? 'COMPLETED' : 'OPEN';
+      const href = `/cases/${encodeURIComponent(document.caseId)}/documents?documentId=${encodeURIComponent(document.id)}`;
+      return {
+        id: `DOCUMENT_WORK:${document.id}`,
+        sourceType: 'DOCUMENT_WORK' as const,
+        sourceId: document.id,
+        caseId: document.caseId,
+        title: `Dokumentummunka: ${document.title || document.name}`,
+        safeDescription: compactSafeText(document.workInstruction),
+        startsAt: null,
+        dueAt,
+        temporalType: 'TIMESTAMP' as const,
+        allDay: false,
+        status: deadlineStatus,
+        urgency: deriveDeadlineUrgency(dueAt, now),
+        importance: mapImportance(document.case.priority),
+        legalSignificance: null,
+        responsibility: {
+          assignee: displayUser(document.responsible || document.reviewer),
+          responsibleLawyer: displayUser(document.case.assignedLawyer),
+        },
+        source: { type: 'DOCUMENT' as const, id: document.id, displayName: 'Dokumentummunka', href },
+        capabilities: deriveDeadlineCapabilities({ sourceType: 'DOCUMENT_WORK', status: deadlineStatus }),
+        href,
+        updatedAt: toSafeIsoDate(document.updatedAt),
+      };
+    })
+    .filter(Boolean) as WorkflowDeadlineDto[];
+
+  const reviewItems: WorkflowDeadlineDto[] = reviewRows
+    .map((review) => {
+      if (review.documentVersion.documentId !== review.documentId) return null;
+      const dueAt = toSafeIsoDate(review.dueAt);
+      if (!dueAt) return null;
+      const caseStatus = deriveCaseDeadlineStatus(review.document.case.status, review.document.case.completedAt);
+      const deadlineStatus = caseStatus !== 'OPEN' ? caseStatus
+        : review.status === 'CANCELLED' ? 'CANCELLED'
+          : ['CHANGES_REQUESTED', 'APPROVED', 'READY_FOR_CLIENT', 'PUBLISHED', 'CLOSED'].includes(review.status) ? 'COMPLETED' : 'OPEN';
+      const href = `/cases/${encodeURIComponent(review.document.caseId)}/documents?documentId=${encodeURIComponent(review.documentId)}&versionId=${encodeURIComponent(review.documentVersionId)}&mode=review`;
+      return {
+        id: `DOCUMENT_REVIEW:${review.id}`,
+        sourceType: 'DOCUMENT_REVIEW' as const,
+        sourceId: review.id,
+        caseId: review.document.caseId,
+        title: `Verziófelülvizsgálat: ${review.document.title || review.document.name}`,
+        safeDescription: null,
+        startsAt: null,
+        dueAt,
+        temporalType: 'TIMESTAMP' as const,
+        allDay: false,
+        status: deadlineStatus,
+        urgency: deriveDeadlineUrgency(dueAt, now),
+        importance: mapImportance(review.document.case.priority),
+        legalSignificance: null,
+        responsibility: {
+          assignee: displayUser(review.assignedReviewer || review.owner),
+          responsibleLawyer: displayUser(review.document.case.assignedLawyer),
+        },
+        source: { type: 'DOCUMENT' as const, id: review.documentId, displayName: 'Verziófelülvizsgálat', href },
+        capabilities: deriveDeadlineCapabilities({ sourceType: 'DOCUMENT_REVIEW', status: deadlineStatus }),
+        href,
+        updatedAt: toSafeIsoDate(review.updatedAt),
       };
     })
     .filter(Boolean) as WorkflowDeadlineDto[];
@@ -442,7 +560,7 @@ export async function getWorkflowAgenda(params: {
     })
     .filter(Boolean) as WorkflowDeadlineDto[];
 
-  const filtered = [...taskItems, ...intakeItems, ...caseItems]
+  const filtered = [...taskItems, ...intakeItems, ...caseItems, ...documentItems, ...reviewItems]
     .filter((item) => status === 'ALL' || (status === 'OPEN' ? !CLOSED_STATUSES.has(item.status) : CLOSED_STATUSES.has(item.status)))
     // Paging follows the same deadline/id prefix fetched from every source.
     // Priority-first sorting here could move an unseen later deadline ahead of

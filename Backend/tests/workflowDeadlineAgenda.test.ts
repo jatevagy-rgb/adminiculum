@@ -7,6 +7,8 @@ const mockPrismaService: any = {
   case: { findMany: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn() },
   caseCollaborator: { findMany: jest.fn(), findFirst: jest.fn() },
   caseIntakeDeadline: { findMany: jest.fn() },
+  document: { findMany: jest.fn() },
+  documentReview: { findMany: jest.fn() },
   task: { findMany: jest.fn() },
   notification: {
     findMany: jest.fn(),
@@ -121,6 +123,8 @@ function resetMocks() {
   mockPrismaService.caseCollaborator.findMany.mockResolvedValue([]);
   mockPrismaService.caseCollaborator.findFirst.mockResolvedValue(null);
   mockPrismaService.caseIntakeDeadline.findMany.mockResolvedValue([]);
+  mockPrismaService.document.findMany.mockResolvedValue([]);
+  mockPrismaService.documentReview.findMany.mockResolvedValue([]);
   mockPrismaService.task.findMany.mockResolvedValue([]);
   mockPrismaService.notification.findMany.mockResolvedValue([]);
   mockPrismaService.notification.count.mockResolvedValue(0);
@@ -197,6 +201,50 @@ describe('workflow deadlines agenda and notifications', () => {
       select: expect.objectContaining({ id: true, dueDate: true, case: expect.any(Object) }),
     }));
     expect(mockPrismaService.task.findMany.mock.calls[0][0]).not.toHaveProperty('include');
+  });
+
+  it('keeps document and exact-version review due dates case-scoped and HR-confidential', async () => {
+    const dueAt = new Date('2026-07-14T09:00:00.000Z');
+    const assignedLawyer = { id: 'user-1', name: 'Ügyvéd', email: 'lawyer@example.test' };
+    const caseRecord = { status: 'DRAFT', completedAt: null, caseNumber: 'CASE-1', priority: 'MEDIUM', assignedLawyerId: 'user-1', assignedLawyer };
+    mockPrismaService.document.findMany.mockResolvedValue([{
+      id: 'doc-1', caseId: 'case-1', title: 'Munkapéldány', name: 'Dokumentum', workInstruction: 'Átdolgozás',
+      workStatus: 'IN_PROGRESS', dueDate: dueAt, updatedAt: dueAt, responsibleId: 'user-1', reviewerId: null,
+      responsible: assignedLawyer, reviewer: null, case: caseRecord,
+    }]);
+    mockPrismaService.documentReview.findMany.mockResolvedValue([{
+      id: 'review-1', documentId: 'doc-1', documentVersionId: 'v2', dueAt, updatedAt: dueAt,
+      status: 'IN_REVIEW', assignedReviewerId: 'user-1', ownerId: null,
+      assignedReviewer: assignedLawyer, owner: null, documentVersion: { documentId: 'doc-1' },
+      document: { caseId: 'case-1', title: 'Munkapéldány', name: 'Dokumentum', case: caseRecord },
+    }, {
+      id: 'invalid-review', documentId: 'doc-1', documentVersionId: 'foreign-v1', dueAt, updatedAt: dueAt,
+      status: 'IN_REVIEW', assignedReviewerId: 'user-1', ownerId: null,
+      assignedReviewer: assignedLawyer, owner: null, documentVersion: { documentId: 'other-doc' },
+      document: { caseId: 'case-1', title: 'Munkapéldány', name: 'Dokumentum', case: caseRecord },
+    }]);
+    const response = await requestJson(createApp(), 'GET', '/agenda?scope=CASE&caseId=case-1&status=OPEN&from=2026-07-14&to=2026-07-14');
+    expect(response.status).toBe(200);
+    const items = response.body.days.flatMap((day: any) => day.items);
+    const work = items.find((item: any) => item.id === 'DOCUMENT_WORK:doc-1');
+    const review = items.find((item: any) => item.id === 'DOCUMENT_REVIEW:review-1');
+    expect(work).toMatchObject({ sourceType: 'DOCUMENT_WORK', temporalType: 'TIMESTAMP', allDay: false,
+      responsibility: { assignee: { id: 'user-1' } }, href: '/cases/case-1/documents?documentId=doc-1',
+      capabilities: { canComplete: false, canCreateTask: false } });
+    expect(review).toMatchObject({ sourceType: 'DOCUMENT_REVIEW', href: '/cases/case-1/documents?documentId=doc-1&versionId=v2&mode=review' });
+    expect(items.map((item: any) => item.id)).not.toContain('DOCUMENT_REVIEW:invalid-review');
+    expect(mockPrismaService.document.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        caseId: 'case-1', securityClassification: { not: 'HR_CONFIDENTIAL' },
+        AND: expect.arrayContaining([{ workStatus: { notIn: ['SENT', 'ARCHIVED'] } }]),
+      }),
+    }));
+    expect(mockPrismaService.documentReview.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        document: expect.objectContaining({ caseId: 'case-1', securityClassification: { not: 'HR_CONFIDENTIAL' } }),
+        AND: expect.arrayContaining([{ status: { in: ['ASSIGNED', 'IN_REVIEW', 'RESUBMITTED', 'READY_FOR_REVIEW'] } }]),
+      }),
+    }));
   });
 
   it('rejects unsupported team agenda scope and inaccessible case scope', async () => {
