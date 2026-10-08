@@ -56,7 +56,7 @@ describe("Case Workspace visible notes", () => {
     const detailsIdx = src.indexOf("<details ref={secondaryDetailsRef}");
     assert.ok(sectionIdx > -1, "the primary notes section must be rendered");
     assert.ok(detailsIdx > -1, "the secondary details area must remain");
-    assert.ok(sectionIdx > src.indexOf("</details>", detailsIdx), "notes must follow the closed details area on the visible history surface");
+    assert.ok(sectionIdx > src.indexOf('title="Aktív munka"') && sectionIdx < detailsIdx, "notes must follow work before the collapsed secondary details");
     assert.match(src, /caseId=\{caseId\}/);
   });
 
