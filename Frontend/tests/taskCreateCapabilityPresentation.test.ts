@@ -17,6 +17,7 @@ test('case and global task create actions consume backend CASE_MANAGE capability
   assert.match(tasks, /manageableCases\.map\(\(caseItem\) => <option/);
   assert.match(tasks, /if \(!selectedCaseManageable\) \{[\s\S]*?return;[\s\S]*?\}[\s\S]*?await createTask\(/);
   assert.match(tasks, /open=\{showCreateModal && canOpenCreate\}/);
+  assert.match(tasks, /autoOpenKeyRef\.current === key/);
   assert.doesNotMatch([workspace, tasks].join('\n'), /role === "ADMIN" \|\| role === "PARTNER"/);
 });
 

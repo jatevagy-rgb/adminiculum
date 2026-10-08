@@ -260,6 +260,7 @@ function TasksPageContent() {
   const selectedCaseManageable = taskCreateRights.status === "ready" && allowedCaseIds.has(createData.caseId);
   const [taskPlanning, setTaskPlanning] = useState<TaskPlanningValue>(EMPTY_TASK_PLANNING);
   const focusedRowRef = useRef<HTMLTableRowElement | null>(null);
+  const autoOpenKeyRef = useRef<string | null>(null);
 
   // Case-scoped planning candidates: when a case is selected, reviewer/
   // collaborator/assignee options come from the authoritative backend projection.
@@ -308,12 +309,18 @@ function TasksPageContent() {
     setDismissedDeepLinkId(null);
   }, [deepLinkedTaskId]);
 
+  const allowedCaseIdsKey = taskCreateRights.allowedCaseIds.join(",");
   useEffect(() => {
-    if (openCreateFromQuery && !isLoading && !error && taskCreateRights.status === "ready" && manageableCases.length > 0 && (!deepLinkedCaseId || allowedCaseIds.has(deepLinkedCaseId))) {
-      setCreateData((current) => ({ ...current, caseId: deepLinkedCaseId || (allowedCaseIds.has(current.caseId) ? current.caseId : manageableCases[0].id) }));
-      setShowCreateModal(true);
-    }
-  }, [openCreateFromQuery, isLoading, error, taskCreateRights.status, taskCreateRights.allowedCaseIds.join(","), deepLinkedCaseId]);
+    if (!openCreateFromQuery) { autoOpenKeyRef.current = null; return; }
+    const key = deepLinkedCaseId || "global";
+    if (autoOpenKeyRef.current === key || isLoading || error || taskCreateRights.status !== "ready") return;
+    const allowed = new Set(allowedCaseIdsKey ? allowedCaseIdsKey.split(",") : []);
+    const available = cases.filter((caseItem) => allowed.has(caseItem.id));
+    if (available.length === 0 || (deepLinkedCaseId && !allowed.has(deepLinkedCaseId))) return;
+    autoOpenKeyRef.current = key;
+    setCreateData((current) => ({ ...current, caseId: deepLinkedCaseId || (allowed.has(current.caseId) ? current.caseId : available[0].id) }));
+    setShowCreateModal(true);
+  }, [openCreateFromQuery, isLoading, error, taskCreateRights.status, allowedCaseIdsKey, deepLinkedCaseId, cases]);
 
   const canOpenCreate = !isLoading && !error && taskCreateRights.status === "ready" && manageableCases.length > 0 && (!deepLinkedCaseId || allowedCaseIds.has(deepLinkedCaseId));
   const openCreate = () => {
