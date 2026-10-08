@@ -7,6 +7,7 @@ import prisma from '../../config/database';
 import taskSubmissionService from './taskSubmission.service';
 import { canUserActOnTask } from './taskAuthorization';
 export { canUserActOnTask } from './taskAuthorization';
+import { userCanManageCaseById } from '../cases/authorization';
 import {
   SupportedTaskAction,
   WorkflowTransitionError,
@@ -1025,22 +1026,14 @@ export async function createCanonicalTaskFromCommunication(
     throw new SourceLinkedTaskError(404, 'CASE_NOT_FOUND', 'The communication case was not found.');
   }
 
-  // Authorization: the actor must be able to act on the communication's case.
-  // Mirrors the canonical case-eligibility rule (privileged OR assigned lawyer,
-  // creator, collaborator). Roles never grant access here.
-  const privileged = new Set(['ADMIN', 'PARTNER']).has(String(actorRole || '').toUpperCase());
-  if (!privileged) {
-    const collaborator = await prisma.caseCollaborator.findFirst({
-      where: { caseId: communication.caseId, userId },
-      select: { id: true },
-    });
-    const allowed =
-      communicationCase.assignedLawyerId === userId ||
-      communicationCase.createdById === userId ||
-      Boolean(collaborator);
-    if (!allowed) {
-      throw new SourceLinkedTaskError(403, 'COMMUNICATION_NOT_AUTHORIZED', 'A felhasználó nem jogosult ehhez a kommunikációhoz.');
-    }
+  // Authorization: Task creation is a CASE_MANAGE write, not a communication
+  // read. Reuse the canonical CASE_MANAGE authority (ADMIN/PARTNER, assigned
+  // lawyer, or case creator). A CaseCollaborator-only relationship is read-only
+  // and must not grant Task creation. Communication READ remains independently
+  // governed by the route-level mailbox/case read gate.
+  const manageAccess = await userCanManageCaseById(userId, actorRole, communication.caseId, prisma);
+  if (manageAccess !== true) {
+    throw new SourceLinkedTaskError(403, 'COMMUNICATION_NOT_AUTHORIZED', 'A felhasználó nem jogosult ehhez a kommunikációhoz.');
   }
 
   const requestedCaseId = payload.caseId != null ? String(payload.caseId) : null;

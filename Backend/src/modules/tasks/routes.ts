@@ -662,7 +662,7 @@ router.get('/my/tasks', authenticate, requireWorkforceUser, async (req: Request,
 // ============================================================================
 // POST /api/v1/tasks/auto-generate - Automatikus feladat generálás
 // ============================================================================
-router.post('/auto-generate', authenticate, async (req: Request, res: Response) => {
+router.post('/auto-generate', authenticate, requireWorkforceUser, async (req: Request, res: Response) => {
   try {
     const { caseId, workflowEvent, originalDocumentId } = req.body;
     const triggeredBy = (req as any).user?.userId;
@@ -671,6 +671,23 @@ router.post('/auto-generate', authenticate, async (req: Request, res: Response) 
       return res.status(400).json({ 
         error: 'Hiányzó kötelező mezők: caseId, workflowEvent' 
       });
+    }
+
+    if (!triggeredBy) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    let caseAccess: boolean | null;
+    try {
+      caseAccess = await userCanManageCase(req, String(caseId));
+    } catch {
+      return res.status(500).json({ status: 500, code: 'CASE_AUTHORIZATION_ERROR', message: 'Case access could not be verified.' });
+    }
+    if (caseAccess === null) {
+      return res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
+    }
+    if (!caseAccess) {
+      return res.status(403).json({ status: 403, code: 'CASE_ACCESS_FORBIDDEN', message: 'You do not have access to this case.' });
     }
 
     const task = await taskService.autoGenerateTask({

@@ -1,9 +1,17 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { NextFunction, Request, Response } from 'express';
 import { prisma } from '../../prisma/prisma.service';
 import { isWorkforceRole } from '../../middleware/workforceAuthorization';
 
 const PRIVILEGED_ROLES = new Set(['ADMIN', 'PARTNER']);
+
+type CaseAccessRecord = {
+  id: string;
+  assignedLawyerId: string | null;
+  createdById: string;
+};
+
+type CaseDb = PrismaClient | Prisma.TransactionClient;
 
 /** Database predicate that exactly mirrors non-privileged userCanReadCase scope. */
 export function buildCaseReadScope(
@@ -45,12 +53,11 @@ function getCaseId(req: Request): string {
   return String(req.params.caseId || '').trim();
 }
 
-async function getCaseAccessRecord(caseId: string): Promise<{
-  id: string;
-  assignedLawyerId: string | null;
-  createdById: string;
-} | null> {
-  return prisma.case.findUnique({
+async function getCaseAccessRecord(
+  caseId: string,
+  db: CaseDb = prisma,
+): Promise<CaseAccessRecord | null> {
+  return db.case.findUnique({
     where: { id: caseId },
     select: {
       id: true,
@@ -60,20 +67,28 @@ async function getCaseAccessRecord(caseId: string): Promise<{
   });
 }
 
+function isCaseManagerById(
+  userId: string,
+  role: string | null | undefined,
+  caseRecord: CaseAccessRecord,
+): boolean {
+  return (
+    PRIVILEGED_ROLES.has(String(role || '')) ||
+    caseRecord.assignedLawyerId === userId ||
+    caseRecord.createdById === userId
+  );
+}
+
 function isCaseManager(
   req: Request,
-  caseRecord: { assignedLawyerId: string | null; createdById: string }
+  caseRecord: CaseAccessRecord,
 ): boolean {
   const user = req.user;
   if (!user?.userId) {
     return false;
   }
 
-  return (
-    PRIVILEGED_ROLES.has(user.role) ||
-    caseRecord.assignedLawyerId === user.userId ||
-    caseRecord.createdById === user.userId
-  );
+  return isCaseManagerById(user.userId, user.role, caseRecord);
 }
 
 export async function userCanReadCase(req: Request, caseId: string): Promise<boolean | null> {
@@ -113,6 +128,28 @@ export async function userCanManageCase(req: Request, caseId: string): Promise<b
   }
 
   return isCaseManager(req, caseRecord);
+}
+
+/**
+ * Canonical CASE_MANAGE predicate by identity rather than Request, for service
+ * and transaction callers that already hold a userId + role. Mirrors
+ * userCanManageCase exactly: ADMIN/PARTNER, assigned lawyer, or case creator.
+ * A CaseCollaborator-only relationship is read-only and never qualifies.
+ */
+export async function userCanManageCaseById(
+  userId: string | null | undefined,
+  role: string | null | undefined,
+  caseId: string,
+  db: CaseDb = prisma,
+): Promise<boolean | null> {
+  if (!userId) {
+    return false;
+  }
+  const caseRecord = await getCaseAccessRecord(caseId, db);
+  if (!caseRecord) {
+    return null;
+  }
+  return isCaseManagerById(String(userId), role, caseRecord);
 }
 
 export async function requireCaseReadAccess(
