@@ -25,6 +25,7 @@ import { TaskPlanningFields, EMPTY_TASK_PLANNING, type TaskPlanningValue } from 
 import { getCaseResponsibleCandidates, type CaseResponsibleCandidate } from "@/lib/api";
 import { resolveTaskSelection } from "@/lib/taskDeepLinkSelection";
 import { useTaskDeepLink } from "@/lib/useTaskDeepLink";
+import { useTaskCreateCapabilities } from "@/lib/useTaskCreateCapabilities";
 import { getClientAccentBorderClass } from "@/lib/clientColors";
 import {
   ATTENTION_PRESENTATIONS,
@@ -223,6 +224,9 @@ function TasksPageContent() {
   const openCreateFromQuery = searchParams?.get("newTask") === "1";
   const [currentUser, setCurrentUser] = useState<CurrentUser>({ id: "", email: "", name: "Én", role: "" });
   const [cases, setCases] = useState<CaseListItem[]>([]);
+  const taskCreateRights = useTaskCreateCapabilities(cases.map((caseItem) => caseItem.id));
+  const allowedCaseIds = new Set(taskCreateRights.allowedCaseIds);
+  const manageableCases = cases.filter((caseItem) => allowedCaseIds.has(caseItem.id));
   const [users, setUsers] = useState<User[]>([]);
   const [tasks, setTasks] = useState<TaskLifecycleListItem[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -253,14 +257,16 @@ function TasksPageContent() {
     attentionCategory: null,
     estimatedMinutes: null,
   });
+  const selectedCaseManageable = taskCreateRights.status === "ready" && allowedCaseIds.has(createData.caseId);
   const [taskPlanning, setTaskPlanning] = useState<TaskPlanningValue>(EMPTY_TASK_PLANNING);
   const focusedRowRef = useRef<HTMLTableRowElement | null>(null);
+  const autoOpenKeyRef = useRef<string | null>(null);
 
   // Case-scoped planning candidates: when a case is selected, reviewer/
   // collaborator/assignee options come from the authoritative backend projection.
   const [caseCandidates, setCaseCandidates] = useState<CaseResponsibleCandidate[]>([]);
   useEffect(() => {
-    if (!createData.caseId) {
+    if (!selectedCaseManageable) {
       setCaseCandidates([]);
       return;
     }
@@ -269,8 +275,8 @@ function TasksPageContent() {
       .then((result) => { if (active) setCaseCandidates(result.items); })
       .catch(() => { if (active) setCaseCandidates([]); });
     return () => { active = false; };
-  }, [createData.caseId]);
-  const planningUsers = createData.caseId ? caseCandidates : users;
+  }, [createData.caseId, selectedCaseManageable]);
+  const planningUsers = selectedCaseManageable ? caseCandidates : users;
   const duplicatePlanningNames = useMemo(() => new Set(planningUsers.filter((candidate, _index, all) => all.filter((other) => other.name === candidate.name).length > 1).map((candidate) => candidate.name)), [planningUsers]);
 
   const loadTasks = useCallback(async () => {
@@ -303,9 +309,25 @@ function TasksPageContent() {
     setDismissedDeepLinkId(null);
   }, [deepLinkedTaskId]);
 
+  const allowedCaseIdsKey = taskCreateRights.allowedCaseIds.join(",");
   useEffect(() => {
-    if (openCreateFromQuery) setShowCreateModal(true);
-  }, [openCreateFromQuery]);
+    if (!openCreateFromQuery) { autoOpenKeyRef.current = null; return; }
+    const key = deepLinkedCaseId || "global";
+    if (autoOpenKeyRef.current === key || isLoading || error || taskCreateRights.status !== "ready") return;
+    const allowed = new Set(allowedCaseIdsKey ? allowedCaseIdsKey.split(",") : []);
+    const available = cases.filter((caseItem) => allowed.has(caseItem.id));
+    if (available.length === 0 || (deepLinkedCaseId && !allowed.has(deepLinkedCaseId))) return;
+    autoOpenKeyRef.current = key;
+    setCreateData((current) => ({ ...current, caseId: deepLinkedCaseId || (allowed.has(current.caseId) ? current.caseId : available[0].id) }));
+    setShowCreateModal(true);
+  }, [openCreateFromQuery, isLoading, error, taskCreateRights.status, allowedCaseIdsKey, deepLinkedCaseId, cases]);
+
+  const canOpenCreate = !isLoading && !error && taskCreateRights.status === "ready" && manageableCases.length > 0 && (!deepLinkedCaseId || allowedCaseIds.has(deepLinkedCaseId));
+  const openCreate = () => {
+    if (!canOpenCreate) return;
+    setCreateData((current) => ({ ...current, caseId: allowedCaseIds.has(current.caseId) ? current.caseId : manageableCases[0].id }));
+    setShowCreateModal(true);
+  };
 
   const { deepLinkedItem, deepLinkState } = useTaskDeepLink({ deepLinkedTaskId, tasks, isLoading });
 
@@ -379,6 +401,10 @@ function TasksPageContent() {
   };
 
   const handleCreateTask = async () => {
+    if (!selectedCaseManageable) {
+      setError("Feladatot csak az ügy kezelője hozhat létre. Ellenőrizze a kiválasztott ügyet.");
+      return;
+    }
     if (!createData.caseId || !createData.title.trim() || !createData.type) {
       setError("Az ügy, a cím és a típus kötelező.");
       return;
@@ -418,7 +444,7 @@ function TasksPageContent() {
   return (
     <div className="min-h-screen bg-white text-[#1F2937]">
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
-        <PageHeader title="Feladatok" badge={<Badge tone="neutral">{filteredTasks.length} tétel</Badge>} primaryAction={<Button variant="primary" onClick={() => setShowCreateModal(true)}>Új feladat</Button>} actions={<QuietLink href="/reviews">Review munkatér</QuietLink>} />
+        <PageHeader title="Feladatok" badge={<Badge tone="neutral">{filteredTasks.length} tétel</Badge>} primaryAction={canOpenCreate ? <Button variant="primary" onClick={openCreate}>Új feladat</Button> : taskCreateRights.status === "unavailable" ? <Button variant="secondary" onClick={taskCreateRights.retry}>Feladatjogosultság újraellenőrzése</Button> : <span role="status" className="text-xs text-[#6B7280]">{isLoading || taskCreateRights.status === "loading" ? "Feladatjogosultság ellenőrzése…" : "Feladatot csak az ügy kezelője hozhat létre."}</span>} actions={<QuietLink href="/reviews">Review munkatér</QuietLink>} />
 
         <section className="rounded-[12px] border border-[#E5E7E6] bg-white p-3">
           <div className="flex flex-wrap items-center gap-2">{quickFilters.map((filter) => <Button key={filter.id} size="sm" variant={quickFilter === filter.id ? "primary" : "neutral"} aria-pressed={quickFilter === filter.id} onClick={() => setQuickFilter(filter.id)}>{filter.label} <span className="ml-1 opacity-70">{filter.count}</span></Button>)}</div>
@@ -436,7 +462,7 @@ function TasksPageContent() {
         {!isLoading && !error && deepLinkedTaskId && !tasks.some((task) => task.id === deepLinkedTaskId) && deepLinkState === "unavailable" ? <div role="status"><CompactState title="A feladat nem érhető el." detail="A hivatkozott feladat nem található, vagy nincs jogosultsága a megtekintéséhez." /></div> : null}
 
         <section>
-          {isLoading ? <div className="rounded-[12px] border border-[#E5E7E6] bg-white p-4"><CompactState title="Feladatok betöltése…" /></div> : filteredTasks.length === 0 ? <div className="rounded-[12px] border border-[#E5E7E6] bg-white p-4"><EmptyState title={tasks.length === 0 ? "Nincs kijelölt feladat." : "Nincs találat a kiválasztott nézetben."} description={tasks.length === 0 ? "Új feladat egy meglévő ügyhöz hozható létre." : "Módosítsa a keresést vagy a szűrőket."} action={<Button size="sm" variant="secondary" onClick={() => setShowCreateModal(true)}>Új feladat</Button>} /></div> : (
+          {isLoading ? <div className="rounded-[12px] border border-[#E5E7E6] bg-white p-4"><CompactState title="Feladatok betöltése…" /></div> : filteredTasks.length === 0 ? <div className="rounded-[12px] border border-[#E5E7E6] bg-white p-4"><EmptyState title={tasks.length === 0 ? "Nincs kijelölt feladat." : "Nincs találat a kiválasztott nézetben."} description={tasks.length === 0 ? "Új feladat egy meglévő ügyhöz hozható létre." : "Módosítsa a keresést vagy a szűrőket."} action={canOpenCreate ? <Button size="sm" variant="secondary" onClick={openCreate}>Új feladat</Button> : undefined} /></div> : (
             <DataTable minWidth={1180}>
               <DataTableHead><tr><DataTableHeaderCell>Feladat</DataTableHeaderCell><DataTableHeaderCell>Ügy / ügyfél</DataTableHeaderCell><DataTableHeaderCell>Felelős</DataTableHeaderCell><DataTableHeaderCell>Figyelmi munka</DataTableHeaderCell><DataTableHeaderCell>Prioritás</DataTableHeaderCell><DataTableHeaderCell>Határidő</DataTableHeaderCell><DataTableHeaderCell>Állapot</DataTableHeaderCell><DataTableHeaderCell>Leadás</DataTableHeaderCell><DataTableHeaderCell align="right">Következő lépés</DataTableHeaderCell></tr></DataTableHead>
               <DataTableBody>
@@ -483,9 +509,9 @@ function TasksPageContent() {
         else setSelectedTaskId(null);
       }} onWorkflowChanged={loadTasks} /> : null}
 
-      <WorkflowDialog open={showCreateModal} title="Új feladat" description="A feladat egy meglévő ügyhöz kapcsolódik." primaryLabel="Feladat létrehozása" primaryDisabled={!createData.caseId || !createData.title.trim() || !createData.type} busy={isSaving} onClose={() => setShowCreateModal(false)} onConfirm={() => void handleCreateTask()}>
+      <WorkflowDialog open={showCreateModal && canOpenCreate} title="Új feladat" description="A feladat egy meglévő ügyhöz kapcsolódik." primaryLabel="Feladat létrehozása" primaryDisabled={!selectedCaseManageable || !createData.title.trim() || !createData.type} busy={isSaving} onClose={() => setShowCreateModal(false)} onConfirm={() => void handleCreateTask()}>
         <div className="space-y-4">
-          <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Ügy<select autoFocus value={createData.caseId} onChange={(event) => { setCreateData((current) => ({ ...current, caseId: event.target.value, assignedTo: "" })); setTaskPlanning(EMPTY_TASK_PLANNING); }} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]"><option value="">Válasszon ügyet</option>{cases.map((caseItem) => <option key={caseItem.id} value={caseItem.id}>{caseItem.caseNumber} · {caseItem.clientName}</option>)}</select></label>
+          <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Ügy<select autoFocus value={createData.caseId} onChange={(event) => { setCreateData((current) => ({ ...current, caseId: event.target.value, assignedTo: "" })); setTaskPlanning(EMPTY_TASK_PLANNING); }} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]"><option value="">Válasszon kezelhető ügyet</option>{manageableCases.map((caseItem) => <option key={caseItem.id} value={caseItem.id}>{caseItem.caseNumber} · {caseItem.clientName}</option>)}</select></label>
           <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Cím<input value={createData.title} onChange={(event) => setCreateData((current) => ({ ...current, title: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]" /></label>
           <div className="grid gap-3 sm:grid-cols-2"><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Típus<select value={createData.type} onChange={(event) => setCreateData((current) => ({ ...current, type: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]">{TASK_TYPES.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}</select></label><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Prioritás<select value={createData.priority} onChange={(event) => setCreateData((current) => ({ ...current, priority: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]"><option value="LOW">Alacsony</option><option value="MEDIUM">Közepes</option><option value="HIGH">Magas</option><option value="URGENT">Magas</option></select></label></div>
           <TaskAttentionFormFields attentionCategory={createData.attentionCategory ?? null} estimatedMinutes={createData.estimatedMinutes ?? null} onChange={(next) => setCreateData((current) => ({ ...current, ...next }))} />

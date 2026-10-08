@@ -6,7 +6,7 @@ import { Router, Request, Response } from 'express';
 import taskService, { TaskValidationError } from './services';
 import { authenticate, requireRole } from '../../middleware/auth';
 import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
-import { requireCaseReadAccess, userCanReadCase } from '../cases/authorization';
+import { requireCaseReadAccess, userCanReadCase, userCanManageCase } from '../cases/authorization';
 import { buildPrismaErrorResponse } from '../../utils/prismaError';
 import {
   ensureNoArbitraryTaskStatusPayload,
@@ -236,7 +236,24 @@ router.use('/', taskSubmissionRoutes);
 // ============================================================================
 // POST /api/v1/tasks - Új feladat létrehozása
 // ============================================================================
-router.post('/', authenticate, async (req: Request, res: Response) => {
+router.get('/create-capabilities', authenticate, requireWorkforceUser, async (req: Request, res: Response) => {
+  const raw = req.query.caseIds;
+  if (typeof raw !== 'string' || !raw.trim()) {
+    return res.status(400).json({ code: 'CASE_IDS_REQUIRED' });
+  }
+  const caseIds = [...new Set(raw.split(',').map((id) => id.trim()))];
+  if (caseIds.length > 200 || caseIds.some((id) => !id || id.length > 80)) {
+    return res.status(400).json({ code: 'INVALID_CASE_IDS' });
+  }
+  try {
+    const decisions = await Promise.all(caseIds.map((id) => userCanManageCase(req, id)));
+    return res.json({ canCreateCaseIds: caseIds.filter((_id, index) => decisions[index] === true) });
+  } catch {
+    return res.status(500).json({ status: 500, code: 'CASE_AUTHORIZATION_ERROR', message: 'Case access could not be verified.' });
+  }
+});
+
+router.post('/', authenticate, requireWorkforceUser, async (req: Request, res: Response) => {
   try {
     const {
       caseId, title, description, priority,
@@ -254,6 +271,19 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
       return res.status(400).json({ 
         error: 'Hiányzó kötelező mezők: caseId, title, type/taskType' 
       });
+    }
+
+    let caseAccess: boolean | null;
+    try {
+      caseAccess = await userCanManageCase(req, String(caseId));
+    } catch {
+      return res.status(500).json({ status: 500, code: 'CASE_AUTHORIZATION_ERROR', message: 'Case access could not be verified.' });
+    }
+    if (caseAccess === null) {
+      return res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
+    }
+    if (!caseAccess) {
+      return res.status(403).json({ status: 403, code: 'CASE_ACCESS_FORBIDDEN', message: 'You do not have access to this case.' });
     }
 
     const mappedTaskType = mapFrontendTaskTypeToPrisma(rawType);
