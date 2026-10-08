@@ -4,17 +4,18 @@ import { it } from 'node:test';
 
 const row = (id: string, subject: string, direction: 'INBOUND' | 'OUTBOUND', at: string, caseId: string | null = null) => ({
   id, subject, direction, effectiveMessageAt: at, createdAt: at, caseId,
-  case: caseId ? { id: caseId, caseNumber: 'C-220', title: 'Másik ügy' } : null,
   senderName: 'Feladó', recipientName: 'Címzett', senderEmail: 'sender@example.test', recipientEmail: 'recipient@example.test',
   attachmentCount: id === 'a' ? 2 : 0, type: 'EMAIL',
 });
 
 it('an unassigned synthetic ledger supports metadata, multiselect, filters, sort and honest paging without reassignment', async () => {
   const calls: Array<{ clientId?: string; offset?: number }> = [];
+  const caseReads: string[] = [];
   const first = [row('a', 'Szerződés', 'INBOUND', '2026-10-07T09:00:00Z'),
     row('b', 'Határidő', 'OUTBOUND', '2026-10-08T10:00:00Z'), row('c', 'Kapcsolt', 'INBOUND', '2026-10-06T11:00:00Z', 'other-case')];
   const h = createRaceHarness('src/components/cases/intake/CaseCommunicationPickerDrawer.tsx', 'CaseCommunicationPickerDrawer', {
-    '@/lib/api': { getCommunications: async (params: { clientId?: string; offset?: number }) => {
+    '@/lib/api': { getCaseById: async (id: string) => { caseReads.push(id); return { id, clientId: 'client-a', caseNumber: 'C-220', title: 'Másik ügy' }; },
+      getCommunications: async (params: { clientId?: string; offset?: number }) => {
       calls.push(params);
       return { communications: params.offset ? [row('d', 'Negyedik', 'INBOUND', '2026-10-05T10:00:00Z')] : first,
         pagination: { total: 4, limit: 50, offset: params.offset ?? 0 } };
@@ -46,6 +47,7 @@ it('an unassigned synthetic ledger supports metadata, multiselect, filters, sort
   flatten(tree).find((node) => node.props?.['data-testid'] === 'comm-picker-assigned-toggle').props.onClick();
   tree = h.render(props);
   assert.match(textOf(flatten(tree).find((node) => node.props?.['data-testid'] === 'comm-picker-assigned')), /Kapcsolt ügy[\s\S]*C-220[\s\S]*Másik ügy/);
+  assert.deepEqual(caseReads, ['other-case']);
   assert.equal(flatten(tree).filter((node) => node.props?.['data-testid'] === 'comm-picker-item').length, 2);
 
   flatten(tree).find((node) => textOf(node) === 'További beszélgetések betöltése' && node.type === 'button').props.onClick();
@@ -91,4 +93,23 @@ it('late client A ledger responses cannot replace client B or preserve A selecti
   assert.match(textOf(tree), /Csak B/);
   assert.doesNotMatch(textOf(tree), /Régi A/);
   assert.equal(flatten(tree).find((node) => node.props?.['data-testid'] === 'comm-picker-confirm').props.disabled, true);
+});
+
+it('an assigned case from another client is not named and cannot be selected', async () => {
+  const h = createRaceHarness('src/components/cases/intake/CaseCommunicationPickerDrawer.tsx', 'CaseCommunicationPickerDrawer', {
+    '@/lib/api': {
+      getCommunications: async () => ({ communications: [row('linked', 'Rejtett ügy', 'INBOUND', '2026-10-07T09:00:00Z', 'foreign-case')], pagination: { total: 1 } }),
+      getCaseById: async (id: string) => ({ id, clientId: 'client-b', caseNumber: 'SECRET-9', title: 'Másik ügyfél' }),
+    },
+    '@/lib/businessDateTime': { businessDateKey: (value: string) => value.slice(0, 10) },
+    './intakeStyles': { intake: { field: '', primaryAction: '', secondaryAction: '' }, ACCENT_BG: {}, ACCENT_TEXT: {} },
+  });
+  const props = { open: true, clientId: 'client-a', currentCaseId: 'case-a', selectedIds: [], primaryId: '', onCancel() {}, onConfirm() {} };
+  h.render(props); h.effects(); await settle();
+  let tree = h.render(props);
+  flatten(tree).find((node) => node.props?.['data-testid'] === 'comm-picker-assigned-toggle').props.onClick();
+  tree = h.render(props);
+  assert.match(textOf(tree), /Az ügy adatai nem érhetők el/);
+  assert.doesNotMatch(textOf(tree), /SECRET-9|Másik ügyfél/);
+  assert.equal(flatten(tree).filter((node) => node.props?.['data-testid'] === 'comm-picker-item').length, 0);
 });

@@ -16,7 +16,7 @@ import { ViewportDialog } from "@/components/ui/ViewportDialog";
  * genuinely changes nothing.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getCommunications, type CommunicationItem } from "@/lib/api";
+import { getCaseById, getCommunications, type CommunicationItem } from "@/lib/api";
 import { businessDateKey } from "@/lib/businessDateTime";
 import { intake, ACCENT_BG, ACCENT_TEXT } from "./intakeStyles";
 
@@ -46,12 +46,29 @@ export function CaseCommunicationPickerDrawer({
   const [to, setTo] = useState("");
   const [sort, setSort] = useState<"NEWEST" | "OLDEST">("NEWEST");
   const [total, setTotal] = useState(0);
+  const [caseLabels, setCaseLabels] = useState<Record<string, string>>({});
+  const [pendingCaseIds, setPendingCaseIds] = useState<string[]>([]);
   const [loadedClientId, setLoadedClientId] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreError, setMoreError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const loadGeneration = useRef(0);
   const previousClientId = useRef(clientId);
+
+  const resolveAssignedCases = async (communications: CommunicationItem[], generation: number, scopeClientId: string) => {
+    const caseIds = [...new Set(communications.map((item) => item.caseId).filter((id): id is string => Boolean(id)))];
+    if (caseIds.length === 0) return;
+    setPendingCaseIds((current) => [...new Set([...current, ...caseIds])]);
+    const results = await Promise.allSettled(caseIds.map((id) => getCaseById(id)));
+    if (generation !== loadGeneration.current) return;
+    const labels: Record<string, string> = {};
+    results.forEach((result, index) => {
+      const item = result.status === "fulfilled" ? result.value : null;
+      if (item?.id === caseIds[index] && item.clientId === scopeClientId) labels[item.id] = `${item.caseNumber}${item.title ? ` · ${item.title}` : ""}`;
+    });
+    setCaseLabels((current) => ({ ...current, ...labels }));
+    setPendingCaseIds((current) => current.filter((id) => !caseIds.includes(id)));
+  };
   const [showAssigned, setShowAssigned] = useState(false);
   // Staged selection: cancelling must leave the form untouched.
   const [staged, setStaged] = useState<string[]>(selectedIds);
@@ -73,10 +90,12 @@ export function CaseCommunicationPickerDrawer({
     setMoreError(false);
     setItems([]);
     setTotal(0);
+    setCaseLabels({});
+    setPendingCaseIds([]);
     setLoadedClientId(null);
     if (!clientId) { setLoading(false); setLoadError(true); return () => { ++loadGeneration.current; }; }
     getCommunications({ limit: 50, clientId: clientId || undefined })
-      .then((r) => { if (generation === loadGeneration.current) { setItems(r.communications || []); setTotal(r.pagination?.total ?? r.communications.length); setLoadedClientId(clientId); } })
+      .then((r) => { if (generation === loadGeneration.current) { setItems(r.communications || []); setTotal(r.pagination?.total ?? r.communications.length); setLoadedClientId(clientId); void resolveAssignedCases(r.communications || [], generation, clientId); } })
       .catch(() => { if (generation === loadGeneration.current) { setItems([]); setLoadError(true); } })
       .finally(() => { if (generation === loadGeneration.current) setLoading(false); });
     return () => { ++loadGeneration.current; };
@@ -92,6 +111,7 @@ export function CaseCommunicationPickerDrawer({
       if (generation !== loadGeneration.current) return;
       setItems((current) => [...current, ...response.communications.filter((item) => !current.some((row) => row.id === item.id))]);
       setTotal(response.pagination?.total ?? total);
+      void resolveAssignedCases(response.communications, generation, clientId);
     } catch {
       if (generation === loadGeneration.current) setMoreError(true);
     } finally {
@@ -200,7 +220,7 @@ export function CaseCommunicationPickerDrawer({
                                <p className="mt-0.5 break-words text-[11.5px] text-[#5C6660]">{c.direction === "INBOUND" ? "Bejövő" : c.direction === "OUTBOUND" ? "Kimenő" : "Irány nem ismert"} · {c.senderName || c.senderEmail || "Ismeretlen feladó"} → {c.recipientName || c.recipientEmail || "Ismeretlen címzett"}</p>
                                <p className="text-[11px] text-[#5C6660]">{c.effectiveMessageAt || c.createdAt ? new Date(c.effectiveMessageAt || c.createdAt).toLocaleString("hu-HU", { timeZone: "Europe/Budapest", dateStyle: "short", timeStyle: "short" }) : "Időpont nem ismert"}{c.attachmentCount > 0 ? ` · ${c.attachmentCount} melléklet` : ""}</p>
                             </div>
-                            {sel && !singleSelect ? (
+                            {sel && !singleSelect && !currentCaseId ? (
                               <button
                                 type="button"
                                 data-testid="comm-picker-primary"
@@ -235,7 +255,7 @@ export function CaseCommunicationPickerDrawer({
                         {assigned.map((c) => (
                            <li key={c.id} className="rounded-md border border-[rgba(16,22,19,0.10)] bg-[#F4F6F4] px-3 py-1.5 text-[#5C6660]">
                              <p className="break-words text-[12.5px] font-semibold">{c.subject || "Nincs tárgy"}</p>
-                             <p className="break-words text-[11px]">{c.caseId === currentCaseId ? "Ehhez az ügyhöz kapcsolva" : "Kapcsolt ügy"}: {c.case?.caseNumber || "Ügyszám nem ismert"}{c.case?.title ? ` · ${c.case.title}` : ""}</p>
+                             <p className="break-words text-[11px]">{c.caseId === currentCaseId ? "Ehhez az ügyhöz kapcsolva" : "Kapcsolt ügy"}: {c.caseId && caseLabels[c.caseId] ? caseLabels[c.caseId] : c.caseId && pendingCaseIds.includes(c.caseId) ? "Ügyadatok ellenőrzése…" : "Az ügy adatai nem érhetők el"}</p>
                              <p className="break-words text-[11px]">{c.direction === "INBOUND" ? "Bejövő" : c.direction === "OUTBOUND" ? "Kimenő" : "Irány nem ismert"} · {c.senderName || c.senderEmail || "Ismeretlen feladó"} → {c.recipientName || c.recipientEmail || "Ismeretlen címzett"}</p>
                              <p className="text-[11px]">{c.effectiveMessageAt || c.createdAt ? new Date(c.effectiveMessageAt || c.createdAt).toLocaleString("hu-HU", { timeZone: "Europe/Budapest", dateStyle: "short", timeStyle: "short" }) : "Időpont nem ismert"}{c.attachmentCount > 0 ? ` · ${c.attachmentCount} melléklet` : ""}</p>
                           </li>

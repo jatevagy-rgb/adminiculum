@@ -52,8 +52,11 @@ describe("Case Workspace email-thread picker repair (B4)", () => {
     assert.match(src, /for \(const communicationId of uniqueIds\)/);
     assert.match(src, /await linkCommunicationToCase\(communicationId, caseId\)/);
     assert.match(src, /if \(activeLinkCaseId\.current !== caseId\) return/);
+    assert.match(src, /return \(\) => \{ activeLinkCaseId\.current = null; \}/);
     assert.match(src, /setCommPickerOpen\(false\); setCommLinkError\(null\); setCommLinkBusy\(false\)/);
-    assert.match(src, /\$\{linkedCount\} \/ \$\{uniqueIds\.length\} beszélgetés kapcsolása sikerült\. A többi nem változott/);
+    assert.match(src, /\$\{linkedCount\} \/ \$\{uniqueIds\.length\} kapcsolás visszaigazolt\. A hátralévő tételeket nem próbáltuk/);
+    assert.match(src, /A kapcsolás eredménye nem ismert\. Frissítés után ellenőrizze/);
+    assert.match(src, /\[403, 404, 409\]\.includes\(status \?\? 0\)/, "timeouts and 5xx cannot be reported as definitely uncommitted");
     assert.match(src, /setCommPickerOpen\(false\)/);
     assert.match(src, /await refresh\(\)/, "the linked thread is read back through a workspace refresh");
   });
@@ -62,7 +65,9 @@ describe("Case Workspace email-thread picker repair (B4)", () => {
     const src = drawer();
     assert.match(src, /singleSelect\?: boolean/);
     assert.match(src, /setStaged\(\[id\]\)/);
-    assert.match(src, /sel && !singleSelect/, "primary toggle is hidden in single-select mode");
+    assert.match(src, /sel && !singleSelect && !currentCaseId/, "primary toggle remains an intake-only capability");
+    assert.match(src, /getCaseById\(id\)/, "assigned case labels require an authorized case read, not an absent list relation");
+    assert.doesNotMatch(src, /c\.case\?\.caseNumber|c\.case\?\.title/);
     assert.match(src, /disabled=\{busy \|\| \(singleSelect && staged\.length !== 1\) \|\| Boolean\(currentCaseId && staged\.length === 0\)\}/);
     assert.match(src, /direction === "ALL" \|\| c\.direction === direction/);
     assert.match(src, /businessDateKey\(c\.effectiveMessageAt\)/);

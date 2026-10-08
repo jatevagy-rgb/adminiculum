@@ -104,7 +104,7 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
   const [commPickerOpen, setCommPickerOpen] = useState(false);
   const [commLinkBusy, setCommLinkBusy] = useState(false);
   const [commLinkError, setCommLinkError] = useState<string | null>(null);
-  const activeLinkCaseId = useRef(caseId);
+  const activeLinkCaseId = useRef<string | null>(caseId);
   activeLinkCaseId.current = caseId;
   const loadGeneration = useRef(0);
   const secondaryDetailsRef = useRef<HTMLDetailsElement | null>(null);
@@ -162,11 +162,14 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
           if (activeLinkCaseId.current !== caseId) return;
           const status = error instanceof ApiError ? error.status : undefined;
           const code = error instanceof ApiError ? error.code : undefined;
-          const message = linkThreadErrorMessage({ status, code });
-          if (linkedCount === 0) setCommLinkError(message);
+          const knownFailure = [403, 404, 409].includes(status ?? 0) || (error instanceof Error && error.message === "LINK_FAILED");
+          const message = knownFailure
+            ? linkThreadErrorMessage({ status, code })
+            : "A kapcsolás eredménye nem ismert. Frissítés után ellenőrizze a beszélgetés ügykapcsolatát.";
+          if (linkedCount === 0 && knownFailure) setCommLinkError(message);
           else {
             setCommPickerOpen(false);
-            setActionError(`${linkedCount} / ${uniqueIds.length} beszélgetés kapcsolása sikerült. A többi nem változott. ${message}`);
+            setActionError(`${linkedCount} / ${uniqueIds.length} kapcsolás visszaigazolt. A hátralévő tételeket nem próbáltuk. ${message}`);
             await refresh();
           }
           return;
@@ -179,7 +182,11 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
   }, [caseId, refresh]);
 
   useEffect(() => { void load(); return () => { ++loadGeneration.current; }; }, [load]);
-  useEffect(() => { setCommPickerOpen(false); setCommLinkError(null); setCommLinkBusy(false); }, [caseId]);
+  useEffect(() => {
+    activeLinkCaseId.current = caseId;
+    setCommPickerOpen(false); setCommLinkError(null); setCommLinkBusy(false);
+    return () => { activeLinkCaseId.current = null; };
+  }, [caseId]);
 
   // The risk-matrix selection is always case-scoped: switching cases clears it,
   // and a refreshed workspace that no longer contains the selected document
