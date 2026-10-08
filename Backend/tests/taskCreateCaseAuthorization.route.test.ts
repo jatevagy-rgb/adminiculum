@@ -44,22 +44,23 @@ const missingCaseId = '22222222-2222-4222-8222-222222222222';
 
 function app(): Express { const result = express(); result.use(express.json()); result.use('/tasks', routes); return result; }
 
-function request(body: Record<string, unknown>, actorId = 'actor', role = 'LAWYER', authenticated = true): Promise<{ status: number; body: any }> {
+function request(body: Record<string, unknown>, actorId = 'actor', role = 'LAWYER', authenticated = true, method: 'POST' | 'GET' = 'POST', path = '/tasks'): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
     const server = app().listen(0, '127.0.0.1', () => {
       const address = server.address();
       if (!address || typeof address === 'string') { server.close(); reject(new Error('Test server unavailable')); return; }
-      const payload = JSON.stringify(body);
-      const call = http.request({ hostname: '127.0.0.1', port: address.port, method: 'POST', path: '/tasks', headers: {
+      const payload = method === 'POST' ? JSON.stringify(body) : '';
+      const call = http.request({ hostname: '127.0.0.1', port: address.port, method, path, headers: {
         ...(authenticated ? { authorization: 'Bearer test-token' } : {}),
-        'x-actor-id': actorId, 'x-actor-role': role, 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload),
+        'x-actor-id': actorId, 'x-actor-role': role,
+        ...(method === 'POST' ? { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) } : {}),
       } }, (response) => {
         const chunks: Buffer[] = [];
         response.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
         response.on('end', () => { server.close(); const text = Buffer.concat(chunks).toString('utf8'); resolve({ status: response.statusCode || 0, body: text ? JSON.parse(text) : null }); });
       });
       call.on('error', (error) => { server.close(); reject(error); });
-      call.end(payload);
+      call.end(payload || undefined);
     });
   });
 }
@@ -143,5 +144,23 @@ describe('POST /api/v1/tasks CASE_MANAGE security boundary', () => {
     expect(canAssignMock).not.toHaveBeenCalled();
     expect(assertPlanningRolesMock).not.toHaveBeenCalled();
     expect(createTaskMock).toHaveBeenCalledWith(expect.objectContaining({ caseId, title: 'Egyszerű feladat', assignedBy: 'assigned-lawyer', plannedReviewerId: null }));
+  });
+
+  it('projects only CASE_MANAGE case IDs without exposing nonexistent or inaccessible IDs', async () => {
+    manageCaseMock.mockImplementation(async (_req: Request, id: string) => id === caseId ? true : id === missingCaseId ? null : false);
+    const hiddenCaseId = '33333333-3333-4333-8333-333333333333';
+    const path = `/tasks/create-capabilities?caseIds=${caseId},${missingCaseId},${hiddenCaseId},${caseId}`;
+    const result = await request({}, 'actor', 'LAWYER', true, 'GET', path);
+    expect(result).toMatchObject({ status: 200, body: { canCreateCaseIds: [caseId] } });
+    expect(manageCaseMock).toHaveBeenCalledTimes(3);
+    expectNoDownstreamEffects();
+  });
+
+  it('fails closed for capability-read lookup errors and rejects non-workforce callers', async () => {
+    manageCaseMock.mockRejectedValue(new Error('synthetic lookup failure'));
+    const path = `/tasks/create-capabilities?caseIds=${caseId}`;
+    expect(await request({}, 'actor', 'LAWYER', true, 'GET', path)).toMatchObject({ status: 500, body: { code: 'CASE_AUTHORIZATION_ERROR' } });
+    expect(JSON.stringify((await request({}, 'portal', 'CUSTOMER', true, 'GET', path)).body)).toContain('WORKFORCE_ACCESS_REQUIRED');
+    expectNoDownstreamEffects();
   });
 });

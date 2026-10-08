@@ -16,6 +16,7 @@ import { getCaseResponsibility, getCaseWorkspace, startTask, type CaseResponsibi
 import { getCaseComments, createCaseComment, type CaseCommentDto } from "@/lib/api";
 import { ApiError, linkCommunicationToCase } from "@/lib/api";
 import { linkThreadErrorMessage } from "@/lib/communicationLinkErrors";
+import { useTaskCreateCapabilities } from "@/lib/useTaskCreateCapabilities";
 import { listTaskLifecycleItems, type TaskLifecycleListItem } from "@/lib/taskLifecycleApi";
 import { getCaseMatterTypeLabel, getCaseStatusLabel } from "@/lib/caseLabels";
 import { taskStatusLabel } from "@/lib/taskWorkflowPresentation";
@@ -77,6 +78,8 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
 
 function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
   const router = useRouter();
+  const taskCreateRights = useTaskCreateCapabilities([caseId]);
+  const canCreateTask = taskCreateRights.status === "ready" && taskCreateRights.allowedCaseIds.includes(caseId);
   const [ws, setWs] = useState<CaseWorkspace | null>(null);
   const [responsibility, setResponsibility] = useState<CaseResponsibilityResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -369,7 +372,9 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
 
       <section aria-label="Műveletek" data-testid="case-workspace-quick-actions" className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5">
         <span className="mr-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Műveletek</span>
-        <AdminButton variant="primary" size="xs" onClick={() => setModal({ type: "task-create" })}>Új feladat</AdminButton>
+        {canCreateTask ? <AdminButton variant="primary" size="xs" onClick={() => setModal({ type: "task-create" })}>Új feladat</AdminButton> :
+          taskCreateRights.status === "unavailable" ? <button type="button" className="text-xs underline" onClick={taskCreateRights.retry}>Feladatjogosultság újraellenőrzése</button> :
+            <span role="status" className="text-xs text-[var(--adm-text-muted)]">{taskCreateRights.status === "loading" ? "Feladatjogosultság ellenőrzése…" : "Feladatot az ügy kezelője hozhat létre."}</span>}
         <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "doc-upload" })}>Dokumentum feltöltése</AdminButton>
         <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "case-comment" })}>Megjegyzés hozzáadása</AdminButton>
         <AdminButton variant="neutral" size="xs" onClick={() => { setTimeDialogResumeTask(null); setTimeDialogInitialTaskId(undefined); setTimeDialogOpen(true); }}>Munkaidő rögzítése</AdminButton>
@@ -385,7 +390,8 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
             {warn("tasks") ? (
               <ActionableEmpty message="A feladatok most nem érhetők el." actionLabel="Újratöltés" onAction={() => void refresh()} />
             ) : ws.tasks.length === 0 ? (
-              <ActionableEmpty message="Nincs nyitott feladat ezen az ügyön." actionLabel="Első feladat létrehozása" onAction={() => setModal({ type: "task-create" })} />
+              canCreateTask ? <ActionableEmpty message="Nincs nyitott feladat ezen az ügyön." actionLabel="Első feladat létrehozása" onAction={() => setModal({ type: "task-create" })} /> :
+                <p className="p-3 text-xs text-[var(--adm-text-muted)]">Nincs nyitott feladat ezen az ügyön. Új feladatot az ügy kezelője hozhat létre.</p>
             ) : (
               <div>
                 {immediate.length > 0 ? (
@@ -413,7 +419,8 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
 
           <CockpitSection id="ck-deadlines" title="Határidők" accent="terracotta" count={cp.kpi.deadlines.count}>
             {allDeadlines.length === 0 ? (
-              <ActionableEmpty message="Nincs rögzített határidő." actionLabel="Határidő hozzáadása" onAction={() => setModal({ type: "deadline-create" })} />
+              canCreateTask ? <ActionableEmpty message="Nincs rögzített határidő." actionLabel="Határidő hozzáadása" onAction={() => setModal({ type: "deadline-create" })} /> :
+                <p className="p-3 text-xs text-[var(--adm-text-muted)]">Nincs rögzített határidő. Határidős feladatot az ügy kezelője hozhat létre.</p>
             ) : (
               <div data-testid="deadline-timeline">
                 {([
@@ -581,9 +588,9 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
       </section>
 
       {/* ---- inline action modals ------------------------------------------ */}
-      {modal?.type === "task-create" ? <TaskFormModal caseId={caseId} clientId={c.client?.id ?? null} mode="create" onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
+      {modal?.type === "task-create" && canCreateTask ? <TaskFormModal caseId={caseId} clientId={c.client?.id ?? null} mode="create" onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {modal?.type === "task-edit" ? <TaskFormModal caseId={caseId} clientId={c.client?.id ?? null} mode="edit" task={modal.task} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
-      {modal?.type === "deadline-create" ? <TaskFormModal caseId={caseId} clientId={c.client?.id ?? null} mode="create" deadlineMode onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
+      {modal?.type === "deadline-create" && canCreateTask ? <TaskFormModal caseId={caseId} clientId={c.client?.id ?? null} mode="create" deadlineMode onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {modal?.type === "doc-upload" ? <DocumentUploadModal caseId={caseId} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {modal?.type === "case-comment" ? <CaseCommentModal caseId={caseId} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {modal?.type === "doc-comments" ? <DocumentCommentsModal documentId={modal.doc.id} documentName={modal.doc.fileName} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}

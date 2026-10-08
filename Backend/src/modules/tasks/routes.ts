@@ -236,6 +236,23 @@ router.use('/', taskSubmissionRoutes);
 // ============================================================================
 // POST /api/v1/tasks - Új feladat létrehozása
 // ============================================================================
+router.get('/create-capabilities', authenticate, requireWorkforceUser, async (req: Request, res: Response) => {
+  const raw = req.query.caseIds;
+  if (typeof raw !== 'string' || !raw.trim()) {
+    return res.status(400).json({ code: 'CASE_IDS_REQUIRED' });
+  }
+  const caseIds = [...new Set(raw.split(',').map((id) => id.trim()))];
+  if (caseIds.length > 200 || caseIds.some((id) => !id || id.length > 80)) {
+    return res.status(400).json({ code: 'INVALID_CASE_IDS' });
+  }
+  try {
+    const decisions = await Promise.all(caseIds.map((id) => userCanManageCase(req, id)));
+    return res.json({ canCreateCaseIds: caseIds.filter((_id, index) => decisions[index] === true) });
+  } catch {
+    return res.status(500).json({ status: 500, code: 'CASE_AUTHORIZATION_ERROR', message: 'Case access could not be verified.' });
+  }
+});
+
 router.post('/', authenticate, requireWorkforceUser, async (req: Request, res: Response) => {
   try {
     const {
