@@ -39,6 +39,7 @@ import { linkThreadErrorMessage } from "@/lib/communicationLinkErrors";
 import { TaskPlanningFields, type TaskPlanningValue } from "@/components/tasks/TaskPlanningFields";
 import { ATTENTION_CATEGORY_ORDER, attentionPresentation } from "@/lib/attentionCategory";
 import { buildForwardBody, buildReplyAllRecipients } from "@/lib/mailboxMessageRecipients";
+import { attachmentContentType, attachmentDisplayName, formatAttachmentSize } from "@/lib/attachmentPresentation";
 
 const EMPTY_TASK_PLANNING: TaskPlanningValue = {
   taskDefinitionId: null,
@@ -750,7 +751,7 @@ function CommunicationDetail({ item, detail, mailboxes, relatedCase, relatedClie
       <div className="space-y-4 p-4">
         <div><p className="text-[12px] font-semibold text-[var(--adm-text)]">{item.senderName || item.senderEmail || "Nincs feladóadat"}</p><p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{formatContact(item)}</p></div>
         {item.summary || item.contentPreview ? <p className="border-l-2 border-[var(--adm-blue-500)] pl-3 text-[11px] leading-5 text-[var(--adm-text-muted)]">{item.summary || item.contentPreview}</p> : null}
-        {detail?.content ? <section aria-label="Üzenet tartalma" className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3"><p className="whitespace-pre-wrap text-[11px] leading-5 text-[var(--adm-text)]">{detail.content}</p>{detail.attachments?.length ? <p className="mt-3 border-t border-[var(--adm-border)] pt-2 text-[10px] font-semibold text-[var(--adm-text-muted)]">{detail.attachments.length} melléklet csatolva</p> : null}</section> : null}
+        {detail?.content ? <section aria-label="Üzenet tartalma" className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3"><p className="whitespace-pre-wrap text-[11px] leading-5 text-[var(--adm-text)]">{detail.content}</p>{detail.attachments?.length ? <div className="mt-3 border-t border-[var(--adm-border)] pt-2"><p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Mellékletek</p><ul className="mt-1 space-y-0.5">{detail.attachments.map((attachment, index) => <li key={attachment.id || `${attachment.fileName}-${index}`} className="text-[10px] text-[var(--adm-text-muted)]"><span className="font-semibold text-[var(--adm-text)]">{attachmentDisplayName(attachment)}</span>{formatAttachmentSize(attachment.sizeBytes) ? <span> · {formatAttachmentSize(attachment.sizeBytes)}</span> : null}{attachmentContentType(attachment) ? <span> · {attachmentContentType(attachment)}</span> : null}</li>)}</ul></div> : null}</section> : null}
         <div className="flex flex-wrap gap-1"><StatusChip>{sourceLabel(item)}</StatusChip><StatusChip>{signal.direction === "incoming" ? "Bejövő" : "Kimenő"}</StatusChip><StatusChip>{signal.audience === "external" ? "Külső" : "Belső"}</StatusChip><StatusChip>{formatCommunicationType(item.type)}</StatusChip>{item.attachmentCount > 0 ? <StatusChip>{item.attachmentCount} melléklet</StatusChip> : null}{item.sourceTaskCount > 0 ? <StatusChip>{item.sourceTaskCount} feladat</StatusChip> : null}</div>
         {item.triage === "NEEDS_ASSIGNMENT" || item.triage === "IGNORED" ? (
           <div className="flex flex-wrap items-center gap-2">

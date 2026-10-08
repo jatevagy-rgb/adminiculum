@@ -4098,6 +4098,8 @@ export interface CommunicationAttachment {
   description: string | null;
   url: string | null;
   spItemId: string | null;
+  /** Provider attachment size in bytes (metadata only; bytes are not stored). */
+  sizeBytes?: number | null;
   communicationId: string;
   documentId: string | null;
   uploadedById: string;
