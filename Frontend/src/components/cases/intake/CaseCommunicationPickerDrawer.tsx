@@ -248,7 +248,7 @@ export function CaseCommunicationPickerDrawer({
                       onClick={() => setShowAssigned((v) => !v)}
                       className="text-[12px] font-semibold text-[#5C6660] hover:text-[#16201A]"
                     >
-                      Más ügyhöz már hozzárendelve ({assigned.length}) {showAssigned ? "▲" : "▼"}
+                      Már ügyhöz kapcsolt beszélgetések ({assigned.length}) {showAssigned ? "▲" : "▼"}
                     </button>
                     {showAssigned ? (
                       <ul data-testid="comm-picker-assigned" className="mt-1.5 space-y-1">

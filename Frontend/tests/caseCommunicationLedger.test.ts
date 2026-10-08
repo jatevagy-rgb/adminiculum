@@ -113,3 +113,23 @@ it('an assigned case from another client is not named and cannot be selected', a
   assert.doesNotMatch(textOf(tree), /SECRET-9|Másik ügyfél/);
   assert.equal(flatten(tree).filter((node) => node.props?.['data-testid'] === 'comm-picker-item').length, 0);
 });
+
+it('an already-linked conversation in this case is never grouped as another case', async () => {
+  const h = createRaceHarness('src/components/cases/intake/CaseCommunicationPickerDrawer.tsx', 'CaseCommunicationPickerDrawer', {
+    '@/lib/api': {
+      getCommunications: async () => ({ communications: [row('own', 'Saját ügy', 'INBOUND', '2026-10-07T09:00:00Z', 'case-a')], pagination: { total: 1 } }),
+      getCaseById: async (id: string) => ({ id, clientId: 'client-a', caseNumber: 'C-100', title: 'Jelen ügy' }),
+    },
+    '@/lib/businessDateTime': { businessDateKey: (value: string) => value.slice(0, 10) },
+    './intakeStyles': { intake: { field: '', primaryAction: '', secondaryAction: '' }, ACCENT_BG: {}, ACCENT_TEXT: {} },
+  });
+  const props = { open: true, clientId: 'client-a', currentCaseId: 'case-a', selectedIds: [], primaryId: '', onCancel() {}, onConfirm() {} };
+  h.render(props); h.effects(); await settle();
+  let tree = h.render(props);
+  assert.match(textOf(tree), /Már ügyhöz kapcsolt beszélgetések \(\s*1\s*\)/);
+  assert.doesNotMatch(textOf(tree), /Más ügyhöz már hozzárendelve/);
+  flatten(tree).find((node) => node.props?.['data-testid'] === 'comm-picker-assigned-toggle').props.onClick();
+  tree = h.render(props);
+  assert.match(textOf(tree), /Ehhez az ügyhöz kapcsolva[\s\S]*C-100[\s\S]*Jelen ügy/);
+  assert.equal(flatten(tree).filter((node) => node.props?.['data-testid'] === 'comm-picker-item').length, 0);
+});
