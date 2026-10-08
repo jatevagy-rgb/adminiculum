@@ -79,6 +79,7 @@ export function LegalSourceImpactView({
     openRequest.current += 1;
     setOpeningReference(null);
     setOpenError(null);
+    return () => { openRequest.current += 1; };
   }, [impact]);
 
   const openVersion = async (reference: typeof documentImpact.references[number]) => {
