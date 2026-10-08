@@ -99,11 +99,13 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
   // Explicit risk-matrix target: the user selects a concrete document of THIS
   // case before the matrix panel accepts a save. No first-document fallback.
   const [riskDocId, setRiskDocId] = useState<string | null>(null);
-  // Case-thread linking: reuses the existing intake communication picker in
-  // single-select mode. The link is staged and only committed on confirm.
+  // Case-thread linking reuses the intake picker; selected unassigned threads
+  // are committed only after confirmation.
   const [commPickerOpen, setCommPickerOpen] = useState(false);
   const [commLinkBusy, setCommLinkBusy] = useState(false);
   const [commLinkError, setCommLinkError] = useState<string | null>(null);
+  const activeLinkCaseId = useRef<string | null>(caseId);
+  activeLinkCaseId.current = caseId;
   const loadGeneration = useRef(0);
   const secondaryDetailsRef = useRef<HTMLDetailsElement | null>(null);
 
@@ -143,28 +145,48 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
   }, [load]);
 
   const confirmLinkThread = useCallback(async (ids: string[]) => {
-    if (ids.length !== 1) return;
-    const communicationId = ids[0];
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length === 0) return;
     setCommLinkBusy(true);
     setCommLinkError(null);
+    setActionError(null);
+    let linkedCount = 0;
     try {
-      const result = await linkCommunicationToCase(communicationId, caseId);
-      if (result.success) {
-        setCommPickerOpen(false);
-        await refresh();
-      } else {
-        setCommLinkError("A beszélgetés hozzárendelése nem sikerült. Próbáld újra.");
+      for (const communicationId of uniqueIds) {
+        try {
+          const result = await linkCommunicationToCase(communicationId, caseId);
+          if (activeLinkCaseId.current !== caseId) return;
+          if (!result.success) throw new Error("LINK_FAILED");
+          linkedCount += 1;
+        } catch (error) {
+          if (activeLinkCaseId.current !== caseId) return;
+          const status = error instanceof ApiError ? error.status : undefined;
+          const code = error instanceof ApiError ? error.code : undefined;
+          const knownFailure = [403, 404, 409].includes(status ?? 0) || (error instanceof Error && error.message === "LINK_FAILED");
+          const message = knownFailure
+            ? linkThreadErrorMessage({ status, code })
+            : "A kapcsolás eredménye nem ismert. Frissítés után ellenőrizze a beszélgetés ügykapcsolatát.";
+          if (linkedCount === 0 && knownFailure) setCommLinkError(message);
+          else {
+            setCommPickerOpen(false);
+            setActionError(`${linkedCount} / ${uniqueIds.length} kapcsolás visszaigazolt. A hátralévő tételeket nem próbáltuk. ${message}`);
+            await refresh();
+          }
+          return;
+        }
       }
-    } catch (e) {
-      const status = e instanceof ApiError ? e.status : undefined;
-      const code = e instanceof ApiError ? e.code : undefined;
-      setCommLinkError(linkThreadErrorMessage({ status, code }));
+      if (activeLinkCaseId.current === caseId) { setCommPickerOpen(false); await refresh(); }
     } finally {
-      setCommLinkBusy(false);
+      if (activeLinkCaseId.current === caseId) setCommLinkBusy(false);
     }
   }, [caseId, refresh]);
 
   useEffect(() => { void load(); return () => { ++loadGeneration.current; }; }, [load]);
+  useEffect(() => {
+    activeLinkCaseId.current = caseId;
+    setCommPickerOpen(false); setCommLinkError(null); setCommLinkBusy(false);
+    return () => { activeLinkCaseId.current = null; };
+  }, [caseId]);
 
   // The risk-matrix selection is always case-scoped: switching cases clears it,
   // and a refreshed workspace that no longer contains the selected document
@@ -626,9 +648,9 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
         <CaseCommunicationPickerDrawer
           open={commPickerOpen}
           clientId={c.client?.id ?? ""}
+          currentCaseId={caseId}
           selectedIds={[]}
           primaryId=""
-          singleSelect
           busy={commLinkBusy}
           error={commLinkError}
           onCancel={() => { if (!commLinkBusy) setCommPickerOpen(false); }}
