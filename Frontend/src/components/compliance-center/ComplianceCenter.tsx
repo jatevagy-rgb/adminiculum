@@ -1,11 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { getCaseById, getDocumentById, getDocumentVersions } from "@/lib/api";
+import { resolveComplianceDocumentUrl } from "@/lib/complianceDocumentNavigation";
 import {
   complianceCenterApi,
   type ComplianceCenterOverview,
   type OfficeDocumentFamily,
+  type OfficeDocumentFamilyMember,
   type OfficeLegalSourceReviewSignal,
 } from "@/lib/complianceCenterApi";
 import { complianceIntelligenceApi, type ComplianceMonitoringManifest } from "@/lib/complianceIntelligenceApi";
@@ -123,7 +127,11 @@ function LegalSourcesTable({
 }
 
 export function ComplianceCenter() {
+  const router = useRouter();
   const [view, setView] = useState<View>("overview");
+  const openRequest = useRef(0);
+  const [openingVersionId, setOpeningVersionId] = useState<string | null>(null);
+  const [openErrorId, setOpenErrorId] = useState<string | null>(null);
   const [overview, setOverview] = useState<ComplianceCenterOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -164,6 +172,35 @@ export function ComplianceCenter() {
     loadFamilies();
     loadManifest();
   }, [load, loadFamilies, loadManifest]);
+
+  useEffect(() => {
+    openRequest.current += 1;
+    setOpeningVersionId(null);
+    setOpenErrorId(null);
+  }, [view]);
+
+  const openMember = async (member: OfficeDocumentFamilyMember, exactVersion: boolean) => {
+    const request = ++openRequest.current;
+    setOpeningVersionId(member.documentVersionId);
+    setOpenErrorId(null);
+    try {
+      const url = await resolveComplianceDocumentUrl(member, exactVersion, {
+        document: getDocumentById,
+        case: getCaseById,
+        versions: getDocumentVersions,
+      });
+      if (request !== openRequest.current) return;
+      if (!url) {
+        setOpenErrorId(member.documentVersionId);
+        return;
+      }
+      router.push(url);
+    } catch {
+      if (request === openRequest.current) setOpenErrorId(member.documentVersionId);
+    } finally {
+      if (request === openRequest.current) setOpeningVersionId(null);
+    }
+  };
 
   const selectedSource = useMemo(
     () => overview?.legalSources.find((source) => source.legalSourceVersionId === selectedSourceId) ?? null,
@@ -322,6 +359,11 @@ export function ComplianceCenter() {
                               <span className="text-[var(--adm-text-muted)]">
                                 v{member.version}{member.isCurrent ? " · aktuális" : ""}
                               </span>
+                              <div className="flex flex-wrap items-center gap-1">
+                                <AdminButton size="sm" variant="neutral" aria-label={`Dokumentum megnyitása: ${family.name}, ${member.clientName}`} disabled={openingVersionId === member.documentVersionId} onClick={() => void openMember(member, false)}>Dokumentum</AdminButton>
+                                <AdminButton size="sm" variant="neutral" aria-label={`Pontos v${member.version} verzió megnyitása: ${family.name}, ${member.clientName}`} disabled={openingVersionId === member.documentVersionId} onClick={() => void openMember(member, true)}>{openingVersionId === member.documentVersionId ? "Megnyitás…" : `v${member.version} megnyitása`}</AdminButton>
+                              </div>
+                              {openErrorId === member.documentVersionId ? <span role="alert" className="w-full text-[var(--adm-terracotta-700)]">A dokumentum vagy ez a verzió nem nyitható meg. Ellenőrizze a hozzáférést, vagy próbálja újra.</span> : null}
                             </li>
                           ))}
                         </ul>
