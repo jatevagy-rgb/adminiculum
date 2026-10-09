@@ -776,7 +776,7 @@ router.post('/:id/versions/:versionId/security-scan/retry', authenticate, requir
     res.status(404).json({ status: 404, code: 'DOCUMENT_VERSION_NOT_FOUND', message: 'Document version not found.' });
     return;
   }
-  if (version.securityScanStatus !== 'SCAN_FAILED') {
+  if (version.securityScanStatus !== 'SCAN_FAILED' && version.securityScanStatus !== 'PENDING_SCAN') {
     res.status(409).json({ status: 409, code: 'DOCUMENT_SCAN_RETRY_NOT_ALLOWED', message: 'This document does not need a security scan retry.' });
     return;
   }

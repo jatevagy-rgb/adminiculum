@@ -5,20 +5,36 @@
  * transition are fail-closed:
  *   - securityScanBlock only passes an explicit CLEAN; every other status
  *     (PENDING_SCAN, SCAN_FAILED, INFECTED, unknown/missing) is blocked.
- *   - scanDocumentVersionInBackground only persists CLEAN on a real CLEAN
- *     verdict, INFECTED on infected, and SCAN_FAILED otherwise (never a
- *     fabricated CLEAN).
+ *   - scanDocumentVersionInBackground only persists a terminal verdict by
+ *     transitioning FROM PENDING_SCAN, so a late/duplicate/concurrent scan can
+ *     never overwrite an already-terminal verdict (most critically a late CLEAN
+ *     can never downgrade a persisted INFECTED).
  */
 
-import { securityScanBlock, scanDocumentVersionInBackground } from '../src/modules/documents/securityScan.service';
+import {
+  securityScanBlock,
+  scanDocumentVersionInBackground,
+  retryDocumentVersionScan,
+} from '../src/modules/documents/securityScan.service';
 import { setScanner } from '../src/modules/upload-security/scannerAdapter';
 import type { MalwareScanner } from '../src/modules/upload-security/scannerAdapter';
 
-const mockPrismaUpdate = jest.fn();
+const mockPrismaUpdateMany = jest.fn();
+const mockPrismaFindUnique = jest.fn();
+const mockDownload = jest.fn();
+
 jest.mock('../src/prisma/prisma.service', () => ({
   prisma: {
-    documentVersion: { update: (...args: unknown[]) => mockPrismaUpdate(...args) },
+    documentVersion: {
+      updateMany: (...args: unknown[]) => mockPrismaUpdateMany(...args),
+      findUnique: (...args: unknown[]) => mockPrismaFindUnique(...args),
+    },
   },
+}));
+
+jest.mock('../src/modules/sharepoint/driveService', () => ({
+  __esModule: true,
+  default: { downloadDocument: (...args: unknown[]) => mockDownload(...args) },
 }));
 
 const mockResume = jest.fn();
@@ -51,10 +67,10 @@ describe('securityScanBlock — canonical fail-closed primitive', () => {
   });
 });
 
-describe('scanDocumentVersionInBackground — durable status transition', () => {
+describe('scanDocumentVersionInBackground — conditional terminal transition', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockPrismaUpdate.mockResolvedValue({});
+    mockPrismaUpdateMany.mockResolvedValue({ count: 1 });
     mockResume.mockResolvedValue(0);
   });
 
@@ -62,31 +78,109 @@ describe('scanDocumentVersionInBackground — durable status transition', () => 
     setScanner(null);
   });
 
-  it('CLEAN verdict → persists CLEAN and resumes blocked analysis', async () => {
+  const pendingWhere = (status: string) => ({
+    where: { id: 'v1', securityScanStatus: 'PENDING_SCAN' },
+    data: { securityScanStatus: status },
+  });
+
+  it('CLEAN verdict → transitions PENDING to CLEAN and resumes blocked analysis', async () => {
     setScanner(scannerReturning('CLEAN'));
     await scanDocumentVersionInBackground('v1', Buffer.from('clean'));
-    expect(mockPrismaUpdate).toHaveBeenCalledWith({ where: { id: 'v1' }, data: { securityScanStatus: 'CLEAN' } });
+    expect(mockPrismaUpdateMany).toHaveBeenCalledWith(pendingWhere('CLEAN'));
     expect(mockResume).toHaveBeenCalledWith('v1');
   });
 
-  it('INFECTED verdict → persists INFECTED (never CLEAN)', async () => {
+  it('INFECTED verdict → transitions PENDING to INFECTED (never CLEAN)', async () => {
     setScanner(scannerReturning('INFECTED'));
     await scanDocumentVersionInBackground('v1', Buffer.from('infected'));
-    expect(mockPrismaUpdate).toHaveBeenCalledWith({ where: { id: 'v1' }, data: { securityScanStatus: 'INFECTED' } });
+    expect(mockPrismaUpdateMany).toHaveBeenCalledWith(pendingWhere('INFECTED'));
     expect(mockResume).not.toHaveBeenCalled();
   });
 
-  it('SCAN_FAILED verdict → persists SCAN_FAILED (never CLEAN)', async () => {
+  it('SCAN_FAILED verdict → transitions PENDING to SCAN_FAILED (never CLEAN)', async () => {
     setScanner(scannerReturning('SCAN_FAILED'));
     await scanDocumentVersionInBackground('v1', Buffer.from('fail'));
-    expect(mockPrismaUpdate).toHaveBeenCalledWith({ where: { id: 'v1' }, data: { securityScanStatus: 'SCAN_FAILED' } });
+    expect(mockPrismaUpdateMany).toHaveBeenCalledWith(pendingWhere('SCAN_FAILED'));
     expect(mockResume).not.toHaveBeenCalled();
   });
 
-  it('scanner throws → persists SCAN_FAILED (never CLEAN)', async () => {
+  it('scanner throws → transitions PENDING to SCAN_FAILED (never CLEAN)', async () => {
     setScanner({ provider: 'FAKE', scan: async () => { throw new Error('boom'); } });
     await scanDocumentVersionInBackground('v1', Buffer.from('boom'));
-    expect(mockPrismaUpdate).toHaveBeenCalledWith({ where: { id: 'v1' }, data: { securityScanStatus: 'SCAN_FAILED' } });
+    expect(mockPrismaUpdateMany).toHaveBeenCalledWith(pendingWhere('SCAN_FAILED'));
     expect(mockResume).not.toHaveBeenCalled();
+  });
+
+  it('a no-op transition (already terminal) does not resume analysis even on a CLEAN verdict', async () => {
+    mockPrismaUpdateMany.mockResolvedValue({ count: 0 });
+    setScanner(scannerReturning('CLEAN'));
+    await scanDocumentVersionInBackground('v1', Buffer.from('clean'));
+    expect(mockResume).not.toHaveBeenCalled();
+  });
+});
+
+describe('retryDocumentVersionScan — P1 recovery path', () => {
+  const stored = {
+    id: 'v1',
+    originalFileName: 'gated.txt',
+    mimeType: 'text/plain',
+    storageReference: 'sp-v1',
+    securityScanStatus: 'SCAN_FAILED',
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockPrismaUpdateMany.mockResolvedValue({ count: 1 });
+    mockPrismaFindUnique.mockResolvedValue({ ...stored });
+    mockDownload.mockResolvedValue(Buffer.from('SecretClient ScanGate file text'));
+    mockResume.mockResolvedValue(0);
+  });
+
+  afterEach(() => {
+    setScanner(null);
+  });
+
+  it('recovers a stale PENDING_SCAN (process interruption) by rescanning exact stored bytes', async () => {
+    mockPrismaFindUnique.mockResolvedValue({ ...stored, securityScanStatus: 'PENDING_SCAN' });
+    const ok = await retryDocumentVersionScan('v1');
+    expect(ok).toBe(true);
+    expect(mockDownload).toHaveBeenCalledWith('sp-v1');
+    expect(mockPrismaUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'v1', securityScanStatus: { in: ['SCAN_FAILED', 'PENDING_SCAN'] } },
+      data: { securityScanStatus: 'PENDING_SCAN' },
+    });
+  });
+
+  it('still recovers SCAN_FAILED (existing retry preserved)', async () => {
+    const ok = await retryDocumentVersionScan('v1');
+    expect(ok).toBe(true);
+    expect(mockDownload).toHaveBeenCalledWith('sp-v1');
+  });
+
+  it('refuses to recover a trustworthy INFECTED verdict', async () => {
+    mockPrismaFindUnique.mockResolvedValue({ ...stored, securityScanStatus: 'INFECTED' });
+    const ok = await retryDocumentVersionScan('v1');
+    expect(ok).toBe(false);
+    expect(mockDownload).not.toHaveBeenCalled();
+  });
+
+  it('refuses to recover a trustworthy CLEAN verdict', async () => {
+    mockPrismaFindUnique.mockResolvedValue({ ...stored, securityScanStatus: 'CLEAN' });
+    const ok = await retryDocumentVersionScan('v1');
+    expect(ok).toBe(false);
+    expect(mockDownload).not.toHaveBeenCalled();
+  });
+
+  it('refuses to reset PENDING when a concurrent scan already established a terminal verdict', async () => {
+    mockPrismaUpdateMany.mockResolvedValue({ count: 0 });
+    const ok = await retryDocumentVersionScan('v1');
+    expect(ok).toBe(false);
+  });
+
+  it('fails closed when the stored bytes cannot be downloaded', async () => {
+    mockDownload.mockResolvedValue(null);
+    const ok = await retryDocumentVersionScan('v1');
+    expect(ok).toBe(false);
+    expect(mockPrismaUpdateMany).not.toHaveBeenCalled();
   });
 });

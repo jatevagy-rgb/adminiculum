@@ -146,7 +146,7 @@ test('caller text cannot bypass an infected canonical version or write an artifa
   expect(await artifactCount()).toBe(before);
 });
 
-test('legacy unbound documents without any version keep their existing behavior', async () => {
+test('legacy unbound documents without any version stay blocked (no trustworthy scan verdict)', async () => {
   const legacyDoc = randomUUID();
   await prisma.document.create({ data: { id: legacyDoc, caseId, clientId: client, name: 'LEGACY_UNBOUND', category: 'OTHER', mimeType: 'text/plain', spItemId: `synthetic-sp-legacy-${randomUUID()}` } });
   downloads = 0;
@@ -156,7 +156,8 @@ test('legacy unbound documents without any version keep their existing behavior'
     body: JSON.stringify({ aiTask: 'SUMMARIZE' }),
   });
   const body = await r.json() as any;
-  expect(r.status).toBe(200);
-  expect(downloads).toBe(1);
-  expect(body.redactedText).toBeDefined();
+  expect(r.status).toBe(409);
+  expect(body.code).toBe('SECURITY_SCAN_BLOCKED');
+  expect(downloads).toBe(0);
+  expect(JSON.stringify(body)).not.toMatch(/SecretClient|LEGACY_UNBOUND/);
 });
