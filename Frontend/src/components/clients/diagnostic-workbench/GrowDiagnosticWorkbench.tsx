@@ -6,6 +6,7 @@ import {
   type DiagnosticWorkbenchDto,
 } from "@/lib/diagnosticWorkbenchApi";
 import { ApiError } from "@/lib/api";
+import { growDiagnosticSummary } from "@/lib/growDiagnosticSummary";
 import { CanonicalStatePanel } from "./CanonicalStatePanel";
 import { ObservationPanel } from "./ObservationPanel";
 import { DiagnosisPanel } from "./DiagnosisPanel";
@@ -21,7 +22,7 @@ export function GrowDiagnosticWorkbench({
   clientId,
   clientName,
 }: GrowDiagnosticWorkbenchProps) {
-  const [data, setData] = useState<DiagnosticWorkbenchDto | null>(null);
+  const [result, setResult] = useState<{ clientId: string; data: DiagnosticWorkbenchDto } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusCode, setStatusCode] = useState<number | null>(null);
@@ -29,13 +30,14 @@ export function GrowDiagnosticWorkbench({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setResult(null);
     setError(null);
     setStatusCode(null);
 
     getDiagnosticWorkbench(clientId)
       .then((dto) => {
         if (!cancelled) {
-          setData(dto);
+          setResult({ clientId, data: dto });
           setLoading(false);
         }
       })
@@ -48,7 +50,7 @@ export function GrowDiagnosticWorkbench({
             } else if (err.status === 404) {
               setError("Az ügyfél nem található vagy nem érhető el diagnosztikai profil.");
             } else {
-              setError(err.message || "A diagnosztikai adatok betöltése sikertelen.");
+              setError("A diagnosztikai adatok betöltése sikertelen.");
             }
           } else {
             setError("Hiba történt a diagnosztikai adatok lekérése során.");
@@ -62,7 +64,7 @@ export function GrowDiagnosticWorkbench({
     };
   }, [clientId]);
 
-  if (loading) {
+  if (loading || (result && result.clientId !== clientId)) {
     return (
       <div
         data-testid="diagnostic-workbench-loading"
@@ -99,6 +101,7 @@ export function GrowDiagnosticWorkbench({
     );
   }
 
+  const data = result?.clientId === clientId ? result.data : null;
   if (!data) {
     return null;
   }
@@ -121,28 +124,37 @@ export function GrowDiagnosticWorkbench({
               </h1>
             </div>
             <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
-              Összesített belső nézet: kanonikus nyilvántartási adatok, felmérési megfigyelések, mért folyamatpillanatképek, származtatott diagnózisok és javaslattervezetek.
+              A rögzített tények, ügyféljelzések és működési adatok külön kezelve. Az ellenőrizendő részletek lent lenyithatók.
             </p>
           </div>
         </div>
       </div>
 
-      {/* 5 Ordered Sections */}
-      <CanonicalStatePanel client={data.client} known={data.known} />
+      <section aria-label="Diagnosztikai áttekintés" className="grid gap-3 md:grid-cols-2" data-testid="diagnostic-readable-summary">
+        {growDiagnosticSummary(data).map(({ question, answer }) => (
+          <article key={question} className="min-w-0 rounded-xl border border-[var(--adm-border)] bg-white p-4">
+            <h2 className="font-serif text-base font-semibold text-[var(--adm-text)]">{question}</h2>
+            <p className="mt-2 break-words text-sm leading-relaxed text-[var(--adm-text-muted)]">{answer}</p>
+          </article>
+        ))}
+      </section>
 
-      <ObservationPanel observed={data.observed} />
-
-      <DiagnosisPanel problems={data.problems} />
-
-      <EvidenceSufficiencyPanel
-        evidence={data.evidence}
-        missing={data.missing}
-        sufficiency={data.problems.sufficiency}
-        diagnoses={data.problems.diagnoses}
-        recommendations={data.proposed.recommendations}
-      />
-
-      <InternalRecommendationPanel proposed={data.proposed} />
+      <details className="rounded-xl border border-[var(--adm-border)] bg-white p-4" data-testid="diagnostic-technical-detail">
+        <summary className="cursor-pointer text-sm font-semibold text-[var(--adm-green-800)]">Részletes diagnosztika és technikai eredet</summary>
+        <div className="mt-5 space-y-6">
+          <CanonicalStatePanel client={data.client} known={data.known} />
+          <ObservationPanel observed={data.observed} />
+          <DiagnosisPanel problems={data.problems} />
+          <EvidenceSufficiencyPanel
+            evidence={data.evidence}
+            missing={data.missing}
+            sufficiency={data.problems.sufficiency}
+            diagnoses={data.problems.diagnoses}
+            recommendations={data.proposed.recommendations}
+          />
+          <InternalRecommendationPanel proposed={data.proposed} />
+        </div>
+      </details>
     </div>
   );
 }

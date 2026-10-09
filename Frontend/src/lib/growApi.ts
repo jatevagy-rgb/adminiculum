@@ -516,7 +516,8 @@ export function publicationStatusLabelHu(status: string): string {
 export type EvidenceBasisCategory = "MEASURED_COMPANY" | "DECLARED_COMPANY" | "ESTIMATED_COMPANY" | "DERIVED_COMPANY" | "UNKNOWN_COMPANY" | "RESEARCH";
 
 export function evidenceBasisCategory(item: GrowEvidenceItem): EvidenceBasisCategory {
-  if (item.sourceBasis === "MEASURED") return "MEASURED_COMPANY";
+  if (item.origin && item.origin !== "CLIENT_INTERNAL") return "RESEARCH";
+  if (item.sourceBasis === "MEASURED") return item.origin === "CLIENT_INTERNAL" ? "MEASURED_COMPANY" : "UNKNOWN_COMPANY";
   if (item.sourceBasis === "ESTIMATED") return "ESTIMATED_COMPANY";
   if (item.sourceBasis === "DERIVED") return "DERIVED_COMPANY";
   if (item.sourceBasis === "DECLARED") return "DECLARED_COMPANY";
