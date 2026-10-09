@@ -14,7 +14,7 @@ import {
 const button = 'rounded border px-3 py-2 text-sm disabled:opacity-50';
 type RequirementTarget = { applicabilityId: string; factKey: string };
 
-export function ComplianceWorkbench({ clientId, onNavigate, onChanged }: { clientId: string; onNavigate: (view: 'requirements' | 'controls' | 'findings', target?: RequirementTarget) => void; onChanged: () => void }) {
+export function ComplianceWorkbench({ clientId, focusRowId, onNavigate, onChanged }: { clientId: string; focusRowId?: string; onNavigate: (view: 'requirements' | 'controls' | 'findings', target?: RequirementTarget) => void; onChanged: () => void }) {
   const [data, setData] = useState<Workbench | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -26,6 +26,12 @@ export function ComplianceWorkbench({ clientId, onNavigate, onChanged }: { clien
     catch { if (mounted.current && run === generation.current) setError('A munkalista nem tölthető be. Frissítsen vagy ellenőrizze a jogosultságot.'); }
   }
   useEffect(() => { mounted.current = true; setData(null); void reload(); return () => { mounted.current = false; generation.current++; }; }, [clientId]); // parent keys by client
+  useEffect(() => {
+    if (!focusRowId || data?.clientId !== clientId || !data.rows.some(row => row.id === focusRowId)) return;
+    const element = document.getElementById(`compliance-work-${encodeURIComponent(focusRowId)}`);
+    element?.focus();
+    element?.scrollIntoView({ block: 'nearest' });
+  }, [clientId, data, focusRowId]);
   async function run(action: () => Promise<unknown>) {
     setBusy(true); setError('');
     try { await action(); if (mounted.current) { await reload(); onChanged(); } }
@@ -39,7 +45,8 @@ export function ComplianceWorkbench({ clientId, onNavigate, onChanged }: { clien
     {!data && !error && <p role="status">Betöltés…</p>}
     {data && Object.values(data.truncated).some(Boolean) && <p role="status">Forrásonként legfeljebb 50 sor látható. A teljes listát a kapcsolódó nyilvántartásban ellenőrizze.</p>}
     {data && !data.rows.length && <p>Nincs rögzített döntési teendő.</p>}
-    {data?.clientId === clientId && data.rows.map(row => <article key={row.id} className="space-y-2 rounded border p-3">
+    {data?.clientId === clientId && focusRowId && !data.rows.some(row => row.id === focusRowId) && <p role="status">A kijelölt munkatétel nem látható ebben a friss munkalistában. Más tétel nem lett kiválasztva.</p>}
+    {data?.clientId === clientId && data.rows.map(row => <article key={row.id} id={`compliance-work-${encodeURIComponent(row.id)}`} tabIndex={-1} className="space-y-2 rounded border p-3 focus:outline-2 focus:outline-[var(--adm-brand-green)]">
       <h3 className="font-medium">{workbenchKindLabel(row.kind)} · {row.title}</h3>
       <p className="text-sm">Állapot: {workbenchStatusLabel(row)}{row.subject ? ` · ${row.subject}` : ''}</p>
       <p className="text-xs">{row.since ? `Rögzítve / értékelve: ${new Date(row.since).toLocaleString('hu-HU')}` : ''}{row.dueAt ? ` · Határidő / érvényesség: ${new Date(row.dueAt).toLocaleDateString('hu-HU')}` : ''}{row.ownerName ? ` · Felelős: ${row.ownerName}` : row.ownerId ? ' · Felelős: nincs megjeleníthető név' : row.kind === 'PROPOSAL' ? ' · Felelős: nincs megadva' : ''}</p>

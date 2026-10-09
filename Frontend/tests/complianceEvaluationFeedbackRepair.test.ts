@@ -93,6 +93,7 @@ function makeHarness(options: HarnessOptions = {}) {
       complianceScopeLabels: {},
     },
     '@/components/clients/compliance/ComplianceDocumentsSection': { ComplianceDocumentsSection: DocumentsSection },
+    '@/components/clients/compliance/ComplianceProfessionalSummary': { ComplianceProfessionalSummary: 'professional-summary' },
     '@/components/client-portal/ClientRequestComposer': { ClientRequestComposer: 'div' },
     '@/lib/complianceOverviewApi': {
       complianceOverviewApi: {
@@ -154,7 +155,13 @@ async function renderMounted(h: { render: (props?: any) => any; effects: () => v
   tree = h.render({});
   h.effects();
   await settle();
-  return tree;
+  tree = h.render({});
+  const professionalTab = flatten(tree).find(n => n.props?.role === 'tab' && textOf(n) === 'Szakmai áttekintés');
+  assert.equal(professionalTab?.props?.['aria-selected'], true, 'the professional summary is the new default');
+  // Detailed evaluation feedback still belongs to the retained state view.
+  // Select it via the real UI so every original feedback assertion stays active.
+  clickLabel(tree, 'Állapotkép');
+  return h.render({});
 }
 
 test('successful evaluation click shows a no-change result summary', async () => {
