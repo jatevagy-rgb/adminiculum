@@ -45,7 +45,7 @@ export function PortalActionRow({ item }: { item: PortalActionItem }) {
           {item.contextLabel ? `${item.contextLabel}${dueLabel ? ` · Határidő: ${dueLabel}` : ""}` : dueLabel ? `Határidő: ${dueLabel}` : ""}
         </p>
         <p className={`mt-1.5 text-xs font-semibold ${urgencyTextClass(item.urgency)}`} aria-live="polite">
-          {URGENCY_LABELS[item.urgency]}
+          {item.canCompleteInPortal ? `Önre vár · ${URGENCY_LABELS[item.urgency]}` : "Tájékoztatás · Itt nem teljesíthető"}
           {item.state !== "OPEN" ? ` · ${STATE_LABELS[item.state]}` : ""}
         </p>
       </div>
@@ -54,7 +54,7 @@ export function PortalActionRow({ item }: { item: PortalActionItem }) {
         data-testid="portal-action-cta"
         className="inline-flex h-10 shrink-0 items-center justify-center rounded-[8px] border border-[var(--adm-brand-green)] px-4 text-sm font-medium text-[var(--adm-brand-green)] transition-colors hover:bg-[var(--adm-brand-green)] hover:text-[var(--adm-canvas-white)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-brand-green)] focus-visible:ring-offset-2 motion-reduce:transition-none"
       >
-        {item.actionLabel}
+        {item.canCompleteInPortal ? item.actionLabel : "Részletek megnyitása"}
       </Link>
     </li>
   );

@@ -561,6 +561,8 @@ export type PortalActionItem = {
 export type PortalActionCenter = {
   items: PortalActionItem[];
   counts: { open: number; overdue: number; dueSoon: number };
+  /** Customer-visible notices, excluded from executable action totals. */
+  informationItems?: PortalActionItem[];
 };
 
 export async function getPortalActionCenter() {
