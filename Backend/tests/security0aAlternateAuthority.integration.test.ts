@@ -32,6 +32,9 @@ d('SEC-0A alternate Task authority (PostgreSQL)', () => {
   };
 
   // ---- SEC-D compliance fixtures ----
+  // The shared requirement/version/rule/domain/case are stable infrastructure.
+  // Each test scenario owns a distinct finding + applicability identity so the
+  // canonical "active proposal" uniqueness is never collided with.
   const comp = {
     admin: crypto.randomUUID(),
     collaborator: crypto.randomUUID(),
@@ -40,14 +43,33 @@ d('SEC-0A alternate Task authority (PostgreSQL)', () => {
     requirement: crypto.randomUUID(),
     version: crypto.randomUUID(),
     rule: crypto.randomUUID(),
-    applicability: crypto.randomUUID(),
-    finding: crypto.randomUUID(),
-    factSubject: crypto.randomUUID(),
     caseA: crypto.randomUUID(),
   };
 
   const taskIds: string[] = [];
   const proposalIds: string[] = [];
+  const compFindingIds: string[] = [];
+  const compApplicabilityIds: string[] = [];
+
+  /** Create an independently valid compliance finding + applicability identity. */
+  async function createComplianceScenario(): Promise<{ findingId: string }> {
+    const applicabilityId = crypto.randomUUID();
+    const findingId = crypto.randomUUID();
+    const factSubjectId = crypto.randomUUID();
+    compApplicabilityIds.push(applicabilityId);
+    compFindingIds.push(findingId);
+    await db.requirementApplicability.create({ data: {
+      id: applicabilityId, clientId: comp.clientA, requirementVersionId: comp.version, ruleVersionId: comp.rule,
+      ruleDigest: 'a'.repeat(64), outcome: 'APPLIES', scopeType: 'EMPLOYEE', factSubjectId, evaluationAt: new Date(),
+      sourceSupportState: 'SUFFICIENT', specialistRequirement: 'NONE', schemaVersion: 'phase6-requirement-applicability/v1',
+      snapshotJson: { outcome: 'APPLIES' }, snapshotDigest: 'b'.repeat(64),
+    } });
+    await db.assessmentFinding.create({ data: {
+      id: findingId, clientId: comp.clientA, title: `S0A finding ${findingId}`, status: 'OPEN',
+      requirementId: comp.requirement, scopeType: 'EMPLOYEE', factSubjectId, requirementApplicabilityId: applicabilityId, createdByUserId: comp.admin,
+    } });
+    return { findingId };
+  }
 
   beforeAll(async () => {
     db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
@@ -63,7 +85,7 @@ d('SEC-0A alternate Task authority (PostgreSQL)', () => {
     await db.caseCollaborator.create({ data: { id: crypto.randomUUID(), caseId: commIds.caseA, userId: commIds.collaborator, role: 'ASSISTANT' } as never });
     await db.communication.create({ data: { id: commIds.commLinked, type: 'EMAIL', subject: 'S0A comm', caseId: commIds.caseA, clientId: commIds.clientA, createdById: commIds.admin, content: 'hello' } as never });
 
-    // SEC-D users + compliance fixture
+    // SEC-D users + shared compliance infrastructure
     await db.user.createMany({ data: [
       { id: comp.admin, email: `s0a-comp-admin-${suffix}@test.invalid`, name: 'S0A Comp Admin', role: 'ADMIN', status: 'ACTIVE' },
       { id: comp.collaborator, email: `s0a-comp-collab-${suffix}@test.invalid`, name: 'S0A Comp Collab', role: 'COLLAB_LAWYER', status: 'ACTIVE' },
@@ -74,17 +96,18 @@ d('SEC-0A alternate Task authority (PostgreSQL)', () => {
     await db.complianceDomain.create({ data: { code: comp.domain, label: `S0A domain ${suffix}` } });
     await db.requirement.create({ data: { id: comp.requirement, key: `REQ_S0A_${suffix}`, jurisdictionCode: 'HU', domainCode: comp.domain } });
     await db.requirementVersion.create({ data: { id: comp.version, requirementId: comp.requirement, versionKey: 'V1', title: 'S0A requirement', normativeStatement: 'S0A statement', effectiveFrom: new Date('2026-01-01'), status: 'APPROVED', sourceSupportState: 'SUFFICIENT' } });
-    await db.applicabilityRuleVersion.create({ data: { id: comp.rule, requirementVersionId: comp.version, ruleVersionKey: 'R1', schemaVersion: 'rule-ast/v1', astJson: { schemaVersion: 'rule-ast/v1', node: { kind: 'LITERAL', valueType: 'boolean', value: true } }, canonicalDigest: 'a'.repeat(64), status: 'APPROVED' } });
-    await db.requirementApplicability.create({ data: { id: comp.applicability, clientId: comp.clientA, requirementVersionId: comp.version, ruleVersionId: comp.rule, ruleDigest: 'b'.repeat(64), outcome: 'APPLIES', scopeType: 'EMPLOYEE', factSubjectId: comp.factSubject, evaluationAt: new Date(), sourceSupportState: 'SUFFICIENT', specialistRequirement: 'NONE', schemaVersion: 'phase6-requirement-applicability/v1', snapshotJson: { outcome: 'APPLIES' }, snapshotDigest: 'c'.repeat(64) } });
-    await db.assessmentFinding.create({ data: { id: comp.finding, clientId: comp.clientA, title: `S0A finding ${suffix}`, status: 'OPEN', requirementId: comp.requirement, scopeType: 'EMPLOYEE', factSubjectId: comp.factSubject, requirementApplicabilityId: comp.applicability, createdByUserId: comp.admin } });
+    await db.applicabilityRuleVersion.create({ data: { id: comp.rule, requirementVersionId: comp.version, ruleVersionKey: 'R1', schemaVersion: 'rule-ast/v1', astJson: { schemaVersion: 'rule-ast/v1', node: { kind: 'LITERAL', valueType: 'boolean', value: true } }, canonicalDigest: 'c'.repeat(64), status: 'APPROVED' } });
   });
 
   afterAll(async () => {
     try {
+      // Timeline/history rows reference the synthetic cases and users by FK and
+      // must be removed before their owners (case/user) are deleted.
+      await db.timelineEvent.deleteMany({ where: { caseId: { in: [commIds.caseA, comp.caseA] } } });
       await db.task.deleteMany({ where: { OR: [{ id: { in: taskIds } }, { type: 'COMPLIANCE_PROPOSAL', caseId: { in: [comp.caseA] } }, { sourceCommunicationId: commIds.commLinked }] } });
       await db.complianceProposal.deleteMany({ where: { id: { in: proposalIds } } });
-      await db.assessmentFinding.deleteMany({ where: { id: comp.finding } });
-      await db.requirementApplicability.deleteMany({ where: { id: comp.applicability } });
+      await db.assessmentFinding.deleteMany({ where: { id: { in: compFindingIds } } });
+      await db.requirementApplicability.deleteMany({ where: { id: { in: compApplicabilityIds } } });
       await db.applicabilityRuleVersion.deleteMany({ where: { id: comp.rule } });
       await db.requirementVersion.deleteMany({ where: { id: comp.version } });
       await db.requirement.deleteMany({ where: { id: comp.requirement } });
@@ -117,8 +140,9 @@ d('SEC-0A alternate Task authority (PostgreSQL)', () => {
 
   describe('SEC-D compliance proposal → task', () => {
     it('DENIES a collaborator-only professional with zero side effects', async () => {
+      const { findingId } = await createComplianceScenario();
       const created = await createProposal({ userId: comp.admin, role: 'ADMIN' }, {
-        findingId: comp.finding,
+        findingId,
         proposalKind: 'REMEDIATION',
         actionIntentKey: 'REMEDIATE_COMPLIANCE_GAP',
         title: 'S0A remediation proposal',
@@ -141,8 +165,9 @@ d('SEC-0A alternate Task authority (PostgreSQL)', () => {
     });
 
     it('preserves the CASE_MANAGE admin confirmation', async () => {
+      const { findingId } = await createComplianceScenario();
       const created = await createProposal({ userId: comp.admin, role: 'ADMIN' }, {
-        findingId: comp.finding,
+        findingId,
         proposalKind: 'REMEDIATION',
         actionIntentKey: 'REMEDIATE_COMPLIANCE_GAP',
         title: 'S0A admin remediation',
@@ -152,6 +177,11 @@ d('SEC-0A alternate Task authority (PostgreSQL)', () => {
       const task = await confirmProposal({ userId: comp.admin, role: 'ADMIN' }, created.id, db);
       taskIds.push(task.id);
       expect(task.caseId).toBe(comp.caseA);
+
+      const stored = await db.complianceProposal.findUniqueOrThrow({ where: { id: created.id } });
+      expect(stored.status).toBe('CONFIRMED');
+      expect(stored.taskId).toBe(task.id);
+      expect(stored.confirmedById).toBe(comp.admin);
     });
   });
 });
