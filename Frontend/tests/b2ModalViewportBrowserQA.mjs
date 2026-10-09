@@ -30,7 +30,7 @@ function Harness() {
   const [open, setOpen] = useState(false);
   const [nested, setNested] = useState(false);
   const close = () => setOpen(false);
-  const contract = { id: "qa-document", title: "Viewport QA", fileName: "qa.docx", templateName: "QA", revisionNumber: 1, status: "DRAFT" };
+  const contract = { id: "qa-document", title: "ViewportQAVeryLongUnbrokenDocumentTitleForNarrowDialog", fileName: "qa.docx", templateName: "QA", revisionNumber: 1, status: "DRAFT" };
   return <><button id="trigger" onClick={() => { setWhich(window.qaNext); setOpen(true); }}>Open dialog</button>
     {open && which === "anon" && <AnonymizeModal isOpen onClose={close} contract={contract} />}
     {open && which === "time" && <CaseTimeEntryDialog caseId="qa-case" tasks={[]} onClose={close} onSaved={close} />}
@@ -54,7 +54,7 @@ createRoot(document.getElementById("root")).render(<Harness />);`,
       build.onResolve({ filter: /^next\/navigation$/ }, () => ({ path: "navigation", namespace: "qa" }));
       build.onLoad({ filter: /.*/, namespace: "qa" }, (args) => ({
         loader: "tsx",
-        contents: args.path === "api" ? "export class ApiError extends Error {}; export async function getAnonymizationSourceText(){return {success:false,textAvailable:false}}; export async function anonymizeDocument(){ window.__b2Mutated = (window.__b2Mutated||0)+1; return {success:false} }" :
+        contents: args.path === "api" ? "export class ApiError extends Error {}; export async function getAnonymizationSourceText(){return window.__b2SourceReady ? {success:true,textAvailable:true,sourceText:'Verified source text'} : {success:false,textAvailable:false}}; export async function anonymizeDocument(){ window.__b2Mutated = (window.__b2Mutated||0)+1; return {success:true,anonymizedDocumentId:'qa-copy',redactedText:'X'.repeat(500),redactedItems:[],aiReadyPrompt:'Y'.repeat(500)} }" :
           args.path === "time-api" ? "export async function recordCaseTime(){ window.__b2Mutated = (window.__b2Mutated||0)+1; }" :
           args.path === "navigation" ? "export function useRouter(){return {push(){}}}" :
           "import React from 'react'; export function AIPromptPanel(){return null}; export function OrganizationPersonPicker(){return null}",
@@ -68,9 +68,10 @@ const html = `<!doctype html><meta charset="utf-8"><style>
 *{box-sizing:border-box}html,body{margin:0;font:14px Arial,sans-serif}body{min-width:0}
 .app-shell-content{backdrop-filter:saturate(105%);min-height:2400px;padding:20px}
 #trigger{margin-top:1850px}.fixed{position:fixed}.inset-0{inset:0}.z-50{z-index:50}
-.flex{display:flex}.flex-col{flex-direction:column}.flex-1{flex:1 1 0%}.shrink-0{flex-shrink:0}
+.flex{display:flex}.flex-col{flex-direction:column}.flex-1{flex:1 1 0%}.flex-wrap{flex-wrap:wrap}.shrink-0{flex-shrink:0}
 .items-center{align-items:center}.items-start{align-items:flex-start}.justify-center{justify-content:center}.justify-between{justify-content:space-between}.justify-end{justify-content:flex-end}
-.overflow-hidden{overflow:hidden}.overflow-y-auto{overflow-y:auto}.min-h-0{min-height:0}.w-full{width:100%}
+.overflow-hidden{overflow:hidden}.overflow-y-auto{overflow-y:auto}.overflow-x-hidden{overflow-x:hidden}.min-h-0{min-height:0}.min-w-0{min-width:0}.w-full{width:100%}.break-words{overflow-wrap:break-word}
+.whitespace-pre-wrap{white-space:pre-wrap}
 .max-w-2xl{max-width:672px}.max-w-lg{max-width:512px}.border{border:1px solid #ddd}.bg-white{background:white}.shadow-2xl{box-shadow:0 20px 40px #0003}
 .max-h-\\[calc\\(100dvh-2rem\\)\\]{max-height:calc(100dvh - 2rem)}
 .px-4{padding-left:16px;padding-right:16px}.py-4{padding-top:16px;padding-bottom:16px}.p-4{padding:16px}.p-5{padding:20px}.p-6{padding:24px}
@@ -137,6 +138,8 @@ try {
           scroller: scroller && {
             scrollHeight: scroller.scrollHeight,
             clientHeight: scroller.clientHeight,
+            scrollWidth: scroller.scrollWidth,
+            clientWidth: scroller.clientWidth,
             overflowY: getComputedStyle(scroller).overflowY,
           },
           focusInsideOnOpen: d.contains(document.activeElement),
@@ -161,6 +164,11 @@ try {
         `portaledToBody=${measurement.portaledToBody} insideShell=${measurement.insideAppShellContent}`);
       check(`${tag} DEEP_SCROLL_STILL_PASS`, measurement.scrollY > 1000);
       check(`${tag} HORIZONTAL_OVERFLOW=NO`, measurement.documentScrollWidth === width);
+      if (which === 'anon' && width === 390) {
+        check(`${tag} INTERNAL_HORIZONTAL_OVERFLOW=NO`, measurement.scroller.scrollWidth <= measurement.scroller.clientWidth,
+          `scrollWidth=${measurement.scroller.scrollWidth} clientWidth=${measurement.scroller.clientWidth}`);
+        check(`${tag} ICON_LIGATURES=NO`, !(await dialog.locator('.material-symbols-outlined').count()));
+      }
       check(`${tag} INTERNAL_SCROLL_STILL_PASS`, !!measurement.scroller && ["auto", "scroll"].includes(measurement.scroller.overflowY),
         `overflowY=${measurement.scroller?.overflowY}`);
 
@@ -270,6 +278,28 @@ try {
       console.log(`${tag} ${JSON.stringify(measurement)}`);
     }
   }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('http://localhost/b2-harness');
+  await page.evaluate(() => { window.qaNext = 'anon'; window.__b2SourceReady = true; window.__b2Mutated = 0; });
+  await page.locator('#trigger').click();
+  const populated = page.getByRole('dialog', { name: 'AI-előkészítés / Anonimizálás' });
+  await populated.getByPlaceholder('Név / cégnév').fill('LongUnbrokenKnownPartyName'.repeat(12));
+  await populated.getByPlaceholder('Ellenérdekelt fél neve...').fill('LongUnbrokenOpponentName'.repeat(12));
+  await populated.getByRole('button', { name: '+', exact: true }).click();
+  const internalWidth = () => populated.locator('.overflow-y-auto').first().evaluate(el => ({ scroll: el.scrollWidth, client: el.clientWidth }));
+  const beforeSubmit = await internalWidth();
+  check('ANON 390x844 POPULATED_HORIZONTAL_OVERFLOW=NO', beforeSubmit.scroll <= beforeSubmit.client);
+  await populated.getByRole('button', { name: 'Anonimizált másolat készítése' }).click();
+  await populated.getByText('Anonimizálás kész').waitFor();
+  const afterSubmit = await internalWidth();
+  check('ANON 390x844 RESULT_HORIZONTAL_OVERFLOW=NO', afterSubmit.scroll <= afterSubmit.client);
+  check('ANON 390x844 RESULT_NO_RAW_LIGATURES', !(await populated.locator('.material-symbols-outlined').count()));
+  check('ANON 390x844 SUBMIT_ONCE', await page.evaluate(() => window.__b2Mutated === 1));
+  await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async text => { window.__b2Copied = text; } } }));
+  await populated.getByRole('button', { name: 'Anonimizált szöveg másolása' }).click();
+  check('ANON 390x844 RESULT_COPY', await page.evaluate(() => window.__b2Copied === 'X'.repeat(500)));
+  await page.keyboard.press('Escape');
+  await populated.waitFor({ state: 'detached' });
 } finally {
   await browser.close();
   await fs.rm(TMP, { recursive: true, force: true });
