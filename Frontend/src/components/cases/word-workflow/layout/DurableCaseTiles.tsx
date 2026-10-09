@@ -187,6 +187,7 @@ export function DurableCaseTiles({ caseId, surface, builtin }: {
     }
     const hiddenBuiltins = draft ? builtin.filter(t => !draft.placements[surface].includes(t.kind)) : [];
     const hiddenCustom = draft ? draft.tiles.filter(t => !t.archived && !draft.placements[surface].includes(t.id)) : [];
+    const archivedCustom = draft?.canManage ? draft.tiles.filter(t => t.archived) : [];
     const editTarget = draft?.canManage && editId ? draft.tiles.find(t => t.id === editId) : null;
     const toolbar = <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--adm-border)] bg-[var(--card-bg)] px-3 py-2">
         <span className="text-sm font-semibold text-[var(--adm-text)]">Csempék szerkesztése</span>
@@ -244,6 +245,10 @@ export function DurableCaseTiles({ caseId, surface, builtin }: {
             <p className="px-2 py-1 text-xs text-[var(--adm-text-muted)]">A tartalom közös; az elhelyezés csak Öné.</p>
             {hiddenBuiltins.map(t => <button key={t.kind} type="button" className="block w-full rounded px-2 py-2 text-left text-sm hover:bg-[var(--adm-surface)]" disabled={busy} onClick={() => { place(t.kind, surface, true); setAddOpen(false); }}>{t.title}</button>)}
             {hiddenCustom.map(t => <button key={t.id} type="button" className="block w-full rounded px-2 py-2 text-left text-sm hover:bg-[var(--adm-surface)]" disabled={busy} onClick={() => { place(t.id, surface, true); setAddOpen(false); }}>{t.title || 'Névtelen csempe'}</button>)}
+            {archivedCustom.length > 0 && <div className="mt-2 border-t border-[var(--adm-border)] pt-2">
+                <p className="px-2 py-1 text-xs font-semibold text-[var(--adm-text-muted)]">Archivált csempék</p>
+                {archivedCustom.map(t => <button key={t.id} type="button" className="block w-full rounded px-2 py-2 text-left text-sm hover:bg-[var(--adm-surface)]" disabled={busy} onClick={() => { mutateTile(t.id, { archived: false }); place(t.id, surface, true); setAddOpen(false); }}>{`${t.title || 'Névtelen csempe'} visszaállítása`}</button>)}
+            </div>}
             {draft.canManage && <button type="button" className="block w-full rounded px-2 py-2 text-left text-sm font-semibold text-[var(--adm-green-800)] hover:bg-[var(--adm-surface)]" disabled={busy || refs.length >= 32} onClick={() => { const id = crypto.randomUUID(); setDraft(d => d && ({ ...d, tiles: [...d.tiles, { id, revision: 0, title: 'Új csempe', text: '', tone: 'green', archived: false }], placements: { ...d.placements, [surface]: [...d.placements[surface], id] } })); setAddOpen(false); setEditId(id); }}>Új szöveges csempe</button>}
         </div>}
     </div>}

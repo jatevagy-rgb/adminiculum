@@ -112,4 +112,27 @@ test("cross-surface placement is context-only and custom editing is manager-gate
   assert.match(source, /editTarget = draft\?\.canManage && editId/);
   assert.match(source, /custom && draft\?\.canManage/);
   assert.match(source, /if \(error instanceof ApiError && error\.status === 409\)/);
+  assert.match(source, /const archivedCustom = draft\?\.canManage \? draft\.tiles\.filter\(t => t\.archived\) : \[\];/);
+  assert.match(source, /Archivált csempék/);
+  assert.match(source, /mutateTile\(t\.id, \{ archived: false \}\); place\(t\.id, surface, true\)/);
+});
+
+test("an archived-and-hidden custom tile stays recoverable from the add popover", async () => {
+  const snapshot = { tiles: [{ id: "custom-archived", revision: 1, title: "Archivált", text: "X", tone: "green" as const, archived: true }], layoutRevision: 0, placements: { overview: ["current-state", "subject", "goal"], document: ["current-state", "subject", "goal"] }, canManage: true };
+  const h = createRaceHarness("src/components/cases/word-workflow/layout/DurableCaseTiles.tsx", "DurableCaseTiles", {
+    "@/lib/api": { ApiError, fetchApi: () => Promise.resolve({ ...snapshot, layoutRevision: 0 }) },
+  });
+  const props = { caseId: "case-1", surface: "overview", builtin };
+  const articles = (tree: any) => flatten(tree).filter((n: any) => n.type === "article" && n.props && "data-tile-id" in n.props).map((n: any) => n.props["data-tile-id"]);
+  h.render(props); h.effects(); await settle();
+  let tree = h.render(props);
+  assert.deepEqual(articles(tree), ["current-state", "subject", "goal"]);
+  flatten(tree).find((n: any) => n.type === "button" && textOf(n) === "Csempék szerkesztése").props.onClick();
+  tree = h.render(props);
+  flatten(tree).find((n: any) => n.type === "button" && textOf(n) === "+ Csempe hozzáadása").props.onClick();
+  tree = h.render(props);
+  assert.match(textOf(tree), /Archivált csempék/);
+  flatten(tree).find((n: any) => n.type === "button" && textOf(n) === "Archivált visszaállítása").props.onClick();
+  tree = h.render(props);
+  assert.deepEqual(articles(tree), ["current-state", "subject", "goal", "custom-archived"]);
 });
