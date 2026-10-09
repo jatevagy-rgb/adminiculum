@@ -21,6 +21,7 @@ import {
 import { PortalMatterDocumentsSection } from "../matters/PortalMatterSections";
 import { PortalInteractionCardV3 } from "../interaction/PortalInteractionCardV3";
 import { PortalRequestResponseV3 } from "../interaction/PortalRequestResponseV3";
+import { customerRequestTruth } from "@/lib/portalCustomerTruth";
 
 type DetailMatter = PortalMatter & { documents: PortalDocument[] };
 
@@ -181,6 +182,7 @@ export function PortalRequestDetailV3({
   const specHints = requestDocumentSpecHints(request.documentSpec);
   const canRespond = canRespondToRequest(request.status);
   const relatedDocuments = matter.documents || [];
+  const customerState = customerRequestTruth(request.status, submission?.status);
 
   return (
     <div className="space-y-4" data-testid="portal-request-detail">
@@ -232,6 +234,11 @@ export function PortalRequestDetailV3({
           </div>
         </dl>
       </header>
+
+      <section className={CARD} aria-label="Ügyfélállapot" data-testid="portal-customer-truth">
+        <h2 className="font-serif text-lg font-semibold text-[var(--adm-text-primary)]">{customerState.label}</h2>
+        <p className={`mt-2 text-sm ${MUTED}`}>{customerState.explanation}</p>
+      </section>
 
       <section className={CARD}>
         <h2 className="font-serif text-lg font-semibold text-[var(--adm-text-primary)]">Miért kérjük ezt?</h2>

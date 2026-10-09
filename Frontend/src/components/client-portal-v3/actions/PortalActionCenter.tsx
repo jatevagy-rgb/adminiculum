@@ -77,7 +77,7 @@ export function PortalActionCenter() {
     <div className="space-y-4" data-testid="portal-action-center">
       <div>
         <h1 className="font-serif text-2xl font-semibold tracking-tight text-[var(--adm-text-primary)] sm:text-3xl">Teendők</h1>
-        {data && data.counts.open > 0 ? (
+        {!loading && !error && data && data.counts.open > 0 ? (
           <p className="mt-1 text-sm text-[var(--adm-text-secondary)]">
             {data.counts.overdue > 0 ? `${data.counts.overdue} lejárt, ` : ""}
             {data.counts.dueSoon > 0 ? `${data.counts.dueSoon} hamarosan esedékes, ` : ""}
@@ -136,6 +136,15 @@ export function PortalActionCenter() {
             <PortalEmptyInline>Ebben a nézetben nincs teendő.</PortalEmptyInline>
           )}
         </>
+      ) : null}
+      {!loading && !error && Boolean(data?.informationItems?.length) ? (
+        <section aria-labelledby="portal-action-information-title" className="space-y-2" data-testid="portal-action-information">
+          <h2 id="portal-action-information-title" className="font-serif text-lg font-semibold text-[var(--adm-text-primary)]">Tájékoztatás</h2>
+          <p className="text-sm text-[var(--adm-text-secondary)]">Ezek a közzétett jelzések itt nem teljesíthetők. Nem számítanak bele a teendők számába.</p>
+          <ul className="overflow-hidden rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)]">
+            {data?.informationItems?.map((item) => <PortalActionRow key={item.id} item={item} />)}
+          </ul>
+        </section>
       ) : null}
     </div>
   );

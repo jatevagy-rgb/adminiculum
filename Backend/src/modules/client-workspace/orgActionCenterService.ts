@@ -85,6 +85,22 @@ export interface PortalActionItem {
 export interface PortalActionCenterDto {
   items: PortalActionItem[];
   counts: { open: number; overdue: number; dueSoon: number };
+  /** Visible notices retain their canonical journey but are not executable work. */
+  informationItems: PortalActionItem[];
+}
+
+/** Partition already authorized safe rows once; list and totals share this truth. */
+export function projectActionableItems(rows: PortalActionItem[]): PortalActionCenterDto {
+  const items = rows.filter((row) => row.canCompleteInPortal);
+  return {
+    items,
+    counts: {
+      open: items.length,
+      overdue: items.filter((row) => row.urgency === 'OVERDUE').length,
+      dueSoon: items.filter((row) => row.urgency === 'DUE_SOON').length,
+    },
+    informationItems: rows.filter((row) => !row.canCompleteInPortal),
+  };
 }
 
 /**
@@ -93,6 +109,10 @@ export interface PortalActionCenterDto {
  * presented as "Önre vár" work. COMPLETED / CANCELLED / EXPIRED are terminal.
  */
 export const ACTIVE_CUSTOMER_REQUEST_STATUSES: ReadonlySet<string> = new Set(['PUBLISHED', 'PARTIALLY_SUBMITTED']);
+
+export function isExecutableRequest(row: { status: string; matterPublicationId: string | null }): boolean {
+  return ACTIVE_CUSTOMER_REQUEST_STATUSES.has(row.status) && Boolean(row.matterPublicationId);
+}
 
 /** Deterministic urgency — no AI, no hidden task priority, no fabrication. */
 export function computeUrgency(dueAt: string | null, now: Date): PortalActionItem['urgency'] {
@@ -388,7 +408,7 @@ export async function getOrganizationalActionCenter(
       href: matterHref(matterPublicationId)
         ? `${matterHref(matterPublicationId)}/requests/${encodeURIComponent(correction.requestId)}`
         : '/portal/ugyek',
-      canCompleteInPortal: true,
+      canCompleteInPortal: Boolean(matterPublicationId && request && !['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(request.status)),
       matterPublicationId: matterPublicationId,
     });
   }
@@ -413,7 +433,7 @@ export async function getOrganizationalActionCenter(
       href: matterHref(request.matterPublicationId)
         ? `${matterHref(request.matterPublicationId)}/requests/${encodeURIComponent(request.id)}`
         : '/portal/ugyek',
-      canCompleteInPortal: true,
+      canCompleteInPortal: isExecutableRequest(request),
       matterPublicationId: request.matterPublicationId,
     });
   }
@@ -470,7 +490,7 @@ export async function getOrganizationalActionCenter(
   // ---- Source 5: compliance portal-answerable missing information.
   // Provenance dedupe: an explicit active ClientRequest for the same canonical
   // requirement provenance supersedes the compliance topic row.
-  const provenanceRequests = requestRows.filter((row) => ACTIVE_CUSTOMER_REQUEST_STATUSES.has(row.status));
+  const provenanceRequests = requestRows.filter(isExecutableRequest);
   const provenanceRows = await prisma.clientRequest.findMany({
     where: { id: { in: provenanceRequests.map((row) => row.id) } },
     select: { id: true, requirementVersionId: true, clientControlId: true, findingId: true },
@@ -515,14 +535,7 @@ export async function getOrganizationalActionCenter(
       || left.id.localeCompare(right.id);
   });
 
-  const dto: PortalActionCenterDto = {
-    items,
-    counts: {
-      open: items.length,
-      overdue: items.filter((item) => item.urgency === 'OVERDUE').length,
-      dueSoon: items.filter((item) => item.urgency === 'DUE_SOON').length,
-    },
-  };
+  const dto = projectActionableItems(items);
 
   // Safety net: forbid internal fields from ever crossing the boundary.
   assertActionCenterDtoSafe(dto);
