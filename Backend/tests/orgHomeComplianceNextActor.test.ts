@@ -41,10 +41,10 @@ describe('Organization home compliance next-actor contract', () => {
     expect(classifyComplianceNextActor(topic('LAWYER_REVIEW_REQUIRED', [officeOnly()]))).toBe('OFFICE');
   });
 
-  it('keeps MORE_INFORMATION_NEEDED and REVIEW_RECOMMENDED as customer actions', () => {
-    expect(classifyComplianceNextActor(topic('MORE_INFORMATION_NEEDED', []))).toBe('CUSTOMER_ACTION');
-    expect(classifyComplianceNextActor(topic('MORE_INFORMATION_NEEDED', [officeOnly()]))).toBe('CUSTOMER_ACTION');
-    expect(classifyComplianceNextActor(topic('REVIEW_RECOMMENDED', []))).toBe('CUSTOMER_ACTION');
+  it('keeps non-answerable information and review with the office', () => {
+    expect(classifyComplianceNextActor(topic('MORE_INFORMATION_NEEDED', []))).toBe('OFFICE');
+    expect(classifyComplianceNextActor(topic('MORE_INFORMATION_NEEDED', [officeOnly()]))).toBe('OFFICE');
+    expect(classifyComplianceNextActor(topic('REVIEW_RECOMMENDED', []))).toBe('OFFICE');
   });
 
   it('maps a resolved topic with no missing information to no action', () => {
@@ -69,8 +69,8 @@ describe('Organization home compliance next-actor contract', () => {
     expect(counts.CUSTOMER_ACTION + counts.OFFICE + counts.NO_ACTION).toBe(topics.length);
     // The lawyer-review topic with answerable data is counted as customer action only.
     expect(buckets[0]).toBe('CUSTOMER_ACTION');
-    expect(counts.OFFICE).toBe(2);
-    expect(counts.CUSTOMER_ACTION).toBe(5);
+    expect(counts.OFFICE).toBe(5);
+    expect(counts.CUSTOMER_ACTION).toBe(2);
     expect(counts.NO_ACTION).toBe(1);
   });
 
@@ -83,6 +83,15 @@ describe('Organization home compliance next-actor contract', () => {
     expect(homeComplianceNextAction(topic('LAWYER_REVIEW_REQUIRED', [], canonical))).toBe(canonical);
     expect(homeComplianceNextAction(topic('MORE_INFORMATION_NEEDED', [answerable()], canonical))).toBe(canonical);
     expect(homeComplianceNextAction(topic('RESOLVED', [], null))).toBe(null);
+  });
+
+  it('counts rendered customer compliance actions rather than non-answerable topic states', () => {
+    const src = readFileSync(path.join(process.cwd(), 'src/modules/client-workspace/orgHomeService.ts'), 'utf8');
+    expect(classifyComplianceNextActor(topic('REVIEW_RECOMMENDED', []))).toBe('OFFICE');
+    expect(classifyComplianceNextActor(topic('MORE_INFORMATION_NEEDED', [officeOnly()]))).toBe('OFFICE');
+    expect(src).toContain('const compAttentionCount = complianceActions.length;');
+    expect(src).not.toContain('compAttentionCount += 1');
+    expect(src).not.toContain("answerable.length === 0 && topic.state === 'REVIEW_RECOMMENDED'");
   });
 
   it('derives its decision only from customer-safe fields', () => {

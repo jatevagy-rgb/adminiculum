@@ -798,7 +798,7 @@ export function PortalComplianceV3() {
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <StatusCard
                 label="Öntől szükséges"
-                count={groups.customerAction + requestGroups.awaiting.length}
+                count={worklist.length}
                 hint="Az Ön a következő szereplő: adatmegadás, dokumentumbekérés vagy válasz szükséges."
               />
               <StatusCard

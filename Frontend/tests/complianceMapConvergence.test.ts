@@ -61,9 +61,9 @@ describe("Compliance Map convergence", () => {
       topic({ topicId: "f", state: "RESOLVED", missingInformation: [missing()] }),
     ];
     const counts = summarizeTopics(topics);
-    assert.equal(counts.CUSTOMER_ACTION, 3);
-    assert.equal(counts.IN_PROGRESS, 1);
-    assert.equal(counts.LAWYER_REVIEW, 1);
+    assert.equal(counts.CUSTOMER_ACTION, 1);
+    assert.equal(counts.IN_PROGRESS, 2);
+    assert.equal(counts.LAWYER_REVIEW, 2);
     assert.equal(counts.NO_ACTION, 1);
     assert.equal(counts.CUSTOMER_ACTION + counts.IN_PROGRESS + counts.LAWYER_REVIEW + counts.NO_ACTION, topics.length);
   });
@@ -71,8 +71,8 @@ describe("Compliance Map convergence", () => {
   it("9. classifies lawyer review and in-progress distinctly", () => {
     assert.equal(classifyTopic(topic({ state: "LAWYER_REVIEW_REQUIRED" })), "LAWYER_REVIEW");
     assert.equal(classifyTopic(topic({ state: "ACTION_IN_PROGRESS" })), "IN_PROGRESS");
-    assert.equal(classifyTopic(topic({ state: "MORE_INFORMATION_NEEDED" })), "CUSTOMER_ACTION");
-    assert.equal(classifyTopic(topic({ state: "REVIEW_RECOMMENDED" })), "CUSTOMER_ACTION");
+    assert.equal(classifyTopic(topic({ state: "MORE_INFORMATION_NEEDED" })), "IN_PROGRESS");
+    assert.equal(classifyTopic(topic({ state: "REVIEW_RECOMMENDED" })), "LAWYER_REVIEW");
     assert.equal(classifyTopic(topic({ state: "RESOLVED" })), "NO_ACTION");
   });
 
@@ -291,7 +291,7 @@ describe("Compliance Map truthful primary-state convergence", () => {
       topic({ topicId: "e", state: "REVIEW_RECOMMENDED" }),
     ];
     const counts = summarizeTopics(topics);
-    assert.deepEqual(counts, { CUSTOMER_ACTION: 2, IN_PROGRESS: 1, LAWYER_REVIEW: 1, NO_ACTION: 1 });
+    assert.deepEqual(counts, { CUSTOMER_ACTION: 1, IN_PROGRESS: 1, LAWYER_REVIEW: 2, NO_ACTION: 1 });
     assert.equal(counts.CUSTOMER_ACTION + counts.IN_PROGRESS + counts.LAWYER_REVIEW + counts.NO_ACTION, topics.length);
     // The conflicted topic is NOT also counted under lawyer review.
     assert.equal(classifyTopic(topics[0]), "CUSTOMER_ACTION");
@@ -401,11 +401,11 @@ describe("Compliance Map truthful primary-state convergence", () => {
     assert.match(src, /const progress = controlProgressFor\(topic, data\?\.controlsSummary\)/);
   });
 
-  it("keeps REVIEW_RECOMMENDED on its canonical customer-attention mapping", () => {
+  it("keeps office review recommended distinct from executable customer input", () => {
     const t = topic({ state: "REVIEW_RECOMMENDED" });
-    assert.equal(classifyTopic(t), "CUSTOMER_ACTION");
-    assert.equal(primaryBadgeLabel(t, "CUSTOMER_ACTION"), "Teendő szükséges");
-    assert.equal(secondaryStateNote(t, "CUSTOMER_ACTION"), null);
+    assert.equal(classifyTopic(t), "LAWYER_REVIEW");
+    assert.equal(primaryBadgeLabel(t, "LAWYER_REVIEW"), "Irodai felülvizsgálat javasolt");
+    assert.equal(secondaryStateNote(t, "LAWYER_REVIEW"), null);
   });
 
   it("keeps the canonical backend nextAction outside the conflicting case", () => {
