@@ -146,17 +146,21 @@ export async function getClientControl(actor: InternalActor, clientId: string, c
     include: { controlDefinition: true, ownerUser: { select: { name: true } }, evidenceLinks: { include: { evidenceRecord: true } } },
   });
   if (!row) throw new InteractionError(404, 'CLIENT_CONTROL_NOT_FOUND', 'Client control not found.');
+  const readableEvidenceIds = await resolveReadableEvidenceIds(actor, clientId, row.evidenceLinks.map((link) => link.evidenceRecord), prisma);
   return {
     title: row.controlDefinition.title,
     implementationStatus: String(row.implementationStatus),
     owner: row.ownerUser?.name || null,
     lastReviewedAt: row.lastReviewedAt?.toISOString() || null,
     nextReviewAt: row.nextReviewAt?.toISOString() || null,
-    evidence: row.evidenceLinks.map((link) => ({
-      title: link.evidenceRecord.title,
-      status: String(link.evidenceRecord.status),
-      freshness: freshness(link.evidenceRecord.validFrom, link.evidenceRecord.validUntil),
-    })),
+    evidence: row.evidenceLinks
+      .map((link) => link.evidenceRecord)
+      .filter((item) => readableEvidenceIds.has(item.id))
+      .map((item) => ({
+        title: item.title,
+        status: String(item.status),
+        freshness: freshness(item.validFrom, item.validUntil),
+      })),
   };
 }
 
@@ -272,6 +276,63 @@ export async function linkEvidenceToControl(actor: InternalActor, clientId: stri
   return prisma.evidenceControlLink.create({ data: { clientId, clientControlId, evidenceRecordId } });
 }
 
+type EvidenceReadCandidate = {
+  id: string;
+  clientId: string;
+  sourceType: string;
+  documentVersionId: string | null;
+  clientFactId: string | null;
+  observationId: string | null;
+};
+
+/** Single source of truth for the authorized evidence set shared by every
+ *  control-evidence read path. Both the rows and the aggregates/counts are
+ *  derived from this set so they can never drift apart. */
+async function resolveReadableEvidenceIds(
+  actor: InternalActor,
+  clientId: string,
+  candidates: EvidenceReadCandidate[],
+  prisma: Prisma,
+): Promise<Set<string>> {
+  const linkedEvidence = candidates.filter((evidence) => evidence.clientId === clientId);
+  const factIds = [...new Set(linkedEvidence.map((evidence) => evidence.clientFactId).filter((id): id is string => Boolean(id)))];
+  const observationIds = [...new Set(linkedEvidence.map((evidence) => evidence.observationId).filter((id): id is string => Boolean(id)))];
+  const facts = factIds.length
+    ? await prisma.clientFact.findMany({ where: { clientId, id: { in: factIds } }, select: { id: true, sourceDocumentVersionId: true } }) : [];
+  const observations = observationIds.length
+    ? await prisma.observation.findMany({ where: { clientId, id: { in: observationIds } }, select: { id: true } }) : [];
+  const factById = new Map<string, { id: string; sourceDocumentVersionId: string | null }>(facts.map((fact) => [fact.id, fact]));
+  const observationIdSet = new Set(observations.map((observation) => observation.id));
+  const versionIds = [...new Set(linkedEvidence.flatMap((evidence) => [
+    evidence.documentVersionId,
+    evidence.clientFactId ? factById.get(evidence.clientFactId)?.sourceDocumentVersionId : null,
+  ]).filter((id): id is string => Boolean(id)))];
+  const readableVersions = new Set<string>();
+  await Promise.all(versionIds.map(async (versionId) => {
+    try {
+      await assertEvidenceDocumentAuthority(actor, clientId, versionId, prisma, undefined, false);
+      readableVersions.add(versionId);
+    } catch (error) {
+      if (error instanceof InteractionError && [
+        'EVIDENCE_ARTIFACT_FORBIDDEN', 'DOCUMENT_ACCESS_FORBIDDEN', 'CASE_ACCESS_FORBIDDEN', 'CASE_NOT_FOUND',
+      ].includes(error.code)) return;
+      throw error;
+    }
+  }));
+  return new Set(linkedEvidence.filter((evidence) => {
+    if (evidence.sourceType === 'DOCUMENT_VERSION' && !evidence.documentVersionId) return false;
+    if (evidence.sourceType === 'CLIENT_FACT' && !evidence.clientFactId) return false;
+    if (evidence.sourceType === 'OBSERVATION' && !evidence.observationId) return false;
+    if (evidence.documentVersionId && !readableVersions.has(evidence.documentVersionId)) return false;
+    if (evidence.clientFactId) {
+      const fact = factById.get(evidence.clientFactId);
+      if (!fact || (fact.sourceDocumentVersionId && !readableVersions.has(fact.sourceDocumentVersionId))) return false;
+    }
+    if (evidence.observationId && !observationIdSet.has(evidence.observationId)) return false;
+    return true;
+  }).map((evidence) => evidence.id));
+}
+
 export async function getControlCoverage(actor: InternalActor, clientId: string, prisma: Prisma = defaultPrisma) {
   await assertClientReadAccess(actor, clientId, prisma);
   const now = new Date();
@@ -297,44 +358,8 @@ export async function getControlCoverage(actor: InternalActor, clientId: string,
     where: { clientId },
     include: { controlDefinition: true, ownerUser: { select: { name: true } }, evidenceLinks: { include: { evidenceRecord: true } } },
   });
-  const linkedEvidence = controls.flatMap((control) => control.evidenceLinks.map((link) => link.evidenceRecord))
-    .filter((evidence) => evidence.clientId === clientId);
-  const factIds = [...new Set(linkedEvidence.map((evidence) => evidence.clientFactId).filter((id): id is string => Boolean(id)))];
-  const observationIds = [...new Set(linkedEvidence.map((evidence) => evidence.observationId).filter((id): id is string => Boolean(id)))];
-  const facts = factIds.length
-    ? await prisma.clientFact.findMany({ where: { clientId, id: { in: factIds } }, select: { id: true, sourceDocumentVersionId: true } }) : [];
-  const observations = observationIds.length
-    ? await prisma.observation.findMany({ where: { clientId, id: { in: observationIds } }, select: { id: true } }) : [];
-  const factById = new Map<string, { id: string; sourceDocumentVersionId: string | null }>(facts.map((fact) => [fact.id, fact]));
-  const observationIdSet = new Set(observations.map((observation) => observation.id));
-  const versionIds = [...new Set(linkedEvidence.flatMap((evidence) => [
-    evidence.documentVersionId,
-    evidence.clientFactId ? factById.get(evidence.clientFactId)?.sourceDocumentVersionId : null,
-  ]).filter((id): id is string => Boolean(id)))];
-  const readableVersions = new Set<string>();
-  await Promise.all(versionIds.map(async (versionId) => {
-    try {
-      await assertEvidenceDocumentAuthority(actor, clientId, versionId, prisma, undefined, false);
-      readableVersions.add(versionId);
-    } catch (error) {
-      if (error instanceof InteractionError && [
-        'EVIDENCE_ARTIFACT_FORBIDDEN', 'DOCUMENT_ACCESS_FORBIDDEN', 'CASE_ACCESS_FORBIDDEN', 'CASE_NOT_FOUND',
-      ].includes(error.code)) return;
-      throw error;
-    }
-  }));
-  const readableEvidenceIds = new Set(linkedEvidence.filter((evidence) => {
-    if (evidence.sourceType === 'DOCUMENT_VERSION' && !evidence.documentVersionId) return false;
-    if (evidence.sourceType === 'CLIENT_FACT' && !evidence.clientFactId) return false;
-    if (evidence.sourceType === 'OBSERVATION' && !evidence.observationId) return false;
-    if (evidence.documentVersionId && !readableVersions.has(evidence.documentVersionId)) return false;
-    if (evidence.clientFactId) {
-      const fact = factById.get(evidence.clientFactId);
-      if (!fact || (fact.sourceDocumentVersionId && !readableVersions.has(fact.sourceDocumentVersionId))) return false;
-    }
-    if (evidence.observationId && !observationIdSet.has(evidence.observationId)) return false;
-    return true;
-  }).map((evidence) => evidence.id));
+  const linkedEvidence = controls.flatMap((control) => control.evidenceLinks.map((link) => link.evidenceRecord));
+  const readableEvidenceIds = await resolveReadableEvidenceIds(actor, clientId, linkedEvidence, prisma);
   const byDefinition = new Map(controls.map((control) => [control.controlDefinitionId, control]));
   return {
     requirements: [...latest.values()].filter((row) => row.outcome === 'APPLIES').map((row) => ({

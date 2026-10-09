@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
-import { createClientControl, createControlDefinition, createEvidenceRecord, getControlCoverage, linkEvidenceToControl, mapControlToRequirement, reviewEvidenceRecord, updateClientControl } from '../src/modules/compliance/controlEvidenceService';
+import { createClientControl, createControlDefinition, createEvidenceRecord, getClientControl, getControlCoverage, linkEvidenceToControl, mapControlToRequirement, reviewEvidenceRecord, updateClientControl } from '../src/modules/compliance/controlEvidenceService';
 import { materializeRequirementApplicabilityFinding } from '../src/modules/compliance/findingMaterializationService';
 import { createProposal } from '../src/modules/compliance/complianceProposalService';
 
@@ -356,6 +356,15 @@ describeWithDatabase('compliance controls and evidence (PostgreSQL)', () => {
       expect(JSON.stringify(restrictedCoverage)).not.toMatch(/Private HR|Restricted HR|private fact/);
       expect(restrictedControl.evidence.map((item) => item.id)).not.toContain(documentEvidence.id);
       expect(restrictedControl.evidence.map((item) => item.id)).not.toContain(factEvidence.id);
+
+      // The single-control detail read must use the same authorized set: a
+      // lawyer with case access must not see the HR document evidence title.
+      const adminDetail = await getClientControl(actor, clientId, control.id, db);
+      expect(adminDetail.evidence.map((item) => item.title)).toEqual(expect.arrayContaining(['Private HR document evidence', 'Private HR fact evidence']));
+      const restrictedDetail = await getClientControl(unauthorizedActor, clientId, control.id, db);
+      expect(restrictedDetail.evidence.map((item) => item.title)).not.toContain('Private HR document evidence');
+      expect(restrictedDetail.evidence.map((item) => item.title)).not.toContain('Private HR fact evidence');
+      expect(JSON.stringify(restrictedDetail)).not.toMatch(/Private HR|private fact/);
     } finally {
       await db.evidenceControlLink.deleteMany({ where: { evidenceRecordId: { in: [restrictedDocumentEvidenceId, restrictedFactEvidenceId].filter((id): id is string => Boolean(id)) } } });
       await db.evidenceRecord.deleteMany({ where: { id: { in: [restrictedDocumentEvidenceId, restrictedFactEvidenceId].filter((id): id is string => Boolean(id)) } } });
