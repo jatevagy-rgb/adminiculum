@@ -167,8 +167,17 @@ test("historical version identity is visible and URL identity is preserved", () 
   assert.match(source, /readerCopy\.historicalVersion/);
   const pageSource = page();
   assert.match(pageSource, /isHistoricalVersion=\{Boolean\(canonicalActiveVersion && !canonicalActiveVersion\.isCurrent\)\}/);
-  assert.match(pageSource, /syncWorkspaceIdentityToUrl\(\{ documentId, versionId: version\.isCurrent \? null : version\.id \}, history\)/);
-  assert.match(pageSource, /router\[history\]\(nextUrl\)/);
+  const selection = pageSource.slice(pageSource.indexOf('const selectVersion ='), pageSource.indexOf('const selectedAnnotation ='));
+  assert.match(selection, /const documentId = selectedUploadedDocument\?\.id \?\? null/);
+  assert.match(selection, /syncWorkspaceIdentityToUrl\(\{ documentId, versionId: version\.isCurrent \? null : version\.id \}, history, mode\)/);
+  const urlWriter = pageSource.slice(pageSource.indexOf('const syncWorkspaceIdentityToUrl ='), pageSource.indexOf('const syncDocumentIdToUrl ='));
+  assert.match(urlWriter, /if \(mode === "document"\) params\.delete\("mode"\)/);
+  assert.match(urlWriter, /else if \(mode\) params\.set\("mode", mode\)/);
+  assert.match(urlWriter, /params\.set\("documentId", identity\.documentId\)/);
+  assert.match(urlWriter, /if \(identity\.documentId && identity\.versionId\) \{\s*params\.set\("versionId", identity\.versionId\)/);
+  assert.match(urlWriter, /params\.delete\("versionId"\)/);
+  assert.match(urlWriter, /router\[history\]\(nextUrl\)/);
+  assert.match(pageSource, /onClick=\{\(\) => selectVersion\(version, "push", "document"\)\}/);
 });
 
 test("a rail item focuses its exact startOffset/endOffset range", () => {

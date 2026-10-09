@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from 'react';
-import { fetchApi } from '@/lib/api';
+import { ApiError, fetchApi } from '@/lib/api';
 type Overlay = {
     sourceKey: string;
     sourceRevision: string;
@@ -47,6 +47,8 @@ export function CustomerHistoryPolicyEditor({ caseId }: {
     caseId: string;
 }) {
     const [value, setValue] = useState<Policy | null>(null);
+    const [readState, setReadState] = useState<'LOADING' | 'READY' | 'UNAVAILABLE' | 'UNAUTHORIZED' | 'ERROR'>('LOADING');
+    const [retry, setRetry] = useState(0);
     const [draft, setDraft] = useState<Snapshot | null>(null);
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
@@ -62,6 +64,7 @@ export function CustomerHistoryPolicyEditor({ caseId }: {
     useEffect(() => {
         const n = ++epoch.current;
         setValue(null);
+        setReadState('LOADING');
         setDraft(null);
         setBusy(false);
         setError('');
@@ -69,15 +72,21 @@ export function CustomerHistoryPolicyEditor({ caseId }: {
         void fetchApi<Policy>(url).then(v => {
             if (n === epoch.current) {
                 setValue(v);
+                setReadState('READY');
                 setGrant(v.snapshot?.audienceGrantId || '');
                 setPublication(v.snapshot?.publicationId || '');
             }
-        }).catch(() => {
-            if (n === epoch.current)
-                setError('A megosztási szabály nem tölthető be vagy nem elérhető.');
+        }).catch(cause => {
+            if (n === epoch.current) {
+                setReadState(cause instanceof ApiError && (cause.status === 401 || cause.status === 403)
+                    ? 'UNAUTHORIZED'
+                    : cause instanceof ApiError && cause.code === 'HISTORY_CAPABILITY_UNAVAILABLE'
+                        ? 'UNAVAILABLE'
+                        : 'ERROR');
+            }
         });
         return () => { ++epoch.current; };
-    }, [url]);
+    }, [url, retry]);
     const cls = 'min-h-10 min-w-10 rounded border border-[var(--adm-border)] px-3 py-2 text-sm';
     const snapshot = draft || value?.snapshot;
     async function loadAudience() {
@@ -143,6 +152,20 @@ export function CustomerHistoryPolicyEditor({ caseId }: {
         const existing = snapshot.overlays.find(o => o.sourceKey === source.sourceKey);
         const item = { sourceKey: source.sourceKey, sourceRevision: source.sourceRevision, excluded: false, customerText: null, includeTime: false, ...existing, ...patch };
         setDraft({ ...snapshot, overlays: [...snapshot.overlays.filter(o => o.sourceKey !== source.sourceKey), item] });
+    }
+    if (readState !== 'READY') {
+        const message = readState === 'LOADING'
+            ? 'A megosztási szabály betöltése…'
+            : readState === 'UNAVAILABLE'
+                ? 'Az ügyféltörténet megosztása jelenleg nem érhető el. A belső ügytörténet változatlan.'
+                : readState === 'UNAUTHORIZED'
+                    ? 'Nincs jogosultsága az ügyféltörténet megosztási szabályának megtekintéséhez.'
+                    : 'A megosztási szabály nem tölthető be. Nem tudjuk megállapítani, van-e mentett szabály.';
+        return <section aria-label="Ügyféltörténet megosztása" className="space-y-3 rounded-lg border border-[var(--adm-border)] bg-white p-4">
+            <h3 className="font-semibold">Ügyféltörténet megosztása</h3>
+            <p role={readState === 'LOADING' ? 'status' : 'alert'}>{message}</p>
+            {readState === 'ERROR' || readState === 'UNAVAILABLE' ? <button type="button" className={cls} onClick={() => setRetry(n => n + 1)}>Újrapróbálás</button> : null}
+        </section>;
     }
     return <section aria-label="Ügyféltörténet megosztása" className="space-y-3 rounded-lg border border-[var(--adm-border)] bg-white p-4"><h3 className="font-semibold">Ügyféltörténet megosztása</h3><p className="text-sm">Ugyanaz a szabály érvényes az ügyfélportálra és a munkajelentésre. A piszkozat mentése nem teszi közzé. A kiválasztott célközönség aktív hozzáférését minden olvasás ellenőrzi.</p>{error && <p role="alert">{error}</p>}{value && <><p role="status">{draft ? 'Nem mentett piszkozat' : value.reviewed ? 'Ellenőrzött változat' : 'Mentett piszkozat'} · {value.publishedNumber ? `Közzétett változat: ${value.publishedNumber}` : 'Nincs aktív közzététel'}</p>{value.canManage && <div className="flex flex-wrap gap-2"><label>Célközönség<select className={cls} value={grant} onChange={e => setGrant(e.target.value)} disabled={busy}><option value="">Válasszon aktív hozzáférést</option>{value.grants.map((g, i) => <option key={g.id} value={g.id}>{g.label || `Aktív hozzáférés ${i + 1}`} · {g.id.slice(0, 8)}</option>)}</select></label><label>Közzétett ügy<select className={cls} value={publication} onChange={e => setPublication(e.target.value)} disabled={busy}><option value="">Válasszon közzétételt</option>{value.publications.map((p, i) => <option key={p.id} value={p.id}>{p.label || `Közzététel ${i + 1}`} · {p.id.slice(0, 8)}</option>)}</select></label><button type="button" className={cls} disabled={busy || !grant || !publication} onClick={() => void loadAudience()}>Forráslista betöltése</button></div>}{snapshot && <><label>Megosztási szint<select className={cls} value={snapshot.level} disabled={busy || !value.canManage} onChange={e => setDraft({ ...snapshot, level: Number(e.target.value) as 1 | 2 | 3 })}>{names.map((name, i) => <option key={name} value={i + 1}>{i + 1}. {name}</option>)}</select></label><p className="text-sm">1: közzétett állapot és következő lépés. 2: engedélyezett mérföldkövek, frissítések és dokumentumadatok. 3: külön ellenőrzött munkaszöveg, engedélyezett tényleges időadatok.</p>{value.sources.map(source => { const o = snapshot.overlays.find(x => x.sourceKey === source.sourceKey); return <div key={source.sourceKey} className="space-y-2 rounded border p-3"><p>{source.title} · {source.occurredAt.slice(0, 10)} · {source.minimumLevel}. szint</p><p className="break-all text-xs">Belső forráshivatkozás: {source.sourceKey}</p><label className="flex min-h-10 items-center gap-2"><input type="checkbox" disabled={!value.canManage || busy} checked={o?.excluded || false} onChange={e => overlay(source, { excluded: e.target.checked })}/>Elrejtés {draft ? '(nem mentett piszkozat)' : value.draftNumber === value.publishedNumber ? '(aktív közzététel)' : '(csak mentett piszkozat)'}</label><label className="block text-sm">Ügyfélnek szánt szöveg (külön ellenőrzendő)<textarea className={`${cls} block w-full`} maxLength={3000} disabled={!value.canManage || busy} value={o?.customerText ?? source.body ?? ''} onChange={e => overlay(source, { customerText: e.target.value, sourceRevision: source.sourceRevision })}/></label>{source.minutes !== null && <label className="flex min-h-10 items-center gap-2"><input type="checkbox" disabled={!value.canManage || busy} checked={o?.includeTime || false} onChange={e => overlay(source, { includeTime: e.target.checked })}/>Tényleges idő megosztása: {source.minutes} perc</label>}</div>; })}</>}
  <div className="flex flex-wrap gap-2">{draft && value.canManage && <><button type="button" className={cls} disabled={busy} onClick={() => void action('save')}>Piszkozat mentése</button><button type="button" className={cls} disabled={busy} onClick={() => setDraft(null)}>Mégse</button></>}{value.snapshot && !draft && <button type="button" className={cls} disabled={busy} onClick={() => void action('preview')}>Ügyfélnézet előnézete</button>}{value.canPublish && value.snapshot && !draft && <><button type="button" className={cls} disabled={busy} onClick={() => void action('review')}>Szöveg és forrás ellenőrzésének jóváhagyása</button><button type="button" className={cls} disabled={busy || !value.reviewed} onClick={() => void action('publish')}>Közzététel a portálon és jelentésben</button><button type="button" className={cls} disabled={busy || !value.publishedNumber} onClick={() => void action('withdraw')}>Megosztás visszavonása</button></>}</div></>}{preview && <div role="region" aria-label="Ügyfélnézet előnézete">{preview.length === 0 ? <p>Nincs megosztható elem.</p> : preview.map((item, i) => <article key={i}><strong>{item.title}</strong><p className="whitespace-pre-wrap">{item.body}</p>{item.minutes !== null && <p>{item.minutes} perc</p>}</article>)}</div>}</section>;

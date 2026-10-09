@@ -76,6 +76,10 @@ test("DW01 resolves every selectable ledger kind from the URL and clears a delet
 
 test("DW06 writes version identity only as documentId plus explicit historical versionId", () => {
   assert.match(source, /const requestedVersionId = searchParams\?\.get\("versionId"\)/);
+  assert.match(source, /!requestedDocumentId && typeof window !== "undefined"[\s\S]*?new URLSearchParams\(window\.location\.search\)\.get\("versionId"\)/);
+  assert.match(source, /const requestedVersionIdRef = useRef<string \| null>\(requestedVersionId\)/);
+  assert.match(source, /const params = new URLSearchParams\(searchParams\?\.toString\(\) \|\| \(typeof window !== "undefined" \? window\.location\.search : ""\)\)/);
+  assert.match(source, /versionId: requestedVersionIdRef\.current/);
   assert.match(source, /params\.set\("versionId", identity\.versionId\)/);
   assert.match(source, /params\.delete\("versionId"\)/);
   // A versionId is only ever written together with its documentId.
@@ -86,6 +90,9 @@ test("DW06 writes version identity only as documentId plus explicit historical v
   assert.match(source, /const selectVersion = \(version: DocumentVersionItem/);
   assert.match(source, /versionId: version\.isCurrent \? null : version\.id/);
   assert.match(source, /onClick=\{\(\) => selectVersion\(version\)\}/);
+  assert.match(source, /onClick=\{\(\) => selectVersion\(version, "push", "document"\)\}/);
+  assert.doesNotMatch(source, /selectVersion\(version\); syncWorkspaceModeToUrl/);
+  assert.match(source, /if \(mode === "document"\) params\.delete\("mode"\)/);
   // Promoting or uploading a new current version canonicalizes back to document-only.
   assert.match(source, /syncWorkspaceIdentityToUrl\(\{ documentId: version\.documentId, versionId: null \}, "replace"\)/);
   assert.match(source, /syncWorkspaceIdentityToUrl\(\{ documentId: selectedUploadedDocument\.id, versionId: null \}, "replace"\)/);

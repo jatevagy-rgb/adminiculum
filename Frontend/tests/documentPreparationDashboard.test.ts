@@ -348,6 +348,9 @@ describe("Document preparation — data contract & truthfulness repair", () => {
     assert.match(source, /preparation-anonymized-unavailable/);
     assert.match(source, /Az anonimizált változat állapota most nem tölthető be\./);
     assert.match(source, /preparation-anonymized-retry/);
+    assert.match(source, /preparation-anonymized-disabled/);
+    assert.match(source, /anonymousReadDisabled \? \(/);
+    assert.match(source, /anonymousResult\.reason instanceof ApiError && anonymousResult\.reason\.status === 501 && anonymousResult\.reason\.code === "FEATURE_DISABLED"/);
     const errorIndex = source.indexOf("preparation-anonymized-unavailable");
     const emptyIndex = source.indexOf("preparation-anonymized-empty");
     assert.ok(errorIndex > -1 && emptyIndex > -1 && errorIndex < emptyIndex);
