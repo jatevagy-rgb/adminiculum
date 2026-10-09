@@ -5,7 +5,13 @@ import { resumeAnalysisJobsBlockedByScan } from '../compliance-doc-intelligence/
 
 export type DocumentSecurityScanStatus = 'PENDING_SCAN' | 'CLEAN' | 'SCAN_FAILED' | 'INFECTED';
 
-export function securityScanBlock(status: DocumentSecurityScanStatus) {
+/**
+ * Canonical fail-closed security gate. Only an explicit 'CLEAN' verdict may
+ * pass; every other value — including PENDING_SCAN, SCAN_FAILED, INFECTED, or
+ * a missing/unknown status (null/undefined) — is blocked. Callers MUST NOT
+ * coerce a missing status to 'CLEAN' before calling this primitive.
+ */
+export function securityScanBlock(status: DocumentSecurityScanStatus | string | null | undefined) {
   return status === 'CLEAN' ? null : {
     error: 'A dokumentum biztonsági ellenőrzése még nem engedélyezi a tartalom megnyitását.',
     code: 'DOCUMENT_SECURITY_SCAN_BLOCKED',

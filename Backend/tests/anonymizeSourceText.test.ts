@@ -120,14 +120,20 @@ describe('resolveAnonymizeSourceText — canonical source reuse', () => {
     expect(downloads).toBe(0);
   });
 
-  it('falls back to the legacy document pointer for rows with no version storage', async () => {
+  it('blocks anonymization (fail-closed) when there is no current version to carry a scan verdict', async () => {
+    // P0: a legacy document with only a document-level pointer has no immutable
+    // version and therefore no trustworthy securityScanStatus. Missing/unknown
+    // status must remain blocked, never default to CLEAN.
+    const download = jest.fn(async (storageId: string) => (storageId === 'sp-legacy' ? Buffer.from('Legacy content', 'utf-8') : null));
     const resolution = await resolveAnonymizeSourceText(
       { spItemId: 'sp-legacy', mimeType: 'text/plain', fileName: 'legacy.txt', currentVersion: null },
-      async (storageId) => (storageId === 'sp-legacy' ? Buffer.from('Legacy content', 'utf-8') : null),
+      download,
     );
 
-    expect(resolution.available).toBe(true);
-    expect(resolution.text).toBe('Legacy content');
+    expect(resolution.available).toBe(false);
+    expect(resolution.scanBlocked).toBe(true);
+    expect(resolution.code).toBe('SECURITY_SCAN_BLOCKED');
+    expect(download).not.toHaveBeenCalled();
   });
 
   it('fails closed when current storage fails even if old document bytes are readable', async () => {

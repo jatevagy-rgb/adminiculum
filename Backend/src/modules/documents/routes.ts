@@ -701,7 +701,7 @@ router.get('/:id/versions/:versionId/text', authenticate, requireDocumentReadAcc
       return;
     }
 
-    const blocked = securityScanBlock(version.securityScanStatus || 'CLEAN');
+    const blocked = securityScanBlock(version.securityScanStatus);
     if (blocked) {
       res.status(blocked.status).json(blocked);
       return;
@@ -892,7 +892,7 @@ router.get('/:id/text', authenticate, requireDocumentObjectReadAccess, async (re
       res.status(409).json({ code: 'SOURCE_NOT_AVAILABLE', message: 'A dokumentum hiteles forrása nem érhető el.' });
       return;
     }
-    const textBlocked = securityScanBlock(currentVersion?.securityScanStatus || 'CLEAN');
+    const textBlocked = securityScanBlock(currentVersion?.securityScanStatus);
     if (textBlocked) {
       res.status(textBlocked.status).json(textBlocked);
       return;
@@ -1307,7 +1307,7 @@ router.get('/:id/download', authenticate, requireDocumentObjectReadAccess, async
       return;
     }
 
-    const downloadBlocked = securityScanBlock(document.versions?.[0]?.securityScanStatus || 'CLEAN');
+    const downloadBlocked = securityScanBlock(document.versions?.[0]?.securityScanStatus);
     if (downloadBlocked) {
       res.status(downloadBlocked.status).json(downloadBlocked);
       return;

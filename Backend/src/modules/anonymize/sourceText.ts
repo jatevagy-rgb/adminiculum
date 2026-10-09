@@ -67,7 +67,7 @@ export async function resolveAnonymizeSourceText(
   if (descriptor.currentVersion && descriptor.documentId && descriptor.currentVersion.documentId !== descriptor.documentId) {
     return { available: false, text: null, scanBlocked: false, code: 'SOURCE_NOT_AVAILABLE', limitationMessage: SOURCE_TEXT_LIMITATION_MESSAGE };
   }
-  const scanStatus = descriptor.currentVersion ? descriptor.currentVersion.securityScanStatus : 'CLEAN';
+  const scanStatus = descriptor.currentVersion?.securityScanStatus ?? null;
   if (scanStatus !== 'CLEAN') {
     return {
       available: false,

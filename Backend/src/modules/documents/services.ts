@@ -304,7 +304,7 @@ class DocumentsService {
                     spItemId: sharePointItemId,
                     spWebUrl: uploadResult.webUrl || null,
                     uploadedById: input.createdById,
-                    securityScanStatus: 'CLEAN' as any,
+                    securityScanStatus: 'PENDING_SCAN' as any,
                   },
                 },
               },
@@ -364,9 +364,11 @@ class DocumentsService {
         );
       }
 
-      if (uploadSource !== 'LAWYER_UPLOAD') {
-        queueDocumentVersionScan(documentVersionId, input.fileContent);
-      }
+      // P0: every durable version must be malware-scanned, including the
+      // LAWYER_UPLOAD initial version. Persisted as PENDING_SCAN above, the
+      // exact uploaded bytes are queued here so only a real CLEAN verdict can
+      // later transition the version to CLEAN (fail-closed otherwise).
+      queueDocumentVersionScan(documentVersionId, input.fileContent);
       return {
         id: document.id,
         caseId: document.caseId,
@@ -686,7 +688,7 @@ class DocumentsService {
                 uploadedById: userId,
                 documentId,
                 previousVersionId: latestVersion?.id || null,
-                securityScanStatus: versionUploadSource === 'LAWYER_UPLOAD' ? 'CLEAN' : 'PENDING_SCAN' as any,
+                securityScanStatus: 'PENDING_SCAN' as any,
               },
             });
 
@@ -735,9 +737,10 @@ class DocumentsService {
         } as any
       }).catch(() => undefined);
 
-      if (versionUploadSource !== 'LAWYER_UPLOAD') {
-        queueDocumentVersionScan(createdVersionId, fileContent);
-      }
+      // P0: every durable version (including LAWYER_UPLOAD) is persisted
+      // PENDING_SCAN above and its exact bytes are queued for malware scanning,
+      // so only a real CLEAN verdict can later clear it.
+      queueDocumentVersionScan(createdVersionId, fileContent);
 
       return {
         id: updatedDoc.id,
@@ -859,7 +862,7 @@ class DocumentsService {
     });
 
     if (!version) return null;
-    const blocked = securityScanBlock(version.securityScanStatus || 'CLEAN');
+    const blocked = securityScanBlock(version.securityScanStatus);
     if (blocked) return blocked;
     const storageId = version.spItemId || version.storageReference;
     if (!storageId) {

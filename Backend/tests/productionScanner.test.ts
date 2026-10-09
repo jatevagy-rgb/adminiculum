@@ -228,6 +228,44 @@ describe('HttpMalwareScanner — fail-closed on abnormal paths', () => {
   });
 });
 
+describe('HttpMalwareScanner — total HTTP deadline covers the response body', () => {
+  // A provider that returns headers immediately (so the pre-fix timer would be
+  // cleared) but then stalls its body must still fail closed as a timeout.
+  function stallingBodyResponse(prefixChunk?: string): Response {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        if (prefixChunk) controller.enqueue(encoder.encode(prefixChunk));
+        // Never enqueue more and never close: the body stalls/trickles forever.
+      },
+    });
+    return new Response(stream, { status: 200 });
+  }
+
+  it('headers then stalled body past deadline → SCAN_FAILED (HTTP_SCAN_TIMEOUT)', async () => {
+    global.fetch = jest.fn(async () => stallingBodyResponse()) as any;
+    const r = await new HttpMalwareScanner({ url: URL, timeoutMs: 30 }).scan(SCAN_INPUT);
+    expect(r.outcome).toBe('SCAN_FAILED');
+    expect(r.codeSafe).toBe('HTTP_SCAN_TIMEOUT');
+  });
+
+  it('headers then trickle body past deadline → SCAN_FAILED (HTTP_SCAN_TIMEOUT)', async () => {
+    // Emit a partial JSON chunk so the first read() resolves, then stall the
+    // remainder past the deadline.
+    global.fetch = jest.fn(async () => stallingBodyResponse('{"result":')) as any;
+    const r = await new HttpMalwareScanner({ url: URL, timeoutMs: 30 }).scan(SCAN_INPUT);
+    expect(r.outcome).toBe('SCAN_FAILED');
+    expect(r.codeSafe).toBe('HTTP_SCAN_TIMEOUT');
+  });
+
+  it('clean body completed within deadline still returns CLEAN', async () => {
+    global.fetch = jest.fn(async () => jsonResponse({ result: 'clean' })) as any;
+    const r = await new HttpMalwareScanner({ url: URL, timeoutMs: 500 }).scan(SCAN_INPUT);
+    expect(r.outcome).toBe('CLEAN');
+    expect(r.codeSafe).toBe('HTTP_SCAN_CLEAN');
+  });
+});
+
 describe('secrets & provider detail never reach logs', () => {
   it('SECRET_NOT_LOGGED: fail-closed logs carry no api key, url, or provider body', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
