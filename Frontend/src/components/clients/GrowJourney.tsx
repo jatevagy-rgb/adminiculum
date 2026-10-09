@@ -1492,6 +1492,13 @@ function GrowDetailScreen({
       <Panel title="Miért ezeket?">
         <div className="mb-4 rounded-2xl border border-[#e8ded1] bg-[#fcfbf9] p-4" data-testid="evidence-basis-summary">
           <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">Mi alapján állítja ezt a rendszer?</p>
+          <div className="mt-3 rounded-xl border border-[#e8ded1] bg-white p-3" data-testid="grow-measured-evidence-metric">
+            <p className="text-sm font-semibold text-[#1b382b]"><strong>{evidenceCategoryCounts.MEASURED_COMPANY} / {detail.evidence.length}</strong> kapcsolt bizonyíték üzemi méréssel alátámasztott</p>
+            <p className="mt-1 text-xs text-[#556052]">A számláló kizárólag a kiválasztott javaslathoz kapcsolt, mért forrásalapú vállalati bizonyíték. A nevező valamennyi kapcsolt bizonyíték; a külső kutatás, ügyféljelzés, becslés és származtatott adat nem számít mért vállalati ténynek.</p>
+            <p className="mt-2 text-xs text-[#556052]">Deklarált: {evidenceCategoryCounts.DECLARED_COMPANY} · Becsült: {evidenceCategoryCounts.ESTIMATED_COMPANY} · Származtatott: {evidenceCategoryCounts.DERIVED_COMPANY} · Külső kutatás: {evidenceCategoryCounts.RESEARCH} · Nem igazolt forrásalap: {evidenceCategoryCounts.UNKNOWN_COMPANY}</p>
+            <p className="mt-2 text-xs text-[#556052]">Ténylegesen elért eredmény ebből az arányból nem következik; az előtte/utána mérés külön, az Eredmények nézetben vizsgálható.</p>
+            <details className="mt-3 text-xs text-[#1b382b]"><summary className="min-h-10 cursor-pointer font-semibold underline">Milyen bizonyíték hiányzik, és hogyan mérhető?</summary><p className="mt-1 leading-5">A kiválasztott folyamatnál rögzítsenek azonos mértékegységű kiinduló és követő üzemi adatot, megfigyelési időponttal és ellenőrizhető forrással. Csak a ténylegesen kapcsolt, mért forrásalapú bizonyíték emeli ezt a számlálót; önmagában egy becslés vagy külső hivatkozás nem.</p></details>
+          </div>
           <ul className="mt-2 space-y-1.5 text-xs text-[#1b382b]">
             <li>
               <span className="font-semibold">Folyamatadat: {sourceBasisLabelHu(sourceRefs?.sourceBasis)}</span>{" "}
