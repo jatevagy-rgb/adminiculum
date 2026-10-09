@@ -368,32 +368,32 @@ const [phone, setPhone] = useState("");
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="anonymize-modal-title" tabIndex={-1} className="flex max-h-[calc(100dvh-2rem)] w-full max-w-2xl flex-col overflow-hidden border border-[#e4e2dd] bg-white shadow-2xl outline-none">
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between bg-[#06190d] px-6 py-4">
-          <div>
+          <div className="min-w-0">
             <h2 id="anonymize-modal-title" className="text-lg font-['Newsreader'] font-bold text-white">
               AI-előkészítés / Anonimizálás
             </h2>
-            <p className="text-xs text-white/60 mt-1">
+            <p className="mt-1 break-words text-xs text-white/60">
               {contract.title || contract.templateName}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-white/60 hover:text-white transition-colors"
+            aria-label="Bezárás"
+            className="min-h-10 min-w-10 shrink-0 text-white/60 hover:text-white transition-colors"
           >
-            <span className="material-symbols-outlined">close</span>
+            <span aria-hidden="true" className="text-2xl">×</span>
           </button>
         </div>
 
         {/* Content */}
-        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6">
           {!result ? (
             <>
               {/* Source Document Info */}
               <div className="mb-6 p-4 bg-[#f5f3ee] border border-[#c3c8c1]/10">
                 <div className="flex items-center gap-3">
-                  <span className="material-symbols-outlined text-[#434843]">description</span>
-                  <div>
-                    <p className="text-sm font-bold text-[#06190d]">{contract.title || contract.templateName}</p>
+                  <div className="min-w-0">
+                    <p className="break-words text-sm font-bold text-[#06190d]">{contract.title || contract.templateName}</p>
                     <p className="text-xs text-[#434843]">
                       v{contract.revisionNumber || 1} • {contract.status}
                     </p>
@@ -404,7 +404,6 @@ const [phone, setPhone] = useState("");
               {/* Source Text Workspace */}
               <div className="mb-6 p-4 border border-[#c3c8c1]/20">
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="material-symbols-outlined text-[#434843] text-base">article</span>
                   <p className="text-xs font-bold text-[var(--adm-text-primary)]">Dokumentumforrás előnézete</p>
                 </div>
                 {sourceTextLoading ? (
@@ -435,7 +434,6 @@ const [phone, setPhone] = useState("");
               {/* Known Party Metadata */}
               <div className="mb-6 p-4 border border-[#c3c8c1]/20">
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="material-symbols-outlined text-[#434843] text-base">badge</span>
                   <p className="text-xs font-bold text-[#06190d]">Ismert fél adatai</p>
                 </div>
                 <p className="text-[10px] text-[#434843]/70 mb-3">
@@ -537,13 +535,12 @@ const [phone, setPhone] = useState("");
               {additionalKnownParties.length > 0 && (
                 <div className="mb-6 p-4 border border-[#c3c8c1]/20">
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="material-symbols-outlined text-[#434843] text-base">group_add</span>
                     <p className="text-xs font-bold text-[#06190d]">További ismert felek</p>
                   </div>
                   <div className="space-y-2">
                     {additionalKnownParties.map((party) => (
-                      <div key={party.id} className="flex items-center justify-between px-3 py-2 bg-[#f5f3ee] border border-[#c3c8c1]/10">
-                        <div>
+                      <div key={party.id} className="flex min-w-0 items-center justify-between gap-2 px-3 py-2 bg-[#f5f3ee] border border-[#c3c8c1]/10">
+                        <div className="min-w-0 break-words">
                           <p className="text-xs font-bold text-[#06190d]">{party.name || "Ismert fél"}</p>
                           <p className="text-[10px] text-[#434843]/70">
                             {party.legalRole || "Szerep nélkül"}
@@ -554,7 +551,7 @@ const [phone, setPhone] = useState("");
                         <button
                           type="button"
                           onClick={() => removeAdditionalParty(party.id)}
-                          className="text-[#8b3a3a] hover:text-[#6b2020] text-xs font-bold"
+                          className="shrink-0 text-[#8b3a3a] hover:text-[#6b2020] text-xs font-bold"
                           aria-label={`Eltávolítás: ${party.name || "Ismert fél"}`}
                         >
                           Eltávolítás
@@ -569,8 +566,7 @@ const [phone, setPhone] = useState("");
               {clientName && (
                 <div className="mb-4 p-3 bg-[#e2ede5] border border-[#a6c0af]">
                   <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-[#23472F]">person</span>
-                    <div>
+                    <div className="min-w-0 break-words">
                       <p className="text-xs font-bold text-[#23472F]">Ismert fél</p>
                       <p className="text-[10px] text-[#23472F]/70">
                         {clientName}{clientRole ? ` — ${clientRole}` : ""} — csak az ellenérdekelt feleket adja meg
@@ -583,7 +579,6 @@ const [phone, setPhone] = useState("");
               {/* Structured Counterparty Input */}
               <div className="mb-6 p-4 border border-[#c3c8c1]/20">
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="material-symbols-outlined text-[#434843] text-base">group</span>
                   <p className="text-xs font-bold text-[#06190d]">További felek</p>
                 </div>
                 <p className="text-[10px] text-[#434843]/60 mb-3">
@@ -591,14 +586,14 @@ const [phone, setPhone] = useState("");
                 </p>
 
                 {/* Add counterparty form */}
-                <div className="flex gap-2 mb-3">
+                <div className="mb-3 flex min-w-0 flex-wrap gap-2">
                   <input
                     type="text"
                     value={newCounterpartyName}
                     onChange={(e) => setNewCounterpartyName(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleAddCounterparty()}
                     placeholder="Ellenérdekelt fél neve..."
-                    className="flex-1 px-2 py-1.5 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]"
+                    className="w-full min-w-0 px-2 py-1.5 text-xs border border-[#c3c8c1]/20 text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d] sm:w-auto sm:flex-1"
                   />
                   <select
                     value={newCounterpartySide}
@@ -621,12 +616,12 @@ const [phone, setPhone] = useState("");
                 {counterparties.length > 0 && (
                   <div className="space-y-1.5">
                     {counterparties.map((cp, i) => (
-                      <div key={i} className="flex items-center justify-between px-2 py-1.5 bg-[#f5f3ee] border border-[#c3c8c1]/10">
-                        <div className="flex items-center gap-2">
+                      <div key={i} className="flex min-w-0 items-center justify-between gap-2 px-2 py-1.5 bg-[#f5f3ee] border border-[#c3c8c1]/10">
+                        <div className="flex min-w-0 items-center gap-2">
                           <span className="text-[10px] text-[#434843]/50">
                             {cp.side === 'OPPONENT' ? 'E' : 'T'}
                           </span>
-                          <span className="text-xs text-[#06190d]">{cp.name}</span>
+                          <span className="min-w-0 break-words text-xs text-[#06190d]">{cp.name}</span>
                         </div>
                         <button
                           onClick={() => handleRemoveCounterparty(i)}
@@ -682,12 +677,12 @@ const [phone, setPhone] = useState("");
                 <label className="block text-xs font-bold uppercase tracking-widest text-[#434843] mb-3">
                   Anonimizálás mértéke
                 </label>
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-3">
                   {redactionLevelOptions.map((option) => (
                     <button
                       key={option.value}
                       onClick={() => setRedactionLevel(option.value)}
-                      className={`flex-1 p-3 text-center border transition-all ${
+                      className={`min-w-[130px] flex-1 p-3 text-center border transition-all ${
                         redactionLevel === option.value
                           ? "border-[#06190d] bg-[#06190d]/5"
                           : "border-[#c3c8c1]/20 hover:border-[#c3c8c1]/40"
@@ -717,7 +712,7 @@ const [phone, setPhone] = useState("");
               {/* Success Result */}
               <div className="mb-6 p-4 bg-[#e2ede5] border border-[#a6c0af]">
                 <div className="flex items-center gap-3">
-                  <span className="material-symbols-outlined text-[#23472F]">check_circle</span>
+                  <span aria-hidden="true" className="text-lg text-[#23472F]">✓</span>
                   <div>
                     <p className="text-sm font-bold text-[#23472F]">Anonimizálás kész</p>
                     <p className="text-xs text-[#23472F]/70">
@@ -735,7 +730,7 @@ const [phone, setPhone] = useState("");
                 <label className="block text-xs font-bold uppercase tracking-widest text-[#434843] mb-3">
                   Anonimizált tartalom előnézete
                 </label>
-                <div className="p-4 bg-[#f5f3ee] border border-[#c3c8c1]/10 text-xs text-[#434843] max-h-48 overflow-y-auto font-mono whitespace-pre-wrap">
+                <div className="max-h-48 overflow-y-auto break-words whitespace-pre-wrap border border-[#c3c8c1]/10 bg-[#f5f3ee] p-4 font-mono text-xs text-[#434843]">
                   {result.redactedText || "Nincs elérhető előnézet"}
                 </div>
               </div>
@@ -746,7 +741,7 @@ const [phone, setPhone] = useState("");
                   <label className="block text-xs font-bold uppercase tracking-widest text-[#434843] mb-3">
                     AI-átadásra kész prompt
                   </label>
-                  <div className="p-4 bg-[#f5f3ee] border border-[#c3c8c1]/10 text-xs text-[#434843] max-h-48 overflow-y-auto font-mono whitespace-pre-wrap">
+                  <div className="max-h-48 overflow-y-auto break-words whitespace-pre-wrap border border-[#c3c8c1]/10 bg-[#f5f3ee] p-4 font-mono text-xs text-[#434843]">
                     {result.aiReadyPrompt}
                   </div>
                 </div>
@@ -825,7 +820,7 @@ const [phone, setPhone] = useState("");
 
         {/* Footer */}
         {!result && (
-          <div className="flex shrink-0 justify-end gap-3 border-t border-[#e4e2dd] px-6 py-4">
+          <div className="flex shrink-0 flex-wrap justify-end gap-3 border-t border-[#e4e2dd] px-4 py-4 sm:px-6">
             <button
               onClick={onClose}
               className="px-4 py-2 text-xs font-bold uppercase tracking-widest border border-[#c3c8c1]/20 text-[#434843] hover:bg-[#f5f3ee]"
@@ -835,7 +830,7 @@ const [phone, setPhone] = useState("");
             <button
               onClick={handleAnonymize}
               disabled={isLoading || sourceTextLoading || !sourceTextAvailable || (aiTask === "CUSTOM" && !customPrompt)}
-              className="px-6 py-2 text-xs font-bold uppercase tracking-widest bg-[#06190d] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="min-w-0 px-4 py-2 text-xs font-bold uppercase tracking-widest bg-[#06190d] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed sm:px-6"
             >
               {isLoading ? "Feldolgozás..." : "Anonimizált másolat készítése"}
             </button>

@@ -78,6 +78,7 @@ import {
   type DocumentAnnotationType,
 } from "@/lib/api";
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
+import { AnonymizationCapabilityNotice, useAnonymizationCapability } from "@/components/documents/anonymizationCapability";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import { AIPromptPreparationModal } from "@/components/ai-prompts/AIPromptPreparationModal";
 import { useDocumentWorkContext } from "@/components/documents/workContext/useDocumentWorkContext";
@@ -555,7 +556,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const requestedDocumentId = searchParams?.get("documentId") ?? null;
-  const requestedVersionId = searchParams?.get("versionId") ?? null;
+  const requestedVersionId = searchParams?.get("versionId") ?? (!requestedDocumentId && typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("versionId")
+    : null);
   const requestedMode = searchParams?.get("mode") ?? null;
   // Canonical four-mode key. `mode` absent => document. Only known keys bind;
   // anything else falls back to the default document mode.
@@ -597,8 +600,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const syncWorkspaceIdentityToUrl = useCallback((
     identity: { documentId: string | null; versionId: string | null },
     history: "push" | "replace",
+    mode?: WorkspaceMode,
   ) => {
-    const params = new URLSearchParams(searchParams?.toString());
+    const params = new URLSearchParams(searchParams?.toString() || (typeof window !== "undefined" ? window.location.search : ""));
+    if (mode === "document") params.delete("mode");
+    else if (mode) params.set("mode", mode);
     if (identity.documentId) {
       params.set("documentId", identity.documentId);
     } else {
@@ -1157,6 +1163,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   };
 
   const handleAnonymize = (contract: CaseContractListItem) => {
+    if (anonymization.status !== "AVAILABLE") return;
     setAnonymizeModalContract(contract);
   };
 
@@ -1286,6 +1293,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const displayMatterName = (caseRecord?.title && caseRecord.title !== 'null' && caseRecord.title !== 'null - null') ? caseRecord.title : 'Dokumentumtár';
   const displayClient = (caseRecord?.clientName && caseRecord.clientName !== 'null') ? caseRecord.clientName : '';
   const canonicalCaseId = caseRecord?.id || resolvedParams.caseId;
+  const anonymization = useAnonymizationCapability(canonicalCaseId);
 
   // Package health calculations
   const totalContracts = contracts.length;
@@ -1423,6 +1431,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   };
 
   const openUploadedAnonymize = (document: DocumentItem) => {
+    if (anonymization.status !== "AVAILABLE" || !canLaunchAnonymization) return;
     const uploadedDocumentAsContract: CaseContractListItem = {
       id: document.id,
       title: document.fileName || 'Feltöltött dokumentum',
@@ -1502,20 +1511,20 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     selectedUploadedDocument?.folder ? `Mappa: ${selectedUploadedDocument.folder}` : selectedGeneratedContract?.templateName ? `Sablon: ${selectedGeneratedContract.templateName}` : null,
     selectedUploadedDocument?.fileName ? `Típus: ${getDocumentKindLabel(selectedUploadedDocument.fileName)}` : selectedGeneratedContract?.fileName ? `Típus: ${getDocumentKindLabel(selectedGeneratedContract.fileName)}` : null,
   ].filter(Boolean);
-  const canAnonymizeActiveDocument = Boolean(selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY');
   const canDeleteSelectedDocument = Boolean(selectedUploadedDocument && caseRecord?.status !== 'ARCHIVED');
   const selectedVersion = versions.find((version) => version.id === selectedVersionId) || versions.find((version) => version.isCurrent) || versions[0] || null;
+  const canAnonymizeActiveDocument = Boolean(selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY');
   const selectedVersionStableId = selectedVersion?.id || null;
   const selectedVersionDocumentId = selectedVersion?.documentId || null;
 
   // Explicit version selection keeps the document identity, writes the
   // immutable version id for a historical version, and canonicalizes the
   // current/default version back to the implicit document-only identity.
-  const selectVersion = (version: DocumentVersionItem, history: "push" | "replace" = "push") => {
+  const selectVersion = (version: DocumentVersionItem, history: "push" | "replace" = "push", mode?: WorkspaceMode) => {
     setSelectedVersionId(version.id);
     const documentId = selectedUploadedDocument?.id ?? null;
     if (!documentId) return;
-    syncWorkspaceIdentityToUrl({ documentId, versionId: version.isCurrent ? null : version.id }, history);
+    syncWorkspaceIdentityToUrl({ documentId, versionId: version.isCurrent ? null : version.id }, history, mode);
   };
   const selectedAnnotation = annotations.find((annotation) => annotation.id === selectedAnnotationId) || null;
   const selectedVersionFileType = getFileType(selectedVersion?.originalFileName || selectedUploadedDocument?.fileName);
@@ -1530,6 +1539,15 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     Boolean(selectedVersion?.id) &&
     selectedVersion?.documentId === selectedUploadedDocument?.id &&
     versions.some((v) => v.id === selectedVersion?.id);
+
+  // Anonymization launch gate. `selectedVersion` alone can still resolve to a
+  // stale previous-document version during an A -> B switch, before B's version
+  // list is authoritative. The action must only be offered for the active
+  // uploaded document's current version, so eligibility additionally requires
+  // the selected version to belong to the active document and loading to be
+  // complete (selectedVersionBelongsToActiveDocument already enforces both).
+  const canLaunchAnonymization =
+    selectedVersionBelongsToActiveDocument && Boolean(selectedVersion?.isCurrent);
 
   const annotationVersionEligible = selectedVersionBelongsToActiveDocument;
 
@@ -2673,7 +2691,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               <div data-testid="version-preview-unavailable" className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
                                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Előnézet</p>
                                 <h5 className="mt-2 font-sans text-2xl font-semibold text-[var(--adm-text)]">Az előnézet jelenleg nem érhető el</h5>
-                                <p className="mt-2 max-w-lg text-sm text-[#3D4842]">{versionTextUnavailableReason || 'Ehhez a verzióhoz nem sikerült betölteni a tárolt tartalmat. A dokumentum és a verziók továbbra is elérhetők; próbáld letölteni a verziót.'}</p>
+                                <p className="mt-2 max-w-lg text-sm text-[#3D4842]">{versionTextUnavailableReason || 'A kiválasztott verzió előnézete nem tölthető be. A letöltés elérhetősége külön ellenőrizhető.'}</p>
                               </div>
                             ) : (
                               <div className="max-h-[74vh] overflow-auto bg-[#efece4] p-4 sm:p-6">
@@ -2704,7 +2722,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               <div data-testid="version-preview-unavailable" className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
                                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{canonicalShellFileType} előnézet</p>
                                 <h5 className="mt-2 font-sans text-2xl font-semibold text-[var(--adm-text)]">A kinyert szöveg betöltése nem sikerült</h5>
-                                <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A szöveges előnézet jelenleg nem tölthető be. A dokumentum és a verzió letöltése továbbra is elérhető.</p>
+                                <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A szöveges előnézet jelenleg nem tölthető be. A letöltés elérhetősége külön ellenőrizhető.</p>
                               </div>
                             ) : (
                               <div data-testid="version-preview-unavailable" className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
@@ -3123,7 +3141,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                           <p className="mt-0.5 text-[10px] text-[var(--adm-text-muted)]">{formatShortDate(version.uploadedAt)} · {version.uploadedBy.name} · {getFileType(version.originalFileName)}</p>
                                         </div>
                                         <div className="flex flex-wrap items-center gap-2">
-                                          <AdminButton variant="neutral" size="xs" onClick={() => { selectVersion(version); syncWorkspaceModeToUrl('document', 'push'); }} disabled={isSelected}>{isSelected ? "Megnyitva" : "Megnyitás"}</AdminButton>
+                                          <AdminButton variant="neutral" size="xs" onClick={() => selectVersion(version, "push", "document")} disabled={isSelected}>{isSelected ? "Megnyitva" : "Megnyitás"}</AdminButton>
                                           <AdminButton variant="neutral" size="xs" onClick={() => handleDownloadVersion(version)} disabled={isDownloading === version.id || version.securityScanStatus !== 'CLEAN'}>{isDownloading === version.id ? "Letöltés..." : "Letöltés"}</AdminButton>
                                         </div>
                                       </div>
@@ -3389,7 +3407,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                         <div data-testid="version-preview-unavailable" className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
                                           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Előnézet</p>
                                           <h5 className="mt-2 font-sans text-2xl font-semibold text-[var(--adm-text)]">Az előnézet jelenleg nem érhető el</h5>
-                                          <p className="mt-2 max-w-lg text-sm text-[#3D4842]">{versionTextUnavailableReason || 'Ehhez a verzióhoz nem sikerült betölteni a tárolt tartalmat. A dokumentum és a verziók továbbra is elérhetők; próbáld letölteni a verziót.'}</p>
+                                          <p className="mt-2 max-w-lg text-sm text-[#3D4842]">{versionTextUnavailableReason || 'A kiválasztott verzió előnézete nem tölthető be. A letöltés elérhetősége külön ellenőrizhető.'}</p>
                                         </div>
                                       ) : (
                                         <div className="max-h-[620px] overflow-auto whitespace-pre-wrap p-5 font-mono text-[12px] leading-6 text-[#1f2a24]">
@@ -3411,7 +3429,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                         <div data-testid="version-preview-unavailable" className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
                                           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{selectedVersionFileType} előnézet</p>
                                           <h5 className="mt-2 font-sans text-2xl font-semibold text-[var(--adm-text)]">A kinyert szöveg betöltése nem sikerült</h5>
-                                          <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A szöveges előnézet jelenleg nem tölthető be. A dokumentum és a verzió letöltése továbbra is elérhető.</p>
+                                          <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A szöveges előnézet jelenleg nem tölthető be. A letöltés elérhetősége külön ellenőrizhető.</p>
                                         </div>
                                       ) : (
                                         <div data-testid="version-preview-unavailable" className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
@@ -3692,9 +3710,13 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               </AdminButton>
                             ) : null}
                             {canAnonymizeActiveDocument && selectedUploadedDocument ? (
-                              <AdminButton className="w-full justify-start" variant="neutral" onClick={() => openUploadedAnonymize(selectedUploadedDocument)}>
+                              <AdminButton className="w-full justify-start" variant="neutral" disabled={anonymization.status !== "AVAILABLE" || !canLaunchAnonymization} onClick={() => openUploadedAnonymize(selectedUploadedDocument)}>
                                 Anonimizálás
                               </AdminButton>
+                            ) : null}
+                            {canAnonymizeActiveDocument ? <AnonymizationCapabilityNotice status={anonymization.status} onRetry={anonymization.retry} /> : null}
+                            {canAnonymizeActiveDocument && selectedVersionBelongsToActiveDocument && selectedVersion && !selectedVersion.isCurrent ? (
+                              <p className="text-xs text-[var(--adm-text-secondary)]">A kiválasztott történeti v{selectedVersion.versionNumber} verzió anonimizálása nem támogatott; az aktuális verzióra váltás nélkül nem indítható.</p>
                             ) : null}
                             {canDeleteSelectedDocument && selectedUploadedDocument ? (
                               <AdminButton
@@ -3831,7 +3853,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       )}
 
       {/* Anonymize Modal */}
-      {anonymizeModalContract && (
+      {anonymizeModalContract && anonymization.status === "AVAILABLE" && (
         <AnonymizeModal
           isOpen={!!anonymizeModalContract}
           onClose={() => setAnonymizeModalContract(null)}

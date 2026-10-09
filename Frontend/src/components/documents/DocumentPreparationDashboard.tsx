@@ -29,6 +29,7 @@ import {
 import { AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
 import { ConfirmationDialog } from "@/components/ui";
 import { AnonymizeModal } from "@/components/documents/AnonymizeModal";
+import { AnonymizationCapabilityNotice, useAnonymizationCapability } from "@/components/documents/anonymizationCapability";
 import { AIPromptPreparationModal } from "@/components/ai-prompts/AIPromptPreparationModal";
 import { DocumentWorkContextEditor, DocumentWorkStatusBadge } from "@/components/documents/DocumentWorkCard";
 import { formatDocDate, workStatusLabel } from "@/lib/documents/workContext";
@@ -96,6 +97,7 @@ export function DocumentPreparationDashboard({
   onRefresh,
   onOpenRiskMatrix,
 }: DocumentPreparationDashboardProps) {
+  const anonymization = useAnonymizationCapability(caseId);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(() =>
     resolveDefaultPreparationDocumentId(documents, activeDocuments),
   );
@@ -104,6 +106,7 @@ export function DocumentPreparationDashboard({
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
   const [anonymousError, setAnonymousError] = useState(false);
+  const [anonymousReadDisabled, setAnonymousReadDisabled] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "ok" | "fail">("idle");
   const [downloading, setDownloading] = useState(false);
   const [anonymizeOpen, setAnonymizeOpen] = useState(false);
@@ -134,6 +137,7 @@ export function DocumentPreparationDashboard({
       setDataLoading(true);
       setDataError(null);
       setAnonymousError(false);
+      setAnonymousReadDisabled(false);
       setAnonymous([]);
       setCard(null);
       try {
@@ -154,7 +158,9 @@ export function DocumentPreparationDashboard({
           setAnonymous(anonymousResult.value);
         } else {
           setAnonymous([]);
-          setAnonymousError(true);
+          const disabled = anonymousResult.reason instanceof ApiError && anonymousResult.reason.status === 501 && anonymousResult.reason.code === "FEATURE_DISABLED";
+          setAnonymousReadDisabled(disabled);
+          setAnonymousError(!disabled);
         }
       } finally {
         if (requestRef.current === requestId) setDataLoading(false);
@@ -171,6 +177,7 @@ export function DocumentPreparationDashboard({
       setDataLoading(false);
       setDataError(null);
       setAnonymousError(false);
+      setAnonymousReadDisabled(false);
       return;
     }
     setCopyState("idle");
@@ -340,11 +347,13 @@ export function DocumentPreparationDashboard({
                 variant="neutral"
                 size="sm"
                 className="max-w-full"
+                disabled={anonymousReadDisabled || anonymization.status !== "AVAILABLE"}
                 onClick={() => setAnonymizeOpen(true)}
               >
                 Anonimizálás
               </AdminButton>
             )}
+            {!latestAnonymous ? <AnonymizationCapabilityNotice status={anonymization.status} onRetry={anonymization.retry} /> : null}
             <AdminButton
               data-testid="preparation-delete"
               variant="ghost"
@@ -497,6 +506,8 @@ export function DocumentPreparationDashboard({
                 </AdminButton>
               </div>
             </>
+          ) : anonymousReadDisabled ? (
+            <p data-testid="preparation-anonymized-disabled" className="mt-2 text-[13px] text-[var(--adm-text-secondary)]">A munkapéldányok listája a kikapcsolt anonimizálás mellett nem olvasható.</p>
           ) : latestAnonymous ? (
             <>
               <p data-testid="preparation-anonymized-ready" className="mt-2 text-[13.5px] font-semibold text-[var(--adm-text-primary)]">
@@ -527,12 +538,13 @@ export function DocumentPreparationDashboard({
                   data-testid="preparation-anonymize-action"
                   variant="neutral"
                   size="xs"
-                  disabled={dataLoading}
+                  disabled={dataLoading || anonymousReadDisabled || anonymization.status !== "AVAILABLE"}
                   onClick={() => setAnonymizeOpen(true)}
                 >
                   Anonimizálás indítása
                 </AdminButton>
               </div>
+              <AnonymizationCapabilityNotice status={anonymization.status} onRetry={anonymization.retry} />
             </>
           )}
           {copyState === "fail" ? (
@@ -557,7 +569,7 @@ export function DocumentPreparationDashboard({
         </div>
       ) : null}
 
-      {anonymizeOpen && selectedDocument ? (
+      {anonymizeOpen && selectedDocument && !anonymousReadDisabled && anonymization.status === "AVAILABLE" ? (
         <AnonymizeModal
           isOpen
           onClose={() => setAnonymizeOpen(false)}

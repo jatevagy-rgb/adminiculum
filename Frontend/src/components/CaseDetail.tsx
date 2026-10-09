@@ -7,6 +7,7 @@ import { closeCaseLifecycle, archiveCaseLifecycle } from "@/lib/api";
 import type { CaseListItem } from "@/lib/api";
 import { findCaseByReference, isCaseLookupAuthorizationDenial } from "@/lib/workspace/identityResolution";
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
+import { AnonymizationCapabilityNotice, useAnonymizationCapability } from "@/components/documents/anonymizationCapability";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
 import { CaseWorkspaceOverview } from "@/components/cases/CaseWorkspaceOverview";
@@ -290,8 +291,9 @@ export function CaseDetail({ params }: CaseDetailProps) {
   const [deleteDocumentSuccess, setDeleteDocumentSuccess] = useState<string | null>(null);
 
   // Anonymization state
-  const [anonymizeDoc, setAnonymizeDoc] = useState<{ id: string; title: string; templateName?: string; revisionNumber?: number; status: string } | null>(null);
+  const [anonymizeDoc, setAnonymizeDoc] = useState<{ id: string; caseId: string; title: string; templateName?: string; revisionNumber?: number; status: string } | null>(null);
   const [anonymizeModalOpen, setAnonymizeModalOpen] = useState(false);
+  const anonymization = useAnonymizationCapability(caseRecord?.id);
   const [lastAnonymizeResult, setLastAnonymizeResult] = useState<AnonymizeResult | null>(null);
   const [anonymousDocuments, setAnonymousDocuments] = useState<AnonymousDocumentListItem[]>([]);
 
@@ -1050,8 +1052,10 @@ export function CaseDetail({ params }: CaseDetailProps) {
   };
 
   const handleAnonymizeDocument = (doc: CaseDocument) => {
+    if (anonymization.status !== "AVAILABLE") return;
     setAnonymizeDoc({
       id: doc.id,
+      caseId: caseRecord?.id ?? "",
       title: doc.name,
       templateName: doc.type,
       revisionNumber: doc.version ? parseInt(doc.version) : undefined,
@@ -2154,11 +2158,12 @@ export function CaseDetail({ params }: CaseDetailProps) {
                       <button onClick={() => router.push(documentWorkspaceHref)} className="bg-[var(--adm-green-800)] px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-ivory-50)]">Dokumentum-review</button>
                       <button onClick={() => router.push(litigationWorkspaceHref)} className="border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-text)]">{activeDocument ? 'Peres munkatér' : 'Dokumentumtár'}</button>
                       <button onClick={() => handleDocumentClick(activeDocument)} disabled={isDownloading === activeDocument.id} className="border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-text)]">{isDownloading === activeDocument.id ? '...' : 'Letöltés'}</button>
-                      <button onClick={() => handleAnonymizeDocument(activeDocument)} className="border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-text)]">Anonimizálás</button>
+                      <button onClick={() => handleAnonymizeDocument(activeDocument)} disabled={anonymization.status !== "AVAILABLE"} className="border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-text)] disabled:opacity-50">Anonimizálás</button>
                       {canRequestDocumentDelete && (
                         <button onClick={() => openDeleteDocumentDialog(activeDocument)} className="border border-[#d4b8b8] bg-white px-3 py-1.5 text-[10px] font-semibold text-[#8b3a3a]">Törlés</button>
                       )}
                     </div>
+                    <AnonymizationCapabilityNotice status={anonymization.status} onRetry={anonymization.retry} />
                   </div>
                 ) : (
                   <div className="mt-3 border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-[11px] text-[var(--adm-text-muted)]">Még nincs kiválasztott dokumentum. Válassz egy iratot az ÜGYFÉL DOKUMENTUMAI listából a dokumentum-review és a peres munkatér megnyitásához.</div>
@@ -2504,7 +2509,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
       )}
 
       {/* Anonymize Modal for Client Documents */}
-      {anonymizeDoc && (
+      {anonymizeDoc && anonymizeDoc.caseId === caseRecord?.id && anonymization.status === "AVAILABLE" && (
         <AnonymizeModal
           isOpen={anonymizeModalOpen}
           onClose={() => {

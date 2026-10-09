@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ApiError,
   getCaseDocuments,
   getCaseAnonymousDocuments,
   getAnonymousDocumentsBySource,
@@ -17,6 +18,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Alert } from "@/components/ui/Alert";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { AnonymizeModal } from "@/components/documents/AnonymizeModal";
+import { AnonymizationCapabilityNotice, useAnonymizationCapability } from "@/components/documents/anonymizationCapability";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 
 // ============================================================================
@@ -116,10 +118,12 @@ export function DocumentAIFlow({
   readOnly = false,
   onChanged,
 }: DocumentAIFlowProps) {
+  const anonymization = useAnonymizationCapability(caseId);
   const [documents, setDocuments] = useState<DocumentItem[] | null>(null);
   const [documentsError, setDocumentsError] = useState<string | null>(null);
   const [anonymousList, setAnonymousList] = useState<AnonymousDocumentListItem[]>([]);
   const [anonymousError, setAnonymousError] = useState<string | null>(null);
+  const [anonymousReadDisabled, setAnonymousReadDisabled] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const [anonymizeTarget, setAnonymizeTarget] = useState<CaseContractListItem | null>(null);
@@ -145,6 +149,7 @@ export function DocumentAIFlow({
     setLoading(true);
     setDocumentsError(null);
     setAnonymousError(null);
+    setAnonymousReadDisabled(false);
 
     const [docsResult, anonResult] = await Promise.allSettled([
       getCaseDocuments(caseId),
@@ -164,7 +169,9 @@ export function DocumentAIFlow({
       setAnonymousList(anonResult.value);
     } else {
       setAnonymousList([]);
-      setAnonymousError("Az anonimizált munkapéldányok listája nem érhető el.");
+      const disabled = anonResult.reason instanceof ApiError && anonResult.reason.status === 501 && anonResult.reason.code === "FEATURE_DISABLED";
+      setAnonymousReadDisabled(disabled);
+      if (!disabled) setAnonymousError("Az anonimizált munkapéldányok listája nem érhető el.");
     }
 
     setLoading(false);
@@ -194,6 +201,7 @@ export function DocumentAIFlow({
     setSaveError(null);
     setDocuments(null);
     setAnonymousList([]);
+    setAnonymousReadDisabled(false);
   }, [caseId]);
 
   const originals = useMemo(
@@ -314,6 +322,7 @@ export function DocumentAIFlow({
           <h2 className="font-serif text-base font-semibold text-[var(--adm-text-primary)] mb-3">
             Eredeti dokumentumok
           </h2>
+          {!readOnly ? <AnonymizationCapabilityNotice status={anonymization.status} onRetry={anonymization.retry} /> : null}
           {loading && documents === null ? (
             <p className="text-xs text-[var(--adm-text-secondary)]">Betöltés…</p>
           ) : originals.length === 0 ? (
@@ -341,7 +350,7 @@ export function DocumentAIFlow({
                       <Button
                         size="sm"
                         variant="primary"
-                        disabled={infected}
+                        disabled={infected || anonymousReadDisabled || anonymization.status !== "AVAILABLE"}
                         onClick={() => setAnonymizeTarget(toAnonymizeContract(doc))}
                       >
                         Anonimizálás
@@ -364,7 +373,9 @@ export function DocumentAIFlow({
           <h2 className="font-serif text-base font-semibold text-[var(--adm-text-primary)] mb-3">
             Anonimizált munkapéldányok
           </h2>
-          {anonymousList.length === 0 && !anonymousError ? (
+          {anonymousReadDisabled && anonymousList.length === 0 ? (
+            <p className="text-xs text-[var(--adm-text-secondary)]">Az anonimizált munkapéldányok listája a kikapcsolt funkció mellett nem olvasható.</p>
+          ) : anonymousList.length === 0 && !anonymousError ? (
             <EmptyState
               title="Még nincs munkapéldány"
               description="Az anonimizálás után itt jelennek meg a szanitizált TXT munkapéldányok."
@@ -481,7 +492,7 @@ export function DocumentAIFlow({
         </div>
       </div>
 
-      {anonymizeTarget && (
+      {anonymizeTarget && !anonymousReadDisabled && anonymization.status === "AVAILABLE" && (
         <AnonymizeModal
           isOpen={!!anonymizeTarget}
           onClose={() => {

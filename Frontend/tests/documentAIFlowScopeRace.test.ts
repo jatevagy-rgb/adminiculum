@@ -50,8 +50,8 @@ test('document AI flow ignores a delayed prior-case response after the visible c
   const requests: string[] = [];
   (globalThis as any).fetch = (input: string) => {
     requests.push(String(input));
-    if (String(input).includes('case-A')) return slowA;
-    if (String(input).includes('/anonymous-documents')) return Promise.resolve(bAnon);
+    if (String(input).includes('case-A')) return slowA.then((response) => response.clone());
+    if (String(input).includes('/anonymous-documents')) return Promise.resolve(bAnon.clone());
     return Promise.resolve(bDocs);
   };
 
@@ -112,7 +112,7 @@ test('final download preserves the server file extension; sanitized export stays
     const url = String(input);
     if (url.includes('/documents/final-1/download')) return Promise.resolve(download);
     if (url.includes('/by-source/')) return Promise.resolve(bySource);
-    if (url.includes('/anonymous-documents')) return Promise.resolve(anonList);
+    if (url.includes('/anonymous-documents')) return Promise.resolve(anonList.clone());
     return Promise.resolve(documents);
   };
 
@@ -172,7 +172,7 @@ test('partial rehydration is visibly partial and saving succeeds through the can
       return Promise.resolve(new Response(JSON.stringify({ success: true, documentId: 'new-final', fileName: 'szerzodes.docx_anon_ai_analysis.txt' }), { status: 200, headers: { 'content-type': 'application/json' } }));
     }
     if (url.includes('/by-source/')) return Promise.resolve(new Response(JSON.stringify([{ id: 'anon-1', redactedText: 'x' }]), { status: 200, headers: { 'content-type': 'application/json' } }));
-    if (url.includes('/anonymous-documents')) return Promise.resolve(anonList);
+    if (url.includes('/anonymous-documents')) return Promise.resolve(anonList.clone());
     return Promise.resolve(documents);
   };
 

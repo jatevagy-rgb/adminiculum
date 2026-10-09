@@ -350,3 +350,69 @@ test("no raw linkedTaskId is rendered as text in Document Workspace surfaces", (
     assert.doesNotMatch(src, /\{point\.linkedTaskId\}\s*</, "raw review-point task id must not be rendered");
   }
 });
+
+// --- P2: anonymization action must never qualify on a stale foreign version --
+
+// Extracts a top-level `const NAME = <expression>;` from page.tsx so the real
+// shipped gate is evaluated against controlled state (not re-implemented).
+function extractConstExpression(source: string, name: string): string {
+  const at = source.indexOf(`const ${name} =`);
+  assert.ok(at >= 0, `const ${name} not found in page.tsx`);
+  const eq = source.indexOf("=", at);
+  const semi = source.indexOf(";", eq);
+  assert.ok(semi > eq, `terminating ';' for ${name} not found`);
+  return source.slice(eq + 1, semi).trim();
+}
+
+test("ANONYMIZE_GATE: stale A-current version cannot qualify the anonymization action for active B", () => {
+  const src = page();
+  const belongsExpr = extractConstExpression(src, "selectedVersionBelongsToActiveDocument");
+  const launchExpr = extractConstExpression(src, "canLaunchAnonymization");
+  const belongs = new Function(
+    "isLoadingVersions", "selectedUploadedDocument", "selectedVersion", "versions",
+    `return (${belongsExpr});`,
+  ) as (loading: boolean, doc: unknown, version: unknown, versions: unknown[]) => boolean;
+  const launch = new Function(
+    "selectedVersionBelongsToActiveDocument", "selectedVersion",
+    `return (${launchExpr});`,
+  ) as (belongs: boolean, version: unknown) => boolean;
+
+  // A selected, A versions loaded: A current qualifies when loading is complete.
+  const aCurrent = { id: "a1", documentId: "A", isCurrent: true };
+  const aBelongs = belongs(false, { id: "A" }, aCurrent, [aCurrent]);
+  assert.equal(aBelongs, true, "A current belongs to active A");
+  assert.equal(launch(aBelongs, aCurrent), true, "A current may launch");
+
+  // A -> B switch while B versions are unresolved: stale A-current must NOT qualify.
+  const staleWhileLoading = belongs(true, { id: "B" }, aCurrent, [aCurrent]);
+  assert.equal(staleWhileLoading, false, "stale A current must not belong to loading B");
+  assert.equal(launch(staleWhileLoading, aCurrent), false, "stale A current must not authorize active B");
+
+  // Even once loading settles, a list that still holds A's versions cannot qualify.
+  const staleAfterLoading = belongs(false, { id: "B" }, aCurrent, [aCurrent]);
+  assert.equal(staleAfterLoading, false, "stale A current must not belong to settled B");
+  assert.equal(launch(staleAfterLoading, aCurrent), false, "settled stale A current must not authorize active B");
+
+  // B versions resolve, B current selected: qualifies again.
+  const bCurrent = { id: "b1", documentId: "B", isCurrent: true };
+  const bHistorical = { id: "b2", documentId: "B", isCurrent: false };
+  const bBelongs = belongs(false, { id: "B" }, bCurrent, [bCurrent, bHistorical]);
+  assert.equal(bBelongs, true, "B current belongs to active B");
+  assert.equal(launch(bBelongs, bCurrent), true, "B current qualifies after B versions resolve");
+
+  // B historical selected: remains blocked by the existing historical-version rule.
+  const bHistoricalBelongs = belongs(false, { id: "B" }, bHistorical, [bCurrent, bHistorical]);
+  assert.equal(bHistoricalBelongs, true, "B historical still belongs to active B");
+  assert.equal(launch(bHistoricalBelongs, bHistorical), false, "historical version must stay blocked");
+});
+
+test("page.tsx wires the anonymization gate onto the launcher and openUploadedAnonymize", () => {
+  const src = page();
+  // The gate is derived from the existing ownership primitive, never a second algorithm.
+  assert.match(src, /const canLaunchAnonymization =\s*\n\s*selectedVersionBelongsToActiveDocument && Boolean\(selectedVersion\?\.isCurrent\)/);
+  // The launcher button and the openUploadedAnonymize guard both use it.
+  assert.match(src, /if \(anonymization\.status !== "AVAILABLE" \|\| !canLaunchAnonymization\) return;/);
+  assert.match(src, /disabled=\{anonymization\.status !== "AVAILABLE" \|\| !canLaunchAnonymization\}/);
+  // The historical-version notice is only shown for a version that belongs to the active document.
+  assert.match(src, /canAnonymizeActiveDocument && selectedVersionBelongsToActiveDocument && selectedVersion && !selectedVersion\.isCurrent/);
+});
