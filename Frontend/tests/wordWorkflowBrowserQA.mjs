@@ -371,6 +371,18 @@ try {
   assert.equal(await page.locator('[data-testid="word-case-context"]').count(), 0, 'document view must not repeat the case context');
   await noOverflow();
   await page.screenshot({ path: path.join(SHOTS, `documents-${width}.png`), fullPage: true });
+  await page.getByTestId('document-reader-more').locator('summary').click();
+  await page.getByTestId('document-reader-advanced-versions').click();
+  await page.waitForURL(/mode=versions/);
+  await page.getByTestId('versions-ledger').getByRole('button', { name: 'Megnyitás', exact: true }).click();
+  await page.waitForFunction(() => !new URL(location.href).searchParams.has('versionId') && !new URL(location.href).searchParams.has('mode'));
+  await page.getByTestId('document-reader-more').locator('summary').click();
+  await page.getByTestId('document-reader-advanced-versions').click();
+  await page.waitForURL(/mode=versions/);
+  await page.getByTestId('versions-ledger').getByRole('button', { name: 'Megnyitás', exact: true }).click();
+  await page.waitForFunction(versionId => new URL(location.href).searchParams.get('versionId') === versionId && !new URL(location.href).searchParams.has('mode'), VERSION_ID);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(versionId => document.querySelector('[data-testid="submission-version-context"]')?.getAttribute('title') === versionId, VERSION_ID);
   await page.locator('[data-testid="document-submission-task"]').selectOption(TASK.id);
   await page.waitForFunction(() => !document.querySelector('[data-testid="document-top-submission"]')?.disabled);
   await page.getByRole('button', { name: 'Leadás', exact: true }).focus();
