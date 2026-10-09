@@ -1431,7 +1431,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   };
 
   const openUploadedAnonymize = (document: DocumentItem) => {
-    if (anonymization.status !== "AVAILABLE" || (selectedVersion && !selectedVersion.isCurrent)) return;
+    if (anonymization.status !== "AVAILABLE" || !canLaunchAnonymization) return;
     const uploadedDocumentAsContract: CaseContractListItem = {
       id: document.id,
       title: document.fileName || 'Feltöltött dokumentum',
@@ -1539,6 +1539,15 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     Boolean(selectedVersion?.id) &&
     selectedVersion?.documentId === selectedUploadedDocument?.id &&
     versions.some((v) => v.id === selectedVersion?.id);
+
+  // Anonymization launch gate. `selectedVersion` alone can still resolve to a
+  // stale previous-document version during an A -> B switch, before B's version
+  // list is authoritative. The action must only be offered for the active
+  // uploaded document's current version, so eligibility additionally requires
+  // the selected version to belong to the active document and loading to be
+  // complete (selectedVersionBelongsToActiveDocument already enforces both).
+  const canLaunchAnonymization =
+    selectedVersionBelongsToActiveDocument && Boolean(selectedVersion?.isCurrent);
 
   const annotationVersionEligible = selectedVersionBelongsToActiveDocument;
 
@@ -3701,12 +3710,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               </AdminButton>
                             ) : null}
                             {canAnonymizeActiveDocument && selectedUploadedDocument ? (
-                              <AdminButton className="w-full justify-start" variant="neutral" disabled={anonymization.status !== "AVAILABLE" || !selectedVersion?.isCurrent} onClick={() => openUploadedAnonymize(selectedUploadedDocument)}>
+                              <AdminButton className="w-full justify-start" variant="neutral" disabled={anonymization.status !== "AVAILABLE" || !canLaunchAnonymization} onClick={() => openUploadedAnonymize(selectedUploadedDocument)}>
                                 Anonimizálás
                               </AdminButton>
                             ) : null}
                             {canAnonymizeActiveDocument ? <AnonymizationCapabilityNotice status={anonymization.status} onRetry={anonymization.retry} /> : null}
-                            {canAnonymizeActiveDocument && selectedVersion && !selectedVersion.isCurrent ? (
+                            {canAnonymizeActiveDocument && selectedVersionBelongsToActiveDocument && selectedVersion && !selectedVersion.isCurrent ? (
                               <p className="text-xs text-[var(--adm-text-secondary)]">A kiválasztott történeti v{selectedVersion.versionNumber} verzió anonimizálása nem támogatott; az aktuális verzióra váltás nélkül nem indítható.</p>
                             ) : null}
                             {canDeleteSelectedDocument && selectedUploadedDocument ? (

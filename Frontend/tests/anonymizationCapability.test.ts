@@ -122,5 +122,6 @@ test('all production launchers use the same capability and never open on failed 
   assert.match(sources[1], /preparation-anonymized-disabled/);
   assert.match(sources[2], /anonymousReadDisabled && anonymousList\.length === 0/);
   assert.match(sources[2], /setAnonymousError\("Az anonimizált munkapéldányok listája nem érhető el\."\)/);
-  assert.match(sources[4], /!selectedVersion\?\.isCurrent/);
+  assert.match(sources[4], /canLaunchAnonymization/);
+  assert.match(sources[4], /selectedVersionBelongsToActiveDocument && Boolean\(selectedVersion\?\.isCurrent\)/);
 });
