@@ -28,11 +28,31 @@ test('six primary answers remain honest in an empty workforce diagnostic', () =>
   assert.match(rows[5].answer, /Nincs új, emberi felülvizsgálatra váró/);
 });
 
+test('only real verified fact statuses count; phantom VERIFIED, CLIENT_PROVIDED and UNVERIFIED never do', () => {
+  const data: DiagnosticWorkbenchDto = { ...empty, known: { ...empty.known, facts: [
+    { id: 'phantom', provenanceClass: 'CANONICAL_STATE', type: 'COUNT', value: '10', factDefinition: null,
+      scopeType: null, factSubjectId: null, verificationStatus: 'VERIFIED', determinationMethod: null,
+      observedAt: null, effectiveAt: null, validFrom: '2026-01-01', validTo: null, supersededAt: null },
+    { id: 'client', provenanceClass: 'CANONICAL_STATE', type: 'COUNT', value: '10', factDefinition: null,
+      scopeType: null, factSubjectId: null, verificationStatus: 'CLIENT_PROVIDED', determinationMethod: null,
+      observedAt: null, effectiveAt: null, validFrom: '2026-01-01', validTo: null, supersededAt: null },
+    { id: 'unverified', provenanceClass: 'CANONICAL_STATE', type: 'COUNT', value: '10', factDefinition: null,
+      scopeType: null, factSubjectId: null, verificationStatus: 'UNVERIFIED', determinationMethod: null,
+      observedAt: null, effectiveAt: null, validFrom: '2026-01-01', validTo: null, supersededAt: null },
+    { id: 'law-firm-unknown', provenanceClass: 'CANONICAL_STATE', type: 'COUNT', value: 'UNKNOWN', factDefinition: null,
+      scopeType: null, factSubjectId: null, verificationStatus: 'LAW_FIRM_VERIFIED', determinationMethod: null,
+      observedAt: null, effectiveAt: null, validFrom: '2026-01-01', validTo: null, supersededAt: null },
+  ] } };
+  const rows = growDiagnosticSummary(data);
+  const emptyRows = growDiagnosticSummary(empty);
+  assert.equal(rows[0].answer, emptyRows[0].answer);
+});
+
 test('declared, estimated and measured data stay distinct; only real pending review needs a decision', () => {
   const data: DiagnosticWorkbenchDto = {
     ...empty,
     known: { ...empty.known, facts: [{ id: 'fact', provenanceClass: 'CANONICAL_STATE', type: 'COUNT', value: '10', factDefinition: null,
-      scopeType: null, factSubjectId: null, verificationStatus: 'VERIFIED', determinationMethod: null,
+      scopeType: null, factSubjectId: null, verificationStatus: 'DOCUMENT_VERIFIED', determinationMethod: null,
       observedAt: null, effectiveAt: null, validFrom: '2026-01-01', validTo: null, supersededAt: null }] },
     observed: { observations: [{ id: 'declared', provenanceClass: 'DECLARED_OBSERVATION', observationType: 'SURVEY',
       observedAt: '2026-01-01', createdAt: '2026-01-01', sourceRecordId: 'internal-id', inputDigest: 'internal-hash',

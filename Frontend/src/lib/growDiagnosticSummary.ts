@@ -1,7 +1,12 @@
 import type { DiagnosticWorkbenchDto } from "@/lib/diagnosticWorkbenchApi";
 
+/* Real ClientFactVerificationStatus members that mean an independently verified fact.
+ * "VERIFIED" is NOT a member of the enum (UNVERIFIED | CLIENT_PROVIDED | DOCUMENT_VERIFIED | LAW_FIRM_VERIFIED),
+ * so filtering on it never matched production data. */
+export const VERIFIED_FACT_STATUSES = new Set(["DOCUMENT_VERIFIED", "LAW_FIRM_VERIFIED"]);
+
 export function growDiagnosticSummary(data: DiagnosticWorkbenchDto) {
-  const verifiedFacts = data.known.facts.filter((fact) => fact.verificationStatus === "VERIFIED" && fact.value && fact.value !== "UNKNOWN");
+  const verifiedFacts = data.known.facts.filter((fact) => VERIFIED_FACT_STATUSES.has(fact.verificationStatus) && fact.value && fact.value !== "UNKNOWN");
   const snapshots = data.observed.processSnapshots;
   const measured = snapshots.filter((snapshot) => snapshot.metrics.length > 0 && snapshot.metrics.every((metric) =>
     metric.value !== null &&
