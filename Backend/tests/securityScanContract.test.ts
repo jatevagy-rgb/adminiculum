@@ -42,6 +42,14 @@ jest.mock('../src/modules/compliance-doc-intelligence/analysisJobService', () =>
   resumeAnalysisJobsBlockedByScan: (...args: unknown[]) => mockResume(...args),
 }));
 
+// The cross-process claim is exercised for real only in the PostgreSQL
+// integration suite. Unit tests mock it so the scan runs when the claim is
+// acquired, and can force an "already held" result to prove no competing scan.
+const mockWithScanClaim = jest.fn();
+jest.mock('../src/modules/documents/scanClaim', () => ({
+  withScanClaim: (...args: unknown[]) => mockWithScanClaim(...args),
+}));
+
 function scannerReturning(outcome: 'CLEAN' | 'INFECTED' | 'SCAN_FAILED'): MalwareScanner {
   return {
     provider: 'FAKE',
@@ -72,6 +80,8 @@ describe('scanDocumentVersionInBackground — conditional terminal transition', 
     jest.clearAllMocks();
     mockPrismaUpdateMany.mockResolvedValue({ count: 1 });
     mockResume.mockResolvedValue(0);
+    // Default: the cross-process claim is acquired and the wrapped scan runs.
+    mockWithScanClaim.mockImplementation(async (_id: string, fn: () => unknown) => ({ acquired: true, result: await fn() }));
   });
 
   afterEach(() => {
@@ -121,26 +131,22 @@ describe('scanDocumentVersionInBackground — conditional terminal transition', 
     expect(mockResume).not.toHaveBeenCalled();
   });
 
-  it('single-flight: a concurrent retry reuses the in-flight scan (scanner invoked once)', async () => {
+  it('single-flight: when the cross-process claim is already held, no competing scan runs', async () => {
     let scanCalls = 0;
-    let release: () => void;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
     setScanner({
       provider: 'FAKE',
       scan: async () => {
         scanCalls += 1;
-        await gate;
         return { outcome: 'CLEAN', provider: 'FAKE', codeSafe: 'FAKE_CLEAN' };
       },
     });
+    mockWithScanClaim.mockResolvedValue({ acquired: false });
 
-    const first = scanDocumentVersionInBackground('v1', Buffer.from('clean'));
-    const second = scanDocumentVersionInBackground('v1', Buffer.from('clean'));
-    // Both should resolve to the SAME in-flight promise.
-    expect(second).toBe(first);
-    release!();
-    await Promise.all([first, second]);
-    expect(scanCalls).toBe(1);
+    await scanDocumentVersionInBackground('v1', Buffer.from('clean'));
+
+    expect(scanCalls).toBe(0);
+    expect(mockPrismaUpdateMany).not.toHaveBeenCalled();
+    expect(mockResume).not.toHaveBeenCalled();
   });
 });
 
@@ -159,6 +165,7 @@ describe('retryDocumentVersionScan — P1 recovery path', () => {
     mockPrismaFindUnique.mockResolvedValue({ ...stored });
     mockDownload.mockResolvedValue(Buffer.from('SecretClient ScanGate file text'));
     mockResume.mockResolvedValue(0);
+    mockWithScanClaim.mockImplementation(async (_id: string, fn: () => unknown) => ({ acquired: true, result: await fn() }));
   });
 
   afterEach(() => {

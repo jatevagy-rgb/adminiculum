@@ -2,6 +2,7 @@ import { prisma } from '../../prisma/prisma.service';
 import { getScanner } from '../upload-security/scannerAdapter';
 import { validateWorkforceUpload } from '../upload-security/uploadValidationCore';
 import { resumeAnalysisJobsBlockedByScan } from '../compliance-doc-intelligence/analysisJobService';
+import { withScanClaim } from './scanClaim';
 
 export type DocumentSecurityScanStatus = 'PENDING_SCAN' | 'CLEAN' | 'SCAN_FAILED' | 'INFECTED';
 
@@ -19,62 +20,61 @@ export function securityScanBlock(status: DocumentSecurityScanStatus | string | 
   };
 }
 
-// In-process single-flight: only one scan may run per version concurrently
-// within a process. This coalesces a retry that races an in-flight original scan
-// so a "temporary CLEAN then later INFECTED" window cannot occur inside one
-// instance. Cross-instance correctness is guaranteed by the monotonic DB verdict
-// below (INFECTED may overwrite CLEAN).
-const inFlightScans = new Map<string, Promise<void>>();
-
 export function scanDocumentVersionInBackground(versionId: string, buffer: Buffer, fileName = 'document', mimeType: string | null = null): Promise<void> {
-  const existing = inFlightScans.get(versionId);
-  if (existing) return existing;
-  const run = runScan(versionId, buffer, fileName, mimeType).finally(() => {
-    inFlightScans.delete(versionId);
-  });
-  inFlightScans.set(versionId, run);
-  return run;
+  return runScan(versionId, buffer, fileName, mimeType);
 }
 
 async function runScan(versionId: string, buffer: Buffer, fileName: string, mimeType: string | null): Promise<void> {
-  let status: DocumentSecurityScanStatus = 'SCAN_FAILED';
-  try {
-    const result = await getScanner().scan({
-      buffer,
-      detectedMimeType: mimeType,
-      sizeBytes: buffer.length,
-      fileName,
-    });
-    status = result.outcome === 'CLEAN' ? 'CLEAN' : result.outcome === 'INFECTED' ? 'INFECTED' : 'SCAN_FAILED';
-  } catch {
-    status = 'SCAN_FAILED';
-  }
-  // Monotonic verdict: INFECTED > CLEAN > SCAN_FAILED > PENDING_SCAN. A scan may
-  // only move the stored status FORWARD, never backward. INFECTED is the
-  // strongest and may overwrite PENDING, SCAN_FAILED, or even a CLEAN that a
-  // concurrent scan committed first — so INFECTED can never lose to CLEAN.
-  // CLEAN and SCAN_FAILED may only be established FROM PENDING_SCAN (a late
-  // CLEAN can never downgrade INFECTED/SCAN_FAILED, and a late SCAN_FAILED can
-  // never downgrade CLEAN).
-  const transitioned = await prisma.documentVersion.updateMany({
-    where: {
-      id: versionId,
-      securityScanStatus: status === 'INFECTED'
-        ? { in: ['PENDING_SCAN', 'CLEAN', 'SCAN_FAILED'] }
-        : 'PENDING_SCAN',
-    },
-    data: { securityScanStatus: status },
-  });
-  // BE_COMP_006: a CLEAN verdict unblocks durable INTERNAL_ANALYSIS jobs that
-  // failed on the mandatory scan gate. Only resume when this run actually
-  // established CLEAN (transitioned from PENDING), never on a no-op.
-  if (status === 'CLEAN' && transitioned.count > 0) {
+  // Cross-process claim: only one effective scan may run per version at a time
+  // across all backend processes. A concurrent worker (another process, or a
+  // same-process retry) that cannot acquire the claim MUST NOT run a competing
+  // scanner call or mutate durable state — this removes the "temporary CLEAN
+  // then later INFECTED" exposure window.
+  const claimed = await withScanClaim(versionId, async () => {
+    let status: DocumentSecurityScanStatus = 'SCAN_FAILED';
     try {
-      const resumed = await resumeAnalysisJobsBlockedByScan(versionId);
-      if (resumed > 0) console.log(`[Scan] resumed ${resumed} internal analysis job(s) for version ${versionId}`);
-    } catch (error) {
-      console.error(`[Scan] internal analysis resume failed for version ${versionId}:`, error);
+      const result = await getScanner().scan({
+        buffer,
+        detectedMimeType: mimeType,
+        sizeBytes: buffer.length,
+        fileName,
+      });
+      status = result.outcome === 'CLEAN' ? 'CLEAN' : result.outcome === 'INFECTED' ? 'INFECTED' : 'SCAN_FAILED';
+    } catch {
+      status = 'SCAN_FAILED';
     }
+    // Monotonic verdict: INFECTED > CLEAN > SCAN_FAILED > PENDING_SCAN. A scan
+    // may only move the stored status FORWARD, never backward. INFECTED is the
+    // strongest and may overwrite PENDING, SCAN_FAILED, or even a CLEAN that a
+    // concurrent scan committed first — so INFECTED can never lose to CLEAN.
+    // CLEAN and SCAN_FAILED may only be established FROM PENDING_SCAN.
+    const transitioned = await prisma.documentVersion.updateMany({
+      where: {
+        id: versionId,
+        securityScanStatus: status === 'INFECTED'
+          ? { in: ['PENDING_SCAN', 'CLEAN', 'SCAN_FAILED'] }
+          : 'PENDING_SCAN',
+      },
+      data: { securityScanStatus: status },
+    });
+    // BE_COMP_006: a CLEAN verdict unblocks durable INTERNAL_ANALYSIS jobs that
+    // failed on the mandatory scan gate. Only resume when this run actually
+    // established CLEAN (transitioned from PENDING), never on a no-op.
+    if (status === 'CLEAN' && transitioned.count > 0) {
+      try {
+        const resumed = await resumeAnalysisJobsBlockedByScan(versionId);
+        if (resumed > 0) console.log(`[Scan] resumed ${resumed} internal analysis job(s) for version ${versionId}`);
+      } catch (error) {
+        console.error(`[Scan] internal analysis resume failed for version ${versionId}:`, error);
+      }
+    }
+  });
+
+  if (!claimed.acquired) {
+    // Another process already owns this exact version's scan. Never run a
+    // competing scanner call, never reset status, never launch competing work.
+    // The durable row stays PENDING_SCAN (blocked) or its prior terminal state.
+    console.warn('[upload-security/scan] scan skipped (claim already held)', { code: 'SCAN_ALREADY_IN_PROGRESS' });
   }
 }
 
