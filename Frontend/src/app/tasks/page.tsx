@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { CompactState } from "@/components/adminiculum/OperationalPrimitives";
 import { AdminButton } from "@/components/adminiculum/ui";
 import { Badge, Button, DataTable, DataTableBody, DataTableCell, DataTableHead, DataTableHeaderCell, DataTableRow, EmptyState, PageHeader, QuietLink, StatusChip } from "@/components/ui";
 import { TaskSubmissionWorkspace } from "@/components/tasks/TaskSubmissionWorkspace";
+import { TaskReviewWorkspace } from "@/components/tasks/TaskReviewWorkspace";
 import { WorkflowDialog } from "@/components/tasks/WorkflowDialog";
 import {
   createTask,
@@ -212,9 +213,21 @@ function TaskAttentionEditor({ task, onSaved }: { task: TaskLifecycleListItem; o
 export default function TasksPage() {
   return (
     <AuthenticatedApp section="tasks">
-      <TasksPageContent />
+      <TasksPageRoute />
     </AuthenticatedApp>
   );
+}
+
+function TasksPageRoute() {
+  const params = useSearchParams();
+  const router = useRouter();
+  const taskId = params?.get("taskId");
+  const submissionId = params?.get("submissionId");
+  if (params?.get("view") !== "review") return <TasksPageContent />;
+  return <main className="mx-auto w-full max-w-7xl space-y-4 px-4 py-5 sm:px-6">
+    <PageHeader title="Ügyvédi döntés" subtitle="A kiválasztott leadás pontos, változatlan azonossága." actions={<QuietLink href="/reviews">Vissza a döntési sorhoz</QuietLink>} />
+    {taskId && submissionId ? <TaskReviewWorkspace key={`${taskId}:${submissionId}`} item={{ taskId, submissionId }} onClose={() => router.push("/reviews")} onQueueChanged={() => undefined} /> : <CompactState tone="error" title="A pontos leadás azonosítója hiányzik." detail="Nyissa meg a leadást a döntési sorból. A rendszer nem választ helyette másik vagy újabb leadást." action={<QuietLink href="/reviews">Döntési sor</QuietLink>} />}
+  </main>;
 }
 
 function TasksPageContent() {
