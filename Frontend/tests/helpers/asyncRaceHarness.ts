@@ -200,6 +200,7 @@ export function createRaceHarness(
     console,
     URLSearchParams,
     crypto: globalThis.crypto,
+    structuredClone: globalThis.structuredClone,
     process: { env: { NODE_ENV: 'test' } },
     window: fakeWindow,
     document: fakeDocument,

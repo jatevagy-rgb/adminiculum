@@ -102,11 +102,13 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
   // Explicit risk-matrix target: the user selects a concrete document of THIS
   // case before the matrix panel accepts a save. No first-document fallback.
   const [riskDocId, setRiskDocId] = useState<string | null>(null);
-  // Case-thread linking: reuses the existing intake communication picker in
-  // single-select mode. The link is staged and only committed on confirm.
+  // Case-thread linking reuses the intake picker; selected unassigned threads
+  // are committed only after confirmation.
   const [commPickerOpen, setCommPickerOpen] = useState(false);
   const [commLinkBusy, setCommLinkBusy] = useState(false);
   const [commLinkError, setCommLinkError] = useState<string | null>(null);
+  const activeLinkCaseId = useRef<string | null>(caseId);
+  activeLinkCaseId.current = caseId;
   const loadGeneration = useRef(0);
   const secondaryDetailsRef = useRef<HTMLDetailsElement | null>(null);
 
@@ -146,28 +148,48 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
   }, [load]);
 
   const confirmLinkThread = useCallback(async (ids: string[]) => {
-    if (ids.length !== 1) return;
-    const communicationId = ids[0];
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length === 0) return;
     setCommLinkBusy(true);
     setCommLinkError(null);
+    setActionError(null);
+    let linkedCount = 0;
     try {
-      const result = await linkCommunicationToCase(communicationId, caseId);
-      if (result.success) {
-        setCommPickerOpen(false);
-        await refresh();
-      } else {
-        setCommLinkError("A beszélgetés hozzárendelése nem sikerült. Próbáld újra.");
+      for (const communicationId of uniqueIds) {
+        try {
+          const result = await linkCommunicationToCase(communicationId, caseId);
+          if (activeLinkCaseId.current !== caseId) return;
+          if (!result.success) throw new Error("LINK_FAILED");
+          linkedCount += 1;
+        } catch (error) {
+          if (activeLinkCaseId.current !== caseId) return;
+          const status = error instanceof ApiError ? error.status : undefined;
+          const code = error instanceof ApiError ? error.code : undefined;
+          const knownFailure = [403, 404, 409].includes(status ?? 0) || (error instanceof Error && error.message === "LINK_FAILED");
+          const message = knownFailure
+            ? linkThreadErrorMessage({ status, code })
+            : "A kapcsolás eredménye nem ismert. Frissítés után ellenőrizze a beszélgetés ügykapcsolatát.";
+          if (linkedCount === 0 && knownFailure) setCommLinkError(message);
+          else {
+            setCommPickerOpen(false);
+            setActionError(`${linkedCount} / ${uniqueIds.length} kapcsolás visszaigazolt. A hátralévő tételeket nem próbáltuk. ${message}`);
+            await refresh();
+          }
+          return;
+        }
       }
-    } catch (e) {
-      const status = e instanceof ApiError ? e.status : undefined;
-      const code = e instanceof ApiError ? e.code : undefined;
-      setCommLinkError(linkThreadErrorMessage({ status, code }));
+      if (activeLinkCaseId.current === caseId) { setCommPickerOpen(false); await refresh(); }
     } finally {
-      setCommLinkBusy(false);
+      if (activeLinkCaseId.current === caseId) setCommLinkBusy(false);
     }
   }, [caseId, refresh]);
 
   useEffect(() => { void load(); return () => { ++loadGeneration.current; }; }, [load]);
+  useEffect(() => {
+    activeLinkCaseId.current = caseId;
+    setCommPickerOpen(false); setCommLinkError(null); setCommLinkBusy(false);
+    return () => { activeLinkCaseId.current = null; };
+  }, [caseId]);
 
   // The risk-matrix selection is always case-scoped: switching cases clears it,
   // and a refreshed workspace that no longer contains the selected document
@@ -360,7 +382,6 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
         </div>
       </section>
 
-      <CaseContextTiles caseRecord={c} />
       {nextTask ? <section aria-label="Következő feladat" className="rounded-xl border-l-4 border-[var(--adm-green-800)] bg-white p-4">
         <p className="text-xs font-semibold text-[var(--adm-text-muted)]">{reviewIds.has(nextTask.id) ? 'Ellenőrzésre vár' : 'Most ezen dolgozunk'}</p>
         <Link href={`/tasks?taskId=${encodeURIComponent(nextTask.id)}`} className="mt-1 text-lg font-semibold text-[var(--adm-green-800)]">{nextTask.title}</Link>
@@ -444,6 +465,16 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
 
       </div>
 
+      <section id="ck-notes" aria-label="Ügy megjegyzései" className="scroll-mt-24">
+        <CaseWorkspaceNotesSection
+          caseId={caseId}
+          refreshKey={notesRefreshKey}
+          onCreateNote={() => setModal({ type: "case-comment" })}
+        />
+      </section>
+
+      <CaseContextTiles caseRecord={c} />
+
       {/* ---- 5. Wide communication reader (WORD_WF04) ----------------------- */}
       <section id="ck-comms" aria-label="Kommunikációs lánc" className="scroll-mt-24 space-y-3">
         <span id="ck-wide-comms" />
@@ -465,6 +496,10 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
           />
         </div>
 
+      <details ref={secondaryDetailsRef} id="case-secondary-details" data-testid="case-secondary-details" className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+        <summary className="cursor-pointer font-sans text-lg font-semibold text-[var(--adm-text)]">Ügy részletei és további eszközök</summary>
+        <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Induló helyzet, munkacsomag, dokumentum- és AI-előkészítés, kockázati mátrix, munkaidő.</p>
+        <div className="mt-4 space-y-4">
       {/* ---- 6. Explicit-document risk matrix (WORD_WF04) -------------------- */}
       <details id="ck-risk-matrix" aria-label="Kockázati mátrix" data-testid="case-risk-matrix-section" className="scroll-mt-24 space-y-3 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
         <summary className="min-h-10 cursor-pointer text-sm font-semibold text-[var(--adm-green-800)]">Kockázati mátrix · dokumentumhoz kötött munkairat</summary>
@@ -527,10 +562,6 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
           </details>
 
       </section>
-      <details ref={secondaryDetailsRef} id="case-secondary-details" data-testid="case-secondary-details" className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
-        <summary className="cursor-pointer font-sans text-lg font-semibold text-[var(--adm-text)]">Ügy részletei és további eszközök</summary>
-        <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Induló helyzet, munkacsomag, speciális előkészítés és munkaidő.</p>
-        <div className="mt-4 space-y-4">
           <details className="rounded-lg border border-[var(--adm-border)] bg-white p-3"><summary className="min-h-10 cursor-pointer font-semibold">Speciális dokumentum-előkészítés</summary>
       <DocumentPreparationDashboard
         caseId={caseId}
@@ -542,7 +573,7 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
         clientRole={c.clientRole}
         onOpenDocument={(docId) => router.push(`/cases/${caseId}/documents?documentId=${encodeURIComponent(docId)}`)}
         onRefresh={() => void refresh()}
-        onOpenRiskMatrix={(documentId) => { setRiskDocId(documentId); const panel = document.getElementById("ck-risk-matrix"); panel?.setAttribute("open", ""); panel?.scrollIntoView({ block: "start" }); }}
+        onOpenRiskMatrix={(documentId) => { setRiskDocId(documentId); secondaryDetailsRef.current?.setAttribute("open", ""); const panel = document.getElementById("ck-risk-matrix"); panel?.setAttribute("open", ""); panel?.scrollIntoView({ block: "start" }); }}
       />
           </details>
           <div id="ck-starting-context" className="scroll-mt-24">
@@ -575,15 +606,10 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
       </details>
 
       <section aria-label="Ügytörténet" className="space-y-4">
-      {/* ---- 2b. Primary internal notes ------------------------------------ */}
-      <span id="ck-notes" />
-      <CaseWorkspaceNotesSection
-        caseId={caseId}
-        refreshKey={notesRefreshKey}
-        onCreateNote={() => setModal({ type: "case-comment" })}
-      />
-
-      <div id="ck-activity"><CaseHistoryPanel key={caseId} caseId={caseId} clientId={c.client?.id ?? null} readOnly /></div>
+        <details id="ck-activity" className="rounded-lg border border-[var(--adm-border)] bg-white p-3">
+          <summary className="min-h-10 cursor-pointer text-sm font-semibold text-[var(--adm-green-800)]">Ügytörténet</summary>
+          <CaseHistoryPanel key={caseId} caseId={caseId} clientId={c.client?.id ?? null} readOnly />
+        </details>
 
       </section>
 
@@ -629,9 +655,9 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
         <CaseCommunicationPickerDrawer
           open={commPickerOpen}
           clientId={c.client?.id ?? ""}
+          currentCaseId={caseId}
           selectedIds={[]}
           primaryId=""
-          singleSelect
           busy={commLinkBusy}
           error={commLinkError}
           onCancel={() => { if (!commLinkBusy) setCommPickerOpen(false); }}

@@ -1,6 +1,7 @@
 "use client";
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent, type KeyboardEvent } from 'react';
 import { ApiError, fetchApi } from '@/lib/api';
+import { ViewportDialog } from '@/components/ui/ViewportDialog';
 import type { CaseTileDescriptor } from './CaseContextTiles';
 type Tile = {
     id: string;
@@ -39,8 +40,14 @@ export function DurableCaseTiles({ caseId, surface, builtin }: {
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
     const [notice, setNotice] = useState('');
+    const [addOpen, setAddOpen] = useState(false);
+    const [editId, setEditId] = useState<string | null>(null);
+    const [menuId, setMenuId] = useState<string | null>(null);
+    const [dragId, setDragId] = useState<string | null>(null);
+    const [overId, setOverId] = useState<string | null>(null);
+    const [moveAnnounce, setMoveAnnounce] = useState('');
     const epoch = useRef(0);
-    const drag = useRef<string | null>(null);
+    const dragSession = useRef<{ pointerId: number } | null>(null);
     const url = `/case-workspace/cases/${encodeURIComponent(caseId)}/tiles`;
     useEffect(() => {
         const load = () => {
@@ -50,6 +57,13 @@ export function DurableCaseTiles({ caseId, surface, builtin }: {
             setDraft(null);
             setBusy(false);
             setError('');
+            setNotice('');
+            setAddOpen(false);
+            setEditId(null);
+            setMenuId(null);
+            setDragId(null);
+            setOverId(null);
+            setMoveAnnounce('');
             void fetchApi<Snapshot>(url).then(value => {
                 if (epoch.current === generation) {
                     setSaved(value);
@@ -80,7 +94,7 @@ export function DurableCaseTiles({ caseId, surface, builtin }: {
                 return d;
             const order = [...d.placements[surface]];
             const from = order.indexOf(id);
-            if (from < 0 || to < 0 || to >= order.length)
+            if (from < 0 || to < 0 || to >= order.length || from === to)
                 return d;
             order.splice(from, 1);
             order.splice(to, 0, id);
@@ -89,6 +103,54 @@ export function DurableCaseTiles({ caseId, surface, builtin }: {
     }
     function place(id: string, target: Surface, include: boolean) {
         setDraft(d => d && ({ ...d, placements: { ...d.placements, [target]: include ? [...d.placements[target].filter(r => r !== id), id].slice(0, 32) : d.placements[target].filter(r => r !== id) } }));
+    }
+    function startDrag(event: PointerEvent<HTMLButtonElement>, id: string) {
+        if (!draft || busy)
+            return;
+        dragSession.current = { pointerId: event.pointerId };
+        (event.currentTarget as HTMLButtonElement).setPointerCapture?.(event.pointerId);
+        setDragId(id);
+        setOverId(id);
+    }
+    function moveDrag(event: PointerEvent<HTMLButtonElement>, id: string) {
+        const session = dragSession.current;
+        if (!session || session.pointerId !== event.pointerId || !draft || !dragId)
+            return;
+        const hit = document.elementFromPoint(event.clientX, event.clientY);
+        const tileElement = hit?.closest?.('[data-tile-id]') as HTMLElement | null;
+        const targetId = tileElement?.getAttribute('data-tile-id');
+        if (targetId && targetId !== id) {
+            const to = draft.placements[surface].indexOf(targetId);
+            if (to >= 0) {
+                setOverId(targetId);
+                move(id, to);
+            }
+        }
+    }
+    function endDrag(event: PointerEvent<HTMLButtonElement>) {
+        const session = dragSession.current;
+        if (!session || session.pointerId !== event.pointerId)
+            return;
+        dragSession.current = null;
+        setDragId(null);
+        setOverId(null);
+    }
+    function keyboardMove(event: KeyboardEvent<HTMLElement>, id: string, index: number, label: string) {
+        if (!draft || busy)
+            return;
+        let target = index;
+        if (event.key === 'ArrowUp' || event.key === 'ArrowLeft')
+            target = index - 1;
+        else if (event.key === 'ArrowDown' || event.key === 'ArrowRight')
+            target = index + 1;
+        else
+            return;
+        event.preventDefault();
+        const order = draft.placements[surface];
+        if (target < 0 || target >= order.length)
+            return;
+        move(id, target);
+        setMoveAnnounce(`${label} áthelyezve a(z) ${target + 1}. helyre.`);
     }
     async function save() {
         if (!draft || !saved)
@@ -104,47 +166,98 @@ export function DurableCaseTiles({ caseId, surface, builtin }: {
                 return;
             setSaved(next);
             setDraft(null);
-            setNotice('A csempék és a saját elrendezés mentve.');
+            setNotice('A csempék elrendezése mentve.');
+            setAddOpen(false);
+            setEditId(null);
+            setMenuId(null);
             window.dispatchEvent(new CustomEvent('case-tiles-saved', { detail: caseId }));
         }
-        catch {
-            if (generation === epoch.current)
-                setError('A mentés nem sikerült vagy másik szerkesztés történt. A piszkozat megmaradt. Másolja ki szükség esetén; a Mégse az aktuális mentett állapothoz tér vissza.');
+        catch (error) {
+            if (generation === epoch.current) {
+                if (error instanceof ApiError && error.status === 409)
+                    setError('Az elrendezés időközben megváltozott. A saját módosításaid megmaradtak.');
+                else
+                    setError('A mentés nem sikerült vagy másik szerkesztés történt. A piszkozat megmaradt. Másolja ki szükség esetén; a Mégse az aktuális mentett állapothoz tér vissza.');
+            }
         }
         finally {
             if (generation === epoch.current)
                 setBusy(false);
         }
     }
+    const hiddenBuiltins = draft ? builtin.filter(t => !draft.placements[surface].includes(t.kind)) : [];
+    const hiddenCustom = draft ? draft.tiles.filter(t => !t.archived && !draft.placements[surface].includes(t.id)) : [];
+    const archivedCustom = draft?.canManage ? draft.tiles.filter(t => t.archived) : [];
+    const editTarget = draft?.canManage && editId ? draft.tiles.find(t => t.id === editId) : null;
+    const toolbar = <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--adm-border)] bg-[var(--card-bg)] px-3 py-2">
+        <span className="text-sm font-semibold text-[var(--adm-text)]">Csempék szerkesztése</span>
+        <span className="text-xs text-[var(--adm-text-muted)]">Húzd a csempéket a kívánt helyre · a mentés csak a saját nézeted elrendezését írja</span>
+        <span className="flex-1" />
+        <button type="button" className={control} disabled={busy} onClick={() => void save()}>{busy ? 'Mentés…' : 'Mentés'}</button>
+        <button type="button" className={control} disabled={busy} onClick={() => { setDraft(null); setError(''); setNotice(''); setAddOpen(false); setEditId(null); setMenuId(null); }}>Mégse</button>
+        <div className="relative">
+            <button type="button" className={control} disabled={busy} aria-haspopup="menu" aria-expanded={menuId === 'toolbar'} onClick={() => setMenuId(menuId === 'toolbar' ? null : 'toolbar')}>…</button>
+            {menuId === 'toolbar' && <div role="menu" className="absolute right-0 top-full z-30 mt-1 w-64 rounded-lg border border-[var(--adm-border)] bg-white p-1 shadow-lg">
+                <button type="button" role="menuitem" className="block w-full rounded px-2 py-2 text-left text-sm hover:bg-[var(--adm-surface)]" disabled={busy} onClick={() => { setDraft(d => d && ({ ...d, placements: { overview: builtin.map(t => t.kind), document: builtin.map(t => t.kind) } })); setMenuId(null); }}>Saját elrendezés alaphelyzetbe</button>
+            </div>}
+        </div>
+    </div>;
     return <section aria-label="Ügykontextus" data-testid="word-case-context" className="space-y-3">
     {readState === 'loading' && <p role="status">Az ügy csempéinek betöltése…</p>}
-    <div className="flex flex-wrap items-center gap-2">
-      {readState === 'success' && !draft && saved && <button type="button" className={control} onClick={() => { setDraft(structuredClone(saved)); setError(''); setNotice(''); }}>Csempék szerkesztése</button>}
-      {readState === 'success' && draft && <><span className="text-sm">Nem mentett változat · közös tartalom, saját elrendezés</span><button type="button" className={control} disabled={busy} onClick={() => void save()}>{busy ? 'Mentés…' : 'Mentés'}</button><button type="button" className={control} disabled={busy} onClick={() => { setDraft(null); setError(''); }}>Mégse</button><button type="button" className={control} disabled={busy} onClick={() => setDraft(d => d && ({ ...d, placements: { overview: builtin.map(t => t.kind), document: builtin.map(t => t.kind) } }))}>Saját elrendezés alaphelyzetbe</button></>}
-    </div>
+    {readState === 'success' && !draft && saved && <button type="button" className={control} onClick={() => { setDraft(structuredClone(saved)); setError(''); setNotice(''); }}>Csempék szerkesztése</button>}
+    {readState === 'success' && draft && toolbar}
     {error && <p role="alert" className="text-sm text-[var(--adm-text)]">{error}</p>}{notice && <p role="status">{notice}</p>}
-    <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3">
+    <div aria-live="polite" className="sr-only">{moveAnnounce}</div>
+    <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
       {refs.map((id, index) => {
             const base = builtinById.get(id);
             const custom = view?.tiles.find(t => t.id === id);
             if (custom?.archived && !draft)
                 return null;
             const title = base?.title || custom?.title || 'Nem elérhető csempe';
-            return <article key={id} data-tile-id={base?.id || id} data-content-ref={base?.contentRef || id} className={`min-w-0 rounded-lg border-l-4 p-4 ${toneClass[base?.tone || custom?.tone || 'info']}`} onDragOver={draft ? e => e.preventDefault() : undefined} onDrop={draft ? e => {
-                    e.preventDefault();
-                    if (drag.current)
-                        move(drag.current, index);
-                    drag.current = null;
-                } : undefined}>
-          {draft && <div className="mb-2 flex flex-wrap gap-1"><button type="button" aria-label={`${title}: húzás`} className={control} draggable={!busy} onDragStart={() => { drag.current = id; }}>↕</button><button type="button" className={control} disabled={busy || index === 0} onClick={() => move(id, index - 1)} aria-label={`${title}: fel`}>Fel</button><button type="button" className={control} disabled={busy || index === refs.length - 1} onClick={() => move(id, index + 1)} aria-label={`${title}: le`}>Le</button></div>}
-          {draft?.canManage && custom ? <><label className="block text-sm">Közös csempe neve<input className={`${control} w-full`} maxLength={120} value={custom.title} disabled={busy} onChange={e => mutateTile(id, { title: e.target.value })}/></label><label className="block text-sm">Közös tartalom<textarea className={`${control} min-h-28 w-full`} maxLength={6000} value={custom.text} disabled={busy} onChange={e => mutateTile(id, { text: e.target.value })}/></label><label className="block text-sm">Szín<select className={control} value={custom.tone} disabled={busy} onChange={e => mutateTile(id, { tone: e.target.value as Tile['tone'] })}><option value="info">Kék</option><option value="teal">Türkiz</option><option value="green">Zöld</option></select></label><button type="button" className={control} disabled={busy} onClick={() => {
-                        if (custom.archived || window.confirm('A közös csempe archiválása minden felhasználó elrendezésében elrejti. Visszaállítható.'))
-                            mutateTile(id, { archived: !custom.archived });
-                    }}>{custom.archived ? 'Közös csempe visszaállítása' : 'Közös csempe archiválása'}</button></> : <><h3 className="text-sm font-semibold text-[var(--adm-green-800)]">{title}</h3><p className="mt-2 whitespace-pre-line break-words text-sm leading-6">{base?.body ?? custom?.text ?? 'A hivatkozás nem érhető el; nincs helyettesítő tartalom.'}</p></>}
-          {draft && <div className="mt-2">{(['overview', 'document'] as Surface[]).map(target => <label key={target} className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" disabled={busy} checked={draft.placements[target].includes(id)} onChange={e => place(id, target, e.target.checked)}/>{target === 'overview' ? 'Saját áttekintés' : 'Saját dokumentumfejléc'}</label>)}</div>}
+            const tone = base?.tone || custom?.tone || 'info';
+            return <article key={id} data-tile-id={id} data-content-ref={base?.contentRef || id} tabIndex={draft ? 0 : undefined}
+                onKeyDown={draft ? e => keyboardMove(e, id, index, title) : undefined}
+                className={`min-w-0 rounded-lg border-l-4 p-4 ${toneClass[tone]} ${draft ? 'outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--adm-green-800)]' : ''} ${dragId === id ? 'opacity-70 shadow-lg ring-2 ring-[var(--adm-green-800)]' : overId === id ? 'ring-2 ring-dashed ring-[var(--adm-green-800)]' : ''}`}>
+          {draft && <div className="mb-2 flex items-center gap-1">
+            <button type="button" aria-label={`${title}: áthelyezés húzással`} className={`${control} cursor-grab touch-none`} disabled={busy} onPointerDown={e => startDrag(e, id)} onPointerMove={e => moveDrag(e, id)} onPointerUp={endDrag} onPointerCancel={endDrag}>⋮⋮</button>
+            <div className="relative">
+              <button type="button" aria-label={`${title}: további műveletek`} aria-haspopup="menu" aria-expanded={menuId === id} className={control} disabled={busy} onClick={() => setMenuId(menuId === id ? null : id)}>…</button>
+              {menuId === id && <div role="menu" className="absolute left-0 top-full z-30 mt-1 w-60 rounded-lg border border-[var(--adm-border)] bg-white p-1 shadow-lg">
+                <button type="button" role="menuitem" className="block w-full rounded px-2 py-2 text-left text-sm hover:bg-[var(--adm-surface)]" disabled={busy} onClick={() => { place(id, surface, false); setMenuId(null); }}>Elrejtés erről a nézetről</button>
+                {custom && draft?.canManage ? <button type="button" role="menuitem" className="block w-full rounded px-2 py-2 text-left text-sm hover:bg-[var(--adm-surface)]" disabled={busy} onClick={() => { setEditId(id); setMenuId(null); }}>Csempe szerkesztése</button> : null}
+                {custom && draft?.canManage ? <button type="button" role="menuitem" className="block w-full rounded px-2 py-2 text-left text-sm hover:bg-[var(--adm-surface)]" disabled={busy} onClick={() => {
+                    if (custom.archived || window.confirm('A közös csempe archiválása minden felhasználó elrendezésében elrejti. Visszaállítható.'))
+                        mutateTile(id, { archived: !custom.archived });
+                    setMenuId(null);
+                }}>{custom.archived ? 'Közös csempe visszaállítása' : 'Közös csempe archiválása'}</button> : null}
+              </div>}
+            </div>
+          </div>}
+          <h3 className="text-sm font-semibold text-[var(--adm-green-800)]">{title}</h3>
+          <p className="mt-2 whitespace-pre-line break-words text-sm leading-6">{base?.body ?? custom?.text ?? 'A hivatkozás nem érhető el; nincs helyettesítő tartalom.'}</p>
         </article>;
         })}
     </div>
-    {readState === 'success' && draft && <div className="space-y-2 rounded border p-3"><p className="text-sm">Elhelyezhető csempék (a tartalom közös; az elhelyezés csak Öné)</p>{[...builtin.map(t => ({ id: t.kind, title: t.title })), ...draft.tiles].filter(t => !refs.includes(t.id)).map(t => <button key={t.id} type="button" className={control} disabled={busy || refs.length >= 32} onClick={() => place(t.id, surface, true)}>{t.title || 'Névtelen csempe'} hozzáadása ide</button>)}{draft.canManage && <button type="button" className={control} disabled={busy || refs.length >= 32} onClick={() => { const id = crypto.randomUUID(); setDraft(d => d && ({ ...d, tiles: [...d.tiles, { id, revision: 0, title: 'Új csempe', text: '', tone: 'green', archived: false }], placements: { ...d.placements, [surface]: [...d.placements[surface], id] } })); }}>Új közös szöveges csempe</button>}</div>}
+    {readState === 'success' && draft && <div className="relative">
+        <button type="button" className={control} aria-haspopup="dialog" aria-expanded={addOpen} disabled={busy || refs.length >= 32} onClick={() => setAddOpen(v => !v)}>+ Csempe hozzáadása</button>
+        {addOpen && <div className="mt-2 w-full max-w-md rounded-lg border border-[var(--adm-border)] bg-white p-2 shadow-lg">
+            <p className="px-2 py-1 text-xs text-[var(--adm-text-muted)]">A tartalom közös; az elhelyezés csak Öné.</p>
+            {hiddenBuiltins.map(t => <button key={t.kind} type="button" className="block w-full rounded px-2 py-2 text-left text-sm hover:bg-[var(--adm-surface)]" disabled={busy} onClick={() => { place(t.kind, surface, true); setAddOpen(false); }}>{t.title}</button>)}
+            {hiddenCustom.map(t => <button key={t.id} type="button" className="block w-full rounded px-2 py-2 text-left text-sm hover:bg-[var(--adm-surface)]" disabled={busy} onClick={() => { place(t.id, surface, true); setAddOpen(false); }}>{t.title || 'Névtelen csempe'}</button>)}
+            {archivedCustom.length > 0 && <div className="mt-2 border-t border-[var(--adm-border)] pt-2">
+                <p className="px-2 py-1 text-xs font-semibold text-[var(--adm-text-muted)]">Archivált csempék</p>
+                {archivedCustom.map(t => <button key={t.id} type="button" className="block w-full rounded px-2 py-2 text-left text-sm hover:bg-[var(--adm-surface)]" disabled={busy} onClick={() => { mutateTile(t.id, { archived: false }); place(t.id, surface, true); setAddOpen(false); }}>{`${t.title || 'Névtelen csempe'} visszaállítása`}</button>)}
+            </div>}
+            {draft.canManage && <button type="button" className="block w-full rounded px-2 py-2 text-left text-sm font-semibold text-[var(--adm-green-800)] hover:bg-[var(--adm-surface)]" disabled={busy || refs.length >= 32} onClick={() => { const id = crypto.randomUUID(); setDraft(d => d && ({ ...d, tiles: [...d.tiles, { id, revision: 0, title: 'Új csempe', text: '', tone: 'green', archived: false }], placements: { ...d.placements, [surface]: [...d.placements[surface], id] } })); setAddOpen(false); setEditId(id); }}>Új szöveges csempe</button>}
+        </div>}
+    </div>}
+    <ViewportDialog open={Boolean(editTarget)} title="Csempe szerkesztése" onClose={() => { if (!busy) setEditId(null); }} busy={busy} testId="tile-edit-dialog" maxWidth="max-w-lg" footer={<><button type="button" className={control} disabled={busy} onClick={() => setEditId(null)}>Kész</button></>}>
+        {editTarget && <>
+        <label className="block text-sm">Közös csempe neve<input className={`${control} w-full`} maxLength={120} value={editTarget.title} disabled={busy} onChange={e => mutateTile(editTarget.id, { title: e.target.value })}/></label>
+        <label className="mt-3 block text-sm">Közös tartalom<textarea className={`${control} min-h-28 w-full`} maxLength={6000} value={editTarget.text} disabled={busy} onChange={e => mutateTile(editTarget.id, { text: e.target.value })}/></label>
+        <label className="mt-3 block text-sm">Szín<select className={control} value={editTarget.tone} disabled={busy} onChange={e => mutateTile(editTarget.id, { tone: e.target.value as Tile['tone'] })}><option value="info">Kék</option><option value="teal">Türkiz</option><option value="green">Zöld</option></select></label>
+        </>}
+    </ViewportDialog>
   </section>;
 }
