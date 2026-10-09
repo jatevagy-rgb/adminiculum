@@ -5,6 +5,7 @@ import { ACTION_INTENT_BY_KIND, COMPLIANCE_ACTION_INTENT_KEYS, COMPLIANCE_PROPOS
 import casesService from '../cases/services';
 import { resolveComplianceCaseType } from './complianceCaseTypeResolver';
 import { lockCaseForMutation } from '../cases/caseMutationGuard';
+import { userCanManageCaseById } from '../cases/authorization';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 type Actor = InternalActor;
@@ -226,6 +227,14 @@ export async function bindProposalToCase(actor: Actor, proposalId: string, caseI
  */
 async function createComplianceTaskAndConfirm(actor: Actor, proposal: any, caseId: string, tx: Prisma.TransactionClient): Promise<any> {
   await lockCaseForMutation(tx, caseId);
+  // Task-producing confirmation is a CASE_MANAGE write. Proposal read/review
+  // eligibility (assertInternalCaseAccess) remains collaborator-inclusive and
+  // unchanged, but confirming a proposal into a Task requires canonical
+  // CASE_MANAGE on the owning Case (ADMIN/PARTNER, assigned lawyer, creator).
+  const manageAccess = await userCanManageCaseById(actor.userId, actor.role, caseId, tx);
+  if (manageAccess !== true) {
+    throw new InteractionError(403, 'CASE_MANAGE_REQUIRED', 'Confirming a compliance proposal into a Task requires case management access.');
+  }
   await assertAssignee(proposal.assigneeId, tx);
   const task = await tx.task.create({
     data: {

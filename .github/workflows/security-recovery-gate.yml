@@ -45,3 +45,10 @@ jobs:
           tests/sec1-document-object-authorization.test.ts
           tests/sec2-upload-security.test.ts
           tests/routeFeatureGuards.test.ts
+          tests/taskCreateCaseAuthorization.route.test.ts
+          tests/security0aCaseManageById.test.ts
+          tests/taskAutoGenerateAuthorization.route.test.ts
+          tests/documentTaskCreateAuthorization.route.test.ts
+          tests/communicationTaskCreateAuthorization.service.test.ts
+          tests/communicationTaskReadAuthorization.route.test.ts
+          tests/complianceProposalConfirmAuthority.service.test.ts

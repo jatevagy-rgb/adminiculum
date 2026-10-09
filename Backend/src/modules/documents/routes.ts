@@ -376,8 +376,13 @@ router.get('/case/:caseId', authenticate, requireCaseReadAccess, async (req: Req
 /**
  * POST /api/v1/documents/:id/tasks
  * Create a safe source-linked task from document metadata only.
+ *
+ * Task creation is a CASE_MANAGE write: document READ access is not enough to
+ * elevate a viewer into creating a Task on the owning Case. This route reuses
+ * the canonical CASE_MANAGE gate (ADMIN/PARTNER, assigned lawyer, case creator)
+ * so a collaborator-only reader is denied before any Task side effect.
  */
-router.post('/:id/tasks', authenticate, requireDocumentReadAccess, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/tasks', authenticate, requireDocumentManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
     const { id } = req.params as { id: string };
