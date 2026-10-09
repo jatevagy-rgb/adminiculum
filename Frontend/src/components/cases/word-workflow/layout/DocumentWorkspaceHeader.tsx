@@ -65,12 +65,13 @@ export function DocumentWorkspaceHeader({ caseId, documentId, versionId, version
         const value = await getCaseLifecycle(caseId);
         if (alive.current) setLifecycle(value);
       })}>Lezárás ellenőrzése</AdminButton>
-      <div className="flex min-w-0 flex-1 flex-wrap items-end gap-2">
-        <label className="min-w-[150px] flex-1 text-xs font-semibold">Leadáshoz tartozó feladat
+      <div className="flex w-full min-w-0 flex-wrap items-end gap-2 sm:w-auto sm:flex-1">
+        <label className="w-full min-w-0 text-xs font-semibold sm:flex-1">Leadáshoz tartozó feladat
           <select data-testid="document-submission-task" value={taskId} disabled={busy || loading} onChange={(event) => setTaskId(event.target.value)} className="mt-1 block min-h-10 w-full min-w-0 max-w-full rounded border border-[var(--adm-border)] bg-[var(--card-bg)] p-2 text-sm">
             <option value="">{loading ? "Feladatok betöltése…" : "Válasszon feladatot…"}</option>
             {tasks.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
           </select>
+          {task ? <span data-testid="document-submission-task-identity" className="mt-1 block break-words font-normal">{task.title}</span> : null}
         </label>
         <AdminButton data-testid="document-top-submission" variant="primary" className="min-h-10" disabled={busy || !task || !documentId || !versionId || !canPrepare} onClick={(event) => { returnFocus.current = event.currentTarget; void run(async () => {
           if (!task || !documentId || !versionId) return;

@@ -9,7 +9,7 @@
  * `POST /communications/:id/link-case` contract via `linkCommunicationToCase`.
  *
  * These are source-contract checks: they pin the wiring and the truthful states
- * (single selection, exact case identity, duplicate prevention, readback, and
+ * (staged selection, exact case identity, duplicate prevention, readback, and
  * the conflict/unauthorized error mapping).
  */
 import assert from "node:assert/strict";
@@ -34,30 +34,46 @@ describe("Case Workspace email-thread picker repair (B4)", () => {
     assert.doesNotMatch(src, /E-mail thread hozzárendelése" href=/, "the CTA must no longer be a link");
   });
 
-  it("renders the existing picker in single-select, client-scoped mode", () => {
+  it("renders the existing picker in client-scoped, multiselect Case mode", () => {
     const src = overview();
     assert.match(src, /<CaseCommunicationPickerDrawer/);
-    assert.match(src, /singleSelect/);
+    assert.doesNotMatch(src, /\bsingleSelect\b/);
     assert.match(src, /clientId=\{c\.client\?\.id \?\? ""\}/);
+    assert.match(src, /currentCaseId=\{caseId\}/);
     assert.match(src, /busy=\{commLinkBusy\}/);
     assert.match(src, /error=\{commLinkError\}/);
     assert.match(src, /onConfirm=\{\(ids\) => void confirmLinkThread\(ids\)\}/);
   });
 
-  it("links exactly one thread and preserves exact case identity", () => {
+  it("links only selected unassigned threads to the exact case and reports partial results", () => {
     const src = overview();
-    assert.match(src, /if \(ids\.length !== 1\) return/, "multiple threads must never be linked silently");
+    assert.match(src, /const uniqueIds = \[\.\.\.new Set\(ids\)\]/);
+    assert.match(src, /if \(uniqueIds\.length === 0\) return/);
+    assert.match(src, /for \(const communicationId of uniqueIds\)/);
     assert.match(src, /await linkCommunicationToCase\(communicationId, caseId\)/);
+    assert.match(src, /if \(activeLinkCaseId\.current !== caseId\) return/);
+    assert.match(src, /return \(\) => \{ activeLinkCaseId\.current = null; \}/);
+    assert.match(src, /setCommPickerOpen\(false\); setCommLinkError\(null\); setCommLinkBusy\(false\)/);
+    assert.match(src, /\$\{linkedCount\} \/ \$\{uniqueIds\.length\} kapcsolás visszaigazolt\. A hátralévő tételeket nem próbáltuk/);
+    assert.match(src, /A kapcsolás eredménye nem ismert\. Frissítés után ellenőrizze/);
+    assert.match(src, /\[403, 404, 409\]\.includes\(status \?\? 0\)/, "timeouts and 5xx cannot be reported as definitely uncommitted");
     assert.match(src, /setCommPickerOpen\(false\)/);
     assert.match(src, /await refresh\(\)/, "the linked thread is read back through a workspace refresh");
   });
 
-  it("keeps the picker single-select and truthful on load/link failure", () => {
+  it("keeps intake single-select compatibility and truthful Case ledger states", () => {
     const src = drawer();
     assert.match(src, /singleSelect\?: boolean/);
     assert.match(src, /setStaged\(\[id\]\)/);
-    assert.match(src, /sel && !singleSelect/, "primary toggle is hidden in single-select mode");
-    assert.match(src, /disabled=\{busy \|\| \(singleSelect && staged\.length !== 1\)\}/);
+    assert.match(src, /sel && !singleSelect && !currentCaseId/, "primary toggle remains an intake-only capability");
+    assert.match(src, /getCaseById\(id\)/, "assigned case labels require an authorized case read, not an absent list relation");
+    assert.doesNotMatch(src, /c\.case\?\.caseNumber|c\.case\?\.title/);
+    assert.match(src, /disabled=\{busy \|\| \(singleSelect && staged\.length !== 1\) \|\| Boolean\(currentCaseId && staged\.length === 0\)\}/);
+    assert.match(src, /direction === "ALL" \|\| c\.direction === direction/);
+    assert.match(src, /businessDateKey\(c\.effectiveMessageAt\)/);
+    assert.match(src, /További beszélgetések betöltése/);
+    assert.match(src, /Kapcsolt ügy/);
+    assert.match(src, /c\.attachmentCount > 0/);
     assert.match(src, /data-testid="comm-picker-load-error"/);
     assert.match(src, /data-testid="comm-picker-link-error"/);
   });

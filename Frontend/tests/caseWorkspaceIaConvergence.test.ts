@@ -24,7 +24,7 @@ describe("Case Workspace IA convergence", () => {
 
     const heroSlice = source.slice(
       source.indexOf('data-testid="matter-hero"'),
-      source.indexOf('<CaseContextTiles'),
+      source.indexOf('aria-label="Következő feladat"'),
     );
     assert.doesNotMatch(heroSlice, /setModal\(\{ type: "task-create" \}\)/, "the hero must not carry a competing create action");
     assert.doesNotMatch(heroSlice, /Megjegyzés hozzáadása/, "the hero must not carry a competing note action");
@@ -108,8 +108,9 @@ describe("Case Workspace IA convergence", () => {
     assert.match(source, /<CaseWorkspaceNotesSection/);
     assert.match(source, /id="ck-notes-primary"/);
     assert.ok(
-      source.indexOf("<CaseWorkspaceNotesSection") > source.indexOf("</details>", source.indexOf("<details ref={secondaryDetailsRef}")),
-      "primary notes must not be pushed back into the collapsed details area",
+      source.indexOf("<CaseWorkspaceNotesSection") > source.indexOf('title="Aktív munka"') &&
+      source.indexOf("<CaseWorkspaceNotesSection") < source.indexOf("<details ref={secondaryDetailsRef}"),
+      "primary notes must follow work and remain outside the collapsed details area",
     );
     assert.doesNotMatch(source, /Kommunikáció hozzáadása/);
   });
