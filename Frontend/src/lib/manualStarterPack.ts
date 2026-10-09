@@ -16,12 +16,12 @@ export const MANUAL_STARTER_PACK_STEPS = [
   'Külön, kifejezett ügyfélközzététel',
 ] as const;
 export const BASELINE_CATEGORIES = ['Email triázs', 'Ügyindítás', 'Dokumentum-előkészítés', 'Senior ellenőrzés', 'Ellenőrzési körök', 'Megfelelési felmérés', 'Helyreállítás', 'Ügyfélre várakozás', 'Grow előkészítés', 'Szerződésvizsgálat / megújítás'] as const;
-export type BaselineRow = { category: string; basis: 'MEASURED' | 'ESTIMATED'; value: number; unit: 'ACTIVE_MINUTES' | 'ELAPSED_MINUTES' | 'COUNT' };
+export type BaselineRow = { category: string; basis: 'MEASURED' | 'ESTIMATED'; value: number; unit: 'ACTIVE_MINUTES' | 'ELAPSED_MINUTES' | 'COUNT'; sampleCount: 1 };
 export function baselineUnit(category: string): BaselineRow['unit'] {
   return category === 'Ügyfélre várakozás' ? 'ELAPSED_MINUTES' : category === 'Ellenőrzési körök' ? 'COUNT' : 'ACTIVE_MINUTES';
 }
 export function makeBaselineRow(category: string, basis: BaselineRow['basis'], raw: string): BaselineRow | null {
   const value = Number(raw);
   if (!(BASELINE_CATEGORIES as readonly string[]).includes(category) || !['MEASURED', 'ESTIMATED'].includes(basis) || !raw.trim() || !Number.isFinite(value) || value < 0 || value > 1000000 || (baselineUnit(category) === 'COUNT' && !Number.isInteger(value))) return null;
-  return { category, basis, value, unit: baselineUnit(category) };
+  return { category, basis, value, unit: baselineUnit(category), sampleCount: 1 };
 }

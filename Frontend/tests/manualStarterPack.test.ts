@@ -7,6 +7,7 @@ test('missing baseline stays missing but explicit zero remains recorded', () => 
   assert.equal(makeBaselineRow('Email triázs', 'MEASURED', '-1'), null);
   assert.equal(makeBaselineRow('Email triázs', 'MEASURED', 'Infinity'), null);
   assert.equal(makeBaselineRow('Email triázs', 'MEASURED', '0')?.value, 0);
+  assert.equal(makeBaselineRow('Email triázs', 'MEASURED', '0')?.sampleCount, 1);
 });
 test('estimated labour, elapsed waiting and review rounds have distinct bases/units', () => {
   assert.equal(makeBaselineRow('Senior ellenőrzés', 'ESTIMATED', '30')?.basis, 'ESTIMATED');

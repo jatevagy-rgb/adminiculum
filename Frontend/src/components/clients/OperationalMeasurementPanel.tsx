@@ -72,6 +72,7 @@ function MeasurementSession({ clientId }: { clientId: string }) {
     <details className={CARD}>
       <summary className="cursor-pointer font-semibold focus-visible:outline">Önkéntes folyamat-alapfelmérés</summary>
       <p className="my-3 text-sm">A munkalap csak ebben a megnyitásban él. Exportálja megőrzéshez; nem kerül szerverre és nem módosít munkaidő-bejegyzést. Ne írjon személyes vagy ügytartalmi adatot.</p>
+      <p className="my-3 text-sm">Egy sor egy megfigyelt munkafolyamat mintája. Az export időszaka a fent megadott kezdő és záró dátum.</p>
       <form className="grid gap-3 sm:grid-cols-2" onSubmit={e => { e.preventDefault(); const row = makeBaselineRow(category, basis, value); setInvalid(!row); if (row) { setRows([...rows, row]); setValue(''); } }}>
         <label className="text-sm">Folyamat<select aria-label="Folyamat" className={INPUT} value={category} onChange={e => setCategory(e.target.value)}>{BASELINE_CATEGORIES.map(name => <option key={name}>{name}</option>)}</select></label>
         <label className="text-sm">Mérési alap<select aria-label="Mérési alap" className={INPUT} value={basis} onChange={e => setBasis(e.target.value as BaselineRow['basis'])}><option value="MEASURED">Mért</option><option value="ESTIMATED">Becsült</option></select></label>
@@ -87,6 +88,6 @@ function MeasurementSession({ clientId }: { clientId: string }) {
       <ol className="space-y-3">{MANUAL_STARTER_PACK_STEPS.map((step, i) => <li key={step}><label className="flex items-start gap-3 text-sm"><input type="checkbox" className="mt-1" checked={checks.includes(i)} onChange={e => setChecks(e.target.checked ? [...checks, i] : checks.filter(v => v !== i))} />{i + 1}. {step}</label></li>)}</ol>
       <details className="mt-4"><summary className="cursor-pointer text-sm font-semibold focus-visible:outline">Kiválasztott nyilvántartási hivatkozások</summary><p className="my-2 text-sm">Rögzítse a már ellenőrzött azonosítót és verziót. Az üres érték ismeretlen; a munkalap nem hitelesíti a hivatkozást.</p><div className="grid gap-3 sm:grid-cols-2">{STARTER_PACK_REGISTRIES.map(registry => <label key={registry} className="min-w-0 break-words text-sm">{registry}<input maxLength={200} className={INPUT} value={refs[registry] || ''} onChange={e => setRefs({ ...refs, [registry]: e.target.value })} /></label>)}</div></details>
     </details>
-    <Button variant="neutral" onClick={() => exportWorksheet({ version: MANUAL_STARTER_PACK_VERSION, exportedAt: new Date().toISOString(), basis: 'VOLUNTARY_MANUAL_WORKSHEET', baseline: rows, reviewedStepIndexes: checks, registryReferences: refs, persisted: false, complianceDecision: null })}>Munkalap exportálása</Button>
+    <Button variant="neutral" onClick={() => exportWorksheet({ version: MANUAL_STARTER_PACK_VERSION, exportedAt: new Date().toISOString(), period: { from, to, timeZone: 'Europe/Budapest' }, basis: 'VOLUNTARY_MANUAL_WORKSHEET', baseline: rows, reviewedStepIndexes: checks, registryReferences: refs, persisted: false, complianceDecision: null })}>Munkalap exportálása</Button>
   </section>;
 }
