@@ -360,7 +360,6 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
         </div>
       </section>
 
-      <CaseContextTiles caseRecord={c} />
       {nextTask ? <section aria-label="Következő feladat" className="rounded-xl border-l-4 border-[var(--adm-green-800)] bg-white p-4">
         <p className="text-xs font-semibold text-[var(--adm-text-muted)]">{reviewIds.has(nextTask.id) ? 'Ellenőrzésre vár' : 'Most ezen dolgozunk'}</p>
         <Link href={`/tasks?taskId=${encodeURIComponent(nextTask.id)}`} className="mt-1 text-lg font-semibold text-[var(--adm-green-800)]">{nextTask.title}</Link>
@@ -444,6 +443,16 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
 
       </div>
 
+      <section id="ck-notes" aria-label="Ügy megjegyzései" className="scroll-mt-24">
+        <CaseWorkspaceNotesSection
+          caseId={caseId}
+          refreshKey={notesRefreshKey}
+          onCreateNote={() => setModal({ type: "case-comment" })}
+        />
+      </section>
+
+      <CaseContextTiles caseRecord={c} />
+
       {/* ---- 5. Wide communication reader (WORD_WF04) ----------------------- */}
       <section id="ck-comms" aria-label="Kommunikációs lánc" className="scroll-mt-24 space-y-3">
         <span id="ck-wide-comms" />
@@ -465,6 +474,10 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
           />
         </div>
 
+      <details ref={secondaryDetailsRef} id="case-secondary-details" data-testid="case-secondary-details" className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+        <summary className="cursor-pointer font-sans text-lg font-semibold text-[var(--adm-text)]">Ügy részletei és további eszközök</summary>
+        <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Induló helyzet, munkacsomag, dokumentum- és AI-előkészítés, kockázati mátrix, munkaidő.</p>
+        <div className="mt-4 space-y-4">
       {/* ---- 6. Explicit-document risk matrix (WORD_WF04) -------------------- */}
       <details id="ck-risk-matrix" aria-label="Kockázati mátrix" data-testid="case-risk-matrix-section" className="scroll-mt-24 space-y-3 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
         <summary className="min-h-10 cursor-pointer text-sm font-semibold text-[var(--adm-green-800)]">Kockázati mátrix · dokumentumhoz kötött munkairat</summary>
@@ -527,10 +540,6 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
           </details>
 
       </section>
-      <details ref={secondaryDetailsRef} id="case-secondary-details" data-testid="case-secondary-details" className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
-        <summary className="cursor-pointer font-sans text-lg font-semibold text-[var(--adm-text)]">Ügy részletei és további eszközök</summary>
-        <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Induló helyzet, munkacsomag, speciális előkészítés és munkaidő.</p>
-        <div className="mt-4 space-y-4">
           <details className="rounded-lg border border-[var(--adm-border)] bg-white p-3"><summary className="min-h-10 cursor-pointer font-semibold">Speciális dokumentum-előkészítés</summary>
       <DocumentPreparationDashboard
         caseId={caseId}
@@ -542,7 +551,7 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
         clientRole={c.clientRole}
         onOpenDocument={(docId) => router.push(`/cases/${caseId}/documents?documentId=${encodeURIComponent(docId)}`)}
         onRefresh={() => void refresh()}
-        onOpenRiskMatrix={(documentId) => { setRiskDocId(documentId); const panel = document.getElementById("ck-risk-matrix"); panel?.setAttribute("open", ""); panel?.scrollIntoView({ block: "start" }); }}
+        onOpenRiskMatrix={(documentId) => { setRiskDocId(documentId); secondaryDetailsRef.current?.setAttribute("open", ""); const panel = document.getElementById("ck-risk-matrix"); panel?.setAttribute("open", ""); panel?.scrollIntoView({ block: "start" }); }}
       />
           </details>
           <div id="ck-starting-context" className="scroll-mt-24">
@@ -575,15 +584,10 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
       </details>
 
       <section aria-label="Ügytörténet" className="space-y-4">
-      {/* ---- 2b. Primary internal notes ------------------------------------ */}
-      <span id="ck-notes" />
-      <CaseWorkspaceNotesSection
-        caseId={caseId}
-        refreshKey={notesRefreshKey}
-        onCreateNote={() => setModal({ type: "case-comment" })}
-      />
-
-      <div id="ck-activity"><CaseHistoryPanel key={caseId} caseId={caseId} clientId={c.client?.id ?? null} readOnly /></div>
+        <details id="ck-activity" className="rounded-lg border border-[var(--adm-border)] bg-white p-3">
+          <summary className="min-h-10 cursor-pointer text-sm font-semibold text-[var(--adm-green-800)]">Ügytörténet</summary>
+          <CaseHistoryPanel key={caseId} caseId={caseId} clientId={c.client?.id ?? null} readOnly />
+        </details>
 
       </section>
 

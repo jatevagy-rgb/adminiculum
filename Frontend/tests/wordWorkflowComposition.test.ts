@@ -66,9 +66,10 @@ test("permitted draft creation uses canonical flow; attachment failure is not re
 });
 test("real hosts mount composition and preserve adjacent actions and exact version identity", () => {
   const overview = readFileSync("src/components/cases/CaseWorkspaceOverview.tsx", "utf8");
-  const ordered = ['<CaseContextTiles', 'title="Aktív munka"', 'id="ck-comms"', '<CaseWorkspaceDocumentsSection', 'id="ck-prompts"', '<DocumentPreparationDashboard', 'aria-label="Ügytörténet"'];
+  const ordered = ['aria-label="Következő feladat"', 'title="Aktív munka"', 'id="ck-notes"', '<CaseContextTiles', 'id="ck-comms"', '<CaseWorkspaceDocumentsSection', 'id="case-secondary-details"', 'id="ck-prompts"', '<DocumentPreparationDashboard', 'aria-label="Ügytörténet"'];
   const positions = ordered.map(marker => overview.indexOf(marker));
   assert.ok(positions.every((position, index) => position >= 0 && (!index || position > positions[index - 1])));
+  assert.ok(overview.indexOf('id="ck-risk-matrix"') > overview.indexOf('id="case-secondary-details"'));
   for (const marker of ["CaseTimeBillingSummary", "HourlyRateCard", "CaseSubmissionHandoff", "CaseCommentModal", "DocumentUploadModal", "CaseWorkPackagePanel"]) assert.ok(overview.includes(marker));
   assert.doesNotMatch(overview, /label="Aktív dokumentumok"|cp.nextStep \? "Kijelölve"/);
   const document = readFileSync("src/app/cases/[caseId]/documents/page.tsx", "utf8");
