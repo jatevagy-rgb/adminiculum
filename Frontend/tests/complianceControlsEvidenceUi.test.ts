@@ -70,11 +70,11 @@ describe("compliance controls and evidence workforce UI", () => {
     };
     const markup = renderToStaticMarkup(createElement(ComplianceControlsSection, { state: { status: "success", summary }, onRetry: retry }));
     assert.match(markup, /Hiányzó intézkedés/);
-    assert.match(markup, /Elavult bizonyíték/);
-    assert.match(markup, /Hiányzó bizonyíték/);
-    assert.match(markup, /Bizonyítékkal alátámasztva/);
+    assert.match(markup, /Látható bizonyíték elavult/);
+    assert.match(markup, /Nincs látható aktuális bizonyíték/);
+    assert.match(markup, /Látható aktuális bizonyíték/);
     // Control C is marked implemented but must not read as evidenced.
-    assert.match(markup, /Hiányzó bizonyíték/);
+    assert.match(markup, /Nincs látható aktuális bizonyíték/);
     assert.doesNotMatch(markup, /%|reviewer|internal|sourceVersion/i);
   });
 
@@ -95,7 +95,7 @@ describe("compliance controls and evidence workforce UI", () => {
       requirements: [{ title: "T", controls: [{ title: "S", implementationStatus: "IMPLEMENTED", owner: null, nextReviewAt: null, evidenceSummary: { acceptedCurrent: 0, stale: 1, missing: true } }] }],
     };
     const markup = renderToStaticMarkup(createElement(ComplianceControlsSection, { state: { status: "success", summary: staleOnly }, onRetry: retry }));
-    assert.match(markup, /Elavult bizonyíték/);
-    assert.doesNotMatch(markup, /Bizonyítékkal alátámasztva/);
+    assert.match(markup, /Látható bizonyíték elavult/);
+    assert.doesNotMatch(markup, /Látható aktuális bizonyíték/);
   });
 });

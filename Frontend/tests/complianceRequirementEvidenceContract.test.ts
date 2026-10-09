@@ -58,8 +58,8 @@ describe("compliance requirement -> evidence contract (workforce UI)", () => {
       requirements: [{ title: "K", controls: [{ title: "C", implementationStatus: "IMPLEMENTED", owner: null, nextReviewAt: null, evidenceSummary: { acceptedCurrent: 0, stale: 0, missing: true }, evidence: [], gap: "MISSING_EVIDENCE" }] }],
     };
     const markup = renderToStaticMarkup(createElement(ComplianceControlsSection, { state: { status: "success", summary: noEvidence }, onRetry: retry }));
-    assert.match(markup, /Nincs csatolt bizonyíték\./);
-    assert.match(markup, /Hiányzó bizonyíték/);
+    assert.match(markup, /Nincs látható bizonyíték/);
+    assert.match(markup, /Nincs látható aktuális bizonyíték/);
   });
 
   it("does not introduce a fabricated compliance score or leak internal identifiers", () => {

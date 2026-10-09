@@ -1,10 +1,10 @@
 import crypto from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
-import { createClientControl, createControlDefinition, createEvidenceRecord, getControlCoverage, linkEvidenceToControl, mapControlToRequirement, reviewEvidenceRecord, updateClientControl } from '../src/modules/compliance/controlEvidenceService';
+import { createClientControl, createControlDefinition, createEvidenceRecord, getClientControl, getControlCoverage, linkEvidenceToControl, mapControlToRequirement, reviewEvidenceRecord, updateClientControl } from '../src/modules/compliance/controlEvidenceService';
 import { materializeRequirementApplicabilityFinding } from '../src/modules/compliance/findingMaterializationService';
 import { createProposal } from '../src/modules/compliance/complianceProposalService';
 
-const databaseUrl = process.env.PHASE7CB_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
+const databaseUrl = process.env.PHASE7CB_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL || process.env.AGENDA_DEADLINE_TEST_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
 
 describeWithDatabase('compliance controls and evidence (PostgreSQL)', () => {
@@ -319,5 +319,59 @@ describeWithDatabase('compliance controls and evidence (PostgreSQL)', () => {
     // A stale-only accepted record must never be counted as current evidence.
     expect(byTitle.get('Gap staleonly')?.evidenceSummary.acceptedCurrent).toBe(0);
     expect(byTitle.get('Gap staleonly')?.evidenceSummary.stale).toBe(1);
+  });
+
+  it('client access does not reveal HR document evidence without case and document authority', async () => {
+    const restrictedDocumentId = crypto.randomUUID();
+    const restrictedVersionId = crypto.randomUUID();
+    const restrictedFactId = crypto.randomUUID();
+    let restrictedDocumentEvidenceId: string | null = null;
+    let restrictedFactEvidenceId: string | null = null;
+    const control = await db.clientControl.findFirstOrThrow({ where: { clientId } });
+    await db.caseCollaborator.create({ data: { caseId, userId: unauthorizedId } });
+    try {
+      const baseline = await getControlCoverage(unauthorizedActor, clientId, db);
+      const before = baseline.requirements.flatMap((requirement) => requirement.controls).find((item) => item.controlId === control.id)!;
+      await db.document.create({ data: { id: restrictedDocumentId, name: 'Restricted HR evidence', category: 'EVIDENCE', caseId, clientId, securityClassification: 'HR_CONFIDENTIAL' } });
+      await db.documentVersion.create({ data: { id: restrictedVersionId, documentId: restrictedDocumentId, version: 1, name: 'Restricted HR v1', uploadedById: adminId } });
+      await db.clientFact.create({ data: { id: restrictedFactId, clientId, type: 'restricted-test', value: 'private fact', validFrom: new Date('2026-01-01'), sourceDocumentVersionId: restrictedVersionId } });
+      const documentEvidence = await createEvidenceRecord(actor, clientId, { sourceType: 'DOCUMENT_VERSION', title: 'Private HR document evidence', documentVersionId: restrictedVersionId }, db);
+      restrictedDocumentEvidenceId = documentEvidence.id;
+      const factEvidence = await createEvidenceRecord(actor, clientId, { sourceType: 'CLIENT_FACT', title: 'Private HR fact evidence', clientFactId: restrictedFactId }, db);
+      restrictedFactEvidenceId = factEvidence.id;
+      await reviewEvidenceRecord(actor, clientId, documentEvidence.id, { status: 'ACCEPTED' }, db);
+      await reviewEvidenceRecord(actor, clientId, factEvidence.id, { status: 'ACCEPTED' }, db);
+      await linkEvidenceToControl(actor, clientId, control.id, documentEvidence.id, db);
+      await linkEvidenceToControl(actor, clientId, control.id, factEvidence.id, db);
+
+      const adminCoverage = await getControlCoverage(actor, clientId, db);
+      const adminControl = adminCoverage.requirements.flatMap((requirement) => requirement.controls).find((item) => item.controlId === control.id)!;
+      expect(adminControl.evidenceSummary.acceptedCurrent).toBeGreaterThanOrEqual(before.evidenceSummary.acceptedCurrent + 2);
+      expect(adminControl.evidence.map((item) => item.id)).toEqual(expect.arrayContaining([documentEvidence.id, factEvidence.id]));
+
+      const restrictedCoverage = await getControlCoverage(unauthorizedActor, clientId, db);
+      const restrictedControl = restrictedCoverage.requirements.flatMap((requirement) => requirement.controls).find((item) => item.controlId === control.id)!;
+      expect(restrictedControl.evidenceSummary).toEqual(before.evidenceSummary);
+      expect(restrictedControl.gap).toBe(before.gap);
+      expect(JSON.stringify(restrictedCoverage)).not.toMatch(/Private HR|Restricted HR|private fact/);
+      expect(restrictedControl.evidence.map((item) => item.id)).not.toContain(documentEvidence.id);
+      expect(restrictedControl.evidence.map((item) => item.id)).not.toContain(factEvidence.id);
+
+      // The single-control detail read must use the same authorized set: a
+      // lawyer with case access must not see the HR document evidence title.
+      const adminDetail = await getClientControl(actor, clientId, control.id, db);
+      expect(adminDetail.evidence.map((item) => item.title)).toEqual(expect.arrayContaining(['Private HR document evidence', 'Private HR fact evidence']));
+      const restrictedDetail = await getClientControl(unauthorizedActor, clientId, control.id, db);
+      expect(restrictedDetail.evidence.map((item) => item.title)).not.toContain('Private HR document evidence');
+      expect(restrictedDetail.evidence.map((item) => item.title)).not.toContain('Private HR fact evidence');
+      expect(JSON.stringify(restrictedDetail)).not.toMatch(/Private HR|private fact/);
+    } finally {
+      await db.evidenceControlLink.deleteMany({ where: { evidenceRecordId: { in: [restrictedDocumentEvidenceId, restrictedFactEvidenceId].filter((id): id is string => Boolean(id)) } } });
+      await db.evidenceRecord.deleteMany({ where: { id: { in: [restrictedDocumentEvidenceId, restrictedFactEvidenceId].filter((id): id is string => Boolean(id)) } } });
+      await db.clientFact.deleteMany({ where: { id: restrictedFactId } });
+      await db.documentVersion.deleteMany({ where: { id: restrictedVersionId } });
+      await db.document.deleteMany({ where: { id: restrictedDocumentId } });
+      await db.caseCollaborator.deleteMany({ where: { caseId, userId: unauthorizedId } });
+    }
   });
 });

@@ -84,7 +84,8 @@ describe("compliance evidence recording and review workforce UI", () => {
 
   it("EVIDENCE_ADD_FORM_HONEST: empty state and add form render without machine fields", () => {
     const empty = renderPanel({ ...evidenceControl, evidence: [] });
-    assert.match(empty, /nincs rögzített bizonyíték/);
+    assert.match(empty, /nincs látható bizonyíték/);
+    assert.match(empty, /nem igazolja, hogy irodai szinten sem rögzítettek bizonyítékot/);
     assert.match(empty, /Bizonyíték hozzáadása/);
     const form = renderPanel({ ...evidenceControl, evidence: [] }, true);
     assert.match(form, /Bizonyíték címe/);
