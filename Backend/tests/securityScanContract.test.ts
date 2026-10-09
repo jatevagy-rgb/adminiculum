@@ -90,14 +90,17 @@ describe('scanDocumentVersionInBackground — conditional terminal transition', 
     expect(mockResume).toHaveBeenCalledWith('v1');
   });
 
-  it('INFECTED verdict → transitions PENDING to INFECTED (never CLEAN)', async () => {
+  it('INFECTED verdict → may overwrite PENDING, CLEAN, or SCAN_FAILED (INFECTED never loses to CLEAN)', async () => {
     setScanner(scannerReturning('INFECTED'));
     await scanDocumentVersionInBackground('v1', Buffer.from('infected'));
-    expect(mockPrismaUpdateMany).toHaveBeenCalledWith(pendingWhere('INFECTED'));
+    expect(mockPrismaUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'v1', securityScanStatus: { in: ['PENDING_SCAN', 'CLEAN', 'SCAN_FAILED'] } },
+      data: { securityScanStatus: 'INFECTED' },
+    });
     expect(mockResume).not.toHaveBeenCalled();
   });
 
-  it('SCAN_FAILED verdict → transitions PENDING to SCAN_FAILED (never CLEAN)', async () => {
+  it('SCAN_FAILED verdict → transitions PENDING to SCAN_FAILED (never downgrades CLEAN/INFECTED)', async () => {
     setScanner(scannerReturning('SCAN_FAILED'));
     await scanDocumentVersionInBackground('v1', Buffer.from('fail'));
     expect(mockPrismaUpdateMany).toHaveBeenCalledWith(pendingWhere('SCAN_FAILED'));
@@ -116,6 +119,28 @@ describe('scanDocumentVersionInBackground — conditional terminal transition', 
     setScanner(scannerReturning('CLEAN'));
     await scanDocumentVersionInBackground('v1', Buffer.from('clean'));
     expect(mockResume).not.toHaveBeenCalled();
+  });
+
+  it('single-flight: a concurrent retry reuses the in-flight scan (scanner invoked once)', async () => {
+    let scanCalls = 0;
+    let release: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    setScanner({
+      provider: 'FAKE',
+      scan: async () => {
+        scanCalls += 1;
+        await gate;
+        return { outcome: 'CLEAN', provider: 'FAKE', codeSafe: 'FAKE_CLEAN' };
+      },
+    });
+
+    const first = scanDocumentVersionInBackground('v1', Buffer.from('clean'));
+    const second = scanDocumentVersionInBackground('v1', Buffer.from('clean'));
+    // Both should resolve to the SAME in-flight promise.
+    expect(second).toBe(first);
+    release!();
+    await Promise.all([first, second]);
+    expect(scanCalls).toBe(1);
   });
 });
 

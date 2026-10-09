@@ -19,7 +19,24 @@ export function securityScanBlock(status: DocumentSecurityScanStatus | string | 
   };
 }
 
-export async function scanDocumentVersionInBackground(versionId: string, buffer: Buffer, fileName = 'document', mimeType: string | null = null): Promise<void> {
+// In-process single-flight: only one scan may run per version concurrently
+// within a process. This coalesces a retry that races an in-flight original scan
+// so a "temporary CLEAN then later INFECTED" window cannot occur inside one
+// instance. Cross-instance correctness is guaranteed by the monotonic DB verdict
+// below (INFECTED may overwrite CLEAN).
+const inFlightScans = new Map<string, Promise<void>>();
+
+export function scanDocumentVersionInBackground(versionId: string, buffer: Buffer, fileName = 'document', mimeType: string | null = null): Promise<void> {
+  const existing = inFlightScans.get(versionId);
+  if (existing) return existing;
+  const run = runScan(versionId, buffer, fileName, mimeType).finally(() => {
+    inFlightScans.delete(versionId);
+  });
+  inFlightScans.set(versionId, run);
+  return run;
+}
+
+async function runScan(versionId: string, buffer: Buffer, fileName: string, mimeType: string | null): Promise<void> {
   let status: DocumentSecurityScanStatus = 'SCAN_FAILED';
   try {
     const result = await getScanner().scan({
@@ -32,13 +49,20 @@ export async function scanDocumentVersionInBackground(versionId: string, buffer:
   } catch {
     status = 'SCAN_FAILED';
   }
-  // Only transition FROM PENDING_SCAN: the stored bytes are immutable, so the
-  // first terminal verdict (CLEAN/INFECTED/SCAN_FAILED) is authoritative and
-  // sticky. A late or duplicate concurrent scan can therefore never overwrite a
-  // trustworthy terminal verdict — most critically, a late CLEAN can never
-  // downgrade an already-persisted INFECTED.
+  // Monotonic verdict: INFECTED > CLEAN > SCAN_FAILED > PENDING_SCAN. A scan may
+  // only move the stored status FORWARD, never backward. INFECTED is the
+  // strongest and may overwrite PENDING, SCAN_FAILED, or even a CLEAN that a
+  // concurrent scan committed first — so INFECTED can never lose to CLEAN.
+  // CLEAN and SCAN_FAILED may only be established FROM PENDING_SCAN (a late
+  // CLEAN can never downgrade INFECTED/SCAN_FAILED, and a late SCAN_FAILED can
+  // never downgrade CLEAN).
   const transitioned = await prisma.documentVersion.updateMany({
-    where: { id: versionId, securityScanStatus: 'PENDING_SCAN' },
+    where: {
+      id: versionId,
+      securityScanStatus: status === 'INFECTED'
+        ? { in: ['PENDING_SCAN', 'CLEAN', 'SCAN_FAILED'] }
+        : 'PENDING_SCAN',
+    },
     data: { securityScanStatus: status },
   });
   // BE_COMP_006: a CLEAN verdict unblocks durable INTERNAL_ANALYSIS jobs that

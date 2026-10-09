@@ -4,6 +4,8 @@ import type { Server } from 'http';
 import { prisma } from '../src/prisma/prisma.service';
 import anonymizeRouter from '../src/modules/anonymize/routes';
 import driveService from '../src/modules/sharepoint/driveService';
+import { scanDocumentVersionInBackground } from '../src/modules/documents/securityScan.service';
+import { setScanner } from '../src/modules/upload-security/scannerAdapter';
 
 jest.mock('../src/middleware/auth', () => ({
   authenticate: (req: any, res: any, next: any) => {
@@ -160,4 +162,33 @@ test('legacy unbound documents without any version stay blocked (no trustworthy 
   expect(body.code).toBe('SECURITY_SCAN_BLOCKED');
   expect(downloads).toBe(0);
   expect(JSON.stringify(body)).not.toMatch(/SecretClient|LEGACY_UNBOUND/);
+});
+
+test('scan verdict is monotonic: INFECTED overwrites an earlier CLEAN and never loses to a later CLEAN', async () => {
+  const conDocId = randomUUID();
+  const conVersionId = randomUUID();
+  await prisma.document.create({ data: { id: conDocId, caseId, clientId: client, name: 'CONCURRENCY_GATE', category: 'OTHER', mimeType: 'text/plain', spItemId: 'sp-conc' } });
+  await prisma.documentVersion.create({ data: { id: conVersionId, documentId: conDocId, version: 1, name: 'v1', originalFileName: 'conc.txt', mimeType: 'text/plain', uploadedById: user, storageReference: 'conc-store', securityScanStatus: 'PENDING_SCAN', isCurrent: true } });
+
+  const clean = { provider: 'FAKE', scan: async () => ({ outcome: 'CLEAN' as const, provider: 'FAKE', codeSafe: 'FAKE_CLEAN' }) };
+  const infected = { provider: 'FAKE', scan: async () => ({ outcome: 'INFECTED' as const, provider: 'FAKE', codeSafe: 'FAKE_INFECTED' }) };
+
+  try {
+    // Scan 1 (e.g. original background scan) establishes CLEAN.
+    setScanner(clean);
+    await scanDocumentVersionInBackground(conVersionId, Buffer.from('bytes'));
+    expect((await prisma.documentVersion.findUnique({ where: { id: conVersionId } }))?.securityScanStatus).toBe('CLEAN');
+
+    // Scan 2 (e.g. concurrent retry) returns INFECTED: it must overwrite CLEAN.
+    setScanner(infected);
+    await scanDocumentVersionInBackground(conVersionId, Buffer.from('bytes'));
+    expect((await prisma.documentVersion.findUnique({ where: { id: conVersionId } }))?.securityScanStatus).toBe('INFECTED');
+
+    // A later CLEAN must never downgrade the persisted INFECTED.
+    setScanner(clean);
+    await scanDocumentVersionInBackground(conVersionId, Buffer.from('bytes'));
+    expect((await prisma.documentVersion.findUnique({ where: { id: conVersionId } }))?.securityScanStatus).toBe('INFECTED');
+  } finally {
+    setScanner(null);
+  }
 });
