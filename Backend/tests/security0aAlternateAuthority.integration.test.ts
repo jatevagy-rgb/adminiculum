@@ -102,10 +102,12 @@ d('SEC-0A alternate Task authority (PostgreSQL)', () => {
   afterAll(async () => {
     try {
       // Timeline/history rows reference the synthetic cases and users by FK and
-      // must be removed before their owners (case/user) are deleted.
+      // must be removed before their owners (case/user) are deleted. Compliance
+      // proposals reference their confirmed Task by FK (taskId), so proposals
+      // must be removed before the Task rows they point to.
       await db.timelineEvent.deleteMany({ where: { caseId: { in: [commIds.caseA, comp.caseA] } } });
-      await db.task.deleteMany({ where: { OR: [{ id: { in: taskIds } }, { type: 'COMPLIANCE_PROPOSAL', caseId: { in: [comp.caseA] } }, { sourceCommunicationId: commIds.commLinked }] } });
       await db.complianceProposal.deleteMany({ where: { id: { in: proposalIds } } });
+      await db.task.deleteMany({ where: { OR: [{ id: { in: taskIds } }, { type: 'COMPLIANCE_PROPOSAL', caseId: { in: [comp.caseA] } }, { sourceCommunicationId: commIds.commLinked }] } });
       await db.assessmentFinding.deleteMany({ where: { id: { in: compFindingIds } } });
       await db.requirementApplicability.deleteMany({ where: { id: { in: compApplicabilityIds } } });
       await db.applicabilityRuleVersion.deleteMany({ where: { id: comp.rule } });
