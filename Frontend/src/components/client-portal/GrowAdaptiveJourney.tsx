@@ -5,6 +5,7 @@ import { Button } from '@/components/ui';
 import { clientSafeError } from '@/lib/clientInteractionApi';
 import { getPortalGrowJourney, getPortalGrowAssessment, getStoredPortalWorkspace, submitPortalGrowAssessment, submitPortalGrowPain, type PortalGrowAssessmentDetail, type PortalGrowAssessmentResult, type PortalGrowAssessmentEvidence, type PortalGrowJourney, type PortalGrowProcess } from '@/lib/clientPortalApi';
 import { activeGrowQuestions, growDraftKey, parseGrowDraft, pruneGrowAnswers, type GrowDraft } from '@/lib/growAdaptiveRunner';
+import { formatGrowCompletion } from '@/lib/growResultIdentity';
 
 const panel = 'rounded-[12px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] p-4 sm:p-6';
 const field = 'min-h-10 w-full rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] px-3 py-2';
@@ -19,7 +20,11 @@ function Evidence({ items }: { items: PortalGrowAssessmentEvidence[] }) {
 export function GrowAssessmentResult({ result, processName }: { result: PortalGrowAssessmentResult; processName?: string | null }) {
   return <div className="space-y-4" data-testid="grow-v2-result">
     <h2 className="text-2xl font-semibold">Mit látunk a válaszokból?</h2>
-    <p className="text-sm text-[var(--adm-text-secondary)]">Ügyfél által megadott információ · {new Date(result.completedAt).toLocaleDateString('hu-HU')}{processName ? ` · ${processName}` : ''}</p>
+    <div className="space-y-1 text-sm text-[var(--adm-text-secondary)]" data-testid="grow-v2-result-identity">
+      <p>Felmérés: {result.titleHu} · Kérdéssor v{result.packVersion}</p>
+      <p>Téma vagy folyamat: {processName || result.titleHu}</p>
+      <p>Ügyfél által megadott információ · <time dateTime={result.completedAt}>{formatGrowCompletion(result.completedAt)}</time> (budapesti idő)</p>
+    </div>
     <p>{result.summaryHu}</p>
     {result.findings.map((f, i) => <article key={i} className={panel}><h3 className="text-lg font-semibold">{f.titleHu}</h3><p className="mt-2 leading-6">{f.summaryHu}</p>{f.nextCheckHu ? <p className="mt-3 leading-6"><strong>Következő ellenőrzés: </strong>{f.nextCheckHu}</p> : null}{f.evidence?.length ? <Evidence items={f.evidence} /> : null}</article>)}
     {result.unknownAreaCount > 0 ? <p>{result.unknownAreaCount} kérdésnél még nincs elég információ. Ez nem jelent hiányosságot.</p> : null}
@@ -142,7 +147,8 @@ export function GrowAdaptiveJourney({ processes, onDetailed, onNext, onFocusChan
           <h2 className="text-2xl font-semibold">Hol akad el a munka?</h2><p>Válasszon 1–3 témát. A szöveges kiegészítés nem kötelező.</p>
           <fieldset className="space-y-2"><legend className="sr-only">Működési témák</legend>{journey.categories.map(c => <label key={c.value} className={`${choice} flex items-start gap-3 ${categories.includes(c.value) ? 'border-[var(--adm-brand-green)]' : ''}`}><input type="checkbox" className="mt-1 h-5 w-5 shrink-0 accent-[var(--adm-brand-green)]" checked={categories.includes(c.value)} disabled={busy || (!categories.includes(c.value) && categories.length === 3)} onChange={() => { painKey.current = ''; setCategories(a => a.includes(c.value) ? a.filter(v => v !== c.value) : [...a, c.value]); }} /><span>{c.labelHu}</span></label>)}</fieldset>
           <label className="block space-y-2"><span>Kiegészítés (nem kötelező)</span><textarea disabled={busy} className={field} rows={3} maxLength={4000} value={freeText} onChange={e => { painKey.current = ''; setFreeText(e.target.value); }} /></label>
-          <Button variant="primary" disabled={busy || categories.length === 0} onClick={() => void submitPain()}>{busy ? 'Rögzítés…' : 'Mutassa a következő lépést'}</Button>
+          <p className="text-sm text-[var(--adm-text-secondary)]">A kiválasztott témákat és a megadott kiegészítést mentjük a visszajelzéséhez, majd megmutatjuk a következő témákat. Ebből nem jön létre automatikusan feladat vagy fejlesztési kezdeményezés.</p>
+          <Button variant="primary" disabled={busy || categories.length === 0} onClick={() => void submitPain()}>{busy ? 'Mentés…' : 'Mentés és folytatás'}</Button>
         </> : null}
         {step === 'routes' ? <><h2 className="text-2xl font-semibold">Melyik témával kezdjük?</h2><p>Most egy témát járunk körül. A többi jelzést is rögzítettük.</p><div className="space-y-2">{routes.map(r => <button key={r.packKey} type="button" className={choice} disabled={busy} onClick={() => void start(r.packKey)}>{r.titleHu} →</button>)}</div><Button variant="ghost" disabled={busy} onClick={() => setStep('pain')}>Vissza a témákhoz</Button></> : null}
         {step === 'process' ? <><h2 className="text-2xl font-semibold">Melyik folyamatban jelentkezik ez leginkább?</h2><label className="block space-y-2"><span id="grow-v2-process-label">Folyamat</span><select aria-labelledby="grow-v2-process-label" className={field} value={processId} onChange={e => { setProcessId(e.target.value); key.current = crypto.randomUUID(); }}><option value="">Válasszon folyamatot</option>{processes.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label><Button variant="primary" disabled={!processId} onClick={() => setStep('questions')}>Kérdések indítása</Button></> : null}

@@ -14,6 +14,8 @@ test('source basis overrides legacy measurement kind and strong evidence', () =>
   assert.equal(evidenceBasisCategory(evidence('MEASURED')), 'MEASURED_COMPANY');
   assert.equal(evidenceBasisCategory(evidence()), 'UNKNOWN_COMPANY');
   assert.equal(evidenceBasisCategory(evidence(null)), 'UNKNOWN_COMPANY');
+  assert.equal(evidenceBasisCategory({ ...evidence('MEASURED'), origin: 'ONLINE_VERIFIED' }), 'RESEARCH');
+  assert.equal(evidenceBasisCategory({ ...evidence('MEASURED'), origin: null }), 'UNKNOWN_COMPANY');
 });
 
 test('five source bases remain distinct and estimates explain non-measurement', () => {

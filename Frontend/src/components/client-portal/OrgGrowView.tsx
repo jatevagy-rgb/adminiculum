@@ -39,6 +39,7 @@ import {
 import { OrgGrowOperatingCanvas } from "@/components/client-portal/OrgGrowOperatingCanvas";
 import { OrgGrowContextInspector } from "@/components/client-portal/OrgGrowContextInspector";
 import { projectGrowOperatingProcess } from "@/lib/growOperatingProjection";
+import { formatGrowCompletion } from "@/lib/growResultIdentity";
 
 /**
  * Canonical customer Grow information architecture.
@@ -946,6 +947,9 @@ function OrgGrowWorkspaceView({ workspaceReference }: { workspaceReference: stri
                 <h2 className="mt-1 font-serif text-[22px] font-medium leading-tight text-[var(--adm-text)]">
                   {assessmentResult.titleHu}
                 </h2>
+                <p className={`mt-1 text-[13px] ${MUTED}`} data-testid="grow-assessment-result-identity">
+                  Felmérés: {assessmentResult.titleHu} · Kérdéssor v{assessmentResult.packVersion} · <time dateTime={assessmentResult.completedAt}>{formatGrowCompletion(assessmentResult.completedAt)}</time> (budapesti idő)
+                </p>
                 {assessmentResultScope?.processName ? (
                   <p
                     className="mt-1 text-[13px] font-medium text-[var(--adm-text)]"
@@ -953,7 +957,7 @@ function OrgGrowWorkspaceView({ workspaceReference }: { workspaceReference: stri
                   >
                     Folyamat: {assessmentResultScope.processName}
                   </p>
-                ) : null}
+                ) : <p className={`mt-1 text-[13px] ${MUTED}`}>Téma: {assessmentResult.titleHu}</p>}
                 <p className={`mt-2 text-[13px] leading-6 ${MUTED}`}>{assessmentResult.summaryHu}</p>
 
                 <div className="mt-6">

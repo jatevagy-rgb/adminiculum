@@ -181,6 +181,9 @@ async function workforce(width) {
   await shot(qa, 'assessment-result');
 
   await page.getByTestId('grow-subnav-diagnosztika').click();
+  // F17 progressive disclosure: the retained provenance panels live inside the collapsed
+  // diagnostic-technical-detail <details>, so expand it before interacting with them.
+  await page.getByTestId('diagnostic-technical-detail').locator(':scope > summary').click();
   const observations = page.getByTestId('diagnostic-observation-panel');
   await observations.getByRole('button', { name: /Folyamatpillanatk\u00e9pek/ }).click();
   assert.match(await observations.innerText(), /Becsl\u00e9sen alapul\u00f3/);

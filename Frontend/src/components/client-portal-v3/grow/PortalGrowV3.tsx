@@ -27,6 +27,7 @@ import { clientSafeError } from "@/lib/clientInteractionApi";
 import { ApiError } from "@/lib/api";
 import { SURVEY_CATEGORY_LABELS_HU } from "@/lib/growApi";
 import { projectGrowOperatingProcess } from "@/lib/growOperatingProjection";
+import { formatGrowCompletion } from "@/lib/growResultIdentity";
 import { OrgGrowOperatingCanvas } from "@/components/client-portal/OrgGrowOperatingCanvas";
 import { OrgGrowContextInspector } from "@/components/client-portal/OrgGrowContextInspector";
 import { PortalEmptyInline } from "../shared/PortalEmptyInline";
@@ -828,11 +829,14 @@ function PortalGrowWorkspaceV3({ workspaceReference }: { workspaceReference: str
                 <h2 className="mt-1 font-serif text-[22px] font-medium leading-tight text-[var(--adm-text-primary)]">
                   {assessmentResult.titleHu}
                 </h2>
+                <p className={`mt-1 text-sm ${MUTED}`} data-testid="grow-assessment-result-identity">
+                  Felmérés: {assessmentResult.titleHu} · Kérdéssor v{assessmentResult.packVersion} · <time dateTime={assessmentResult.completedAt}>{formatGrowCompletion(assessmentResult.completedAt)}</time> (budapesti idő)
+                </p>
                 {assessmentResultScope?.processName ? (
                   <p className="mt-1 text-sm font-medium text-[var(--adm-text-primary)]" data-testid="grow-assessment-result-process">
                     Folyamat: {assessmentResultScope.processName}
                   </p>
-                ) : null}
+                ) : <p className={`mt-1 text-sm ${MUTED}`}>Téma: {assessmentResult.titleHu}</p>}
                 <p className={`mt-2 text-sm leading-6 ${MUTED}`}>{assessmentResult.summaryHu}</p>
 
                 <div className="mt-6">
