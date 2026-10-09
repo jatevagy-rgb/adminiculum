@@ -27,6 +27,7 @@ function makeComplianceHarness() {
       complianceScopeLabels: {},
     },
     '@/components/clients/compliance/ComplianceDocumentsSection': { ComplianceDocumentsSection: 'div' },
+    '@/components/clients/compliance/ComplianceProfessionalSummary': { ComplianceProfessionalSummary: 'professional-summary' },
     '@/lib/complianceOverviewApi': {
       complianceOverviewApi: {
         getOverview: (id: string) => d[id].overview.promise,
@@ -84,6 +85,14 @@ async function driveToCommittedB(ctx: ReturnType<typeof makeComplianceHarness>) 
   await settle();
   tree = ctx.h.render();
   assert.ok(textOf(tree).includes('B Ügyfél'), 'route B identity committed');
+  const professional = flatten(tree).find(n => n.type === 'professional-summary');
+  assert.equal(professional?.props?.clientId, 'B', 'new default professional view receives only the committed client identity');
+  // These regressions exercise the existing state/findings loaders. Navigate to
+  // their retained tab instead of relying on the pre-Wave-1 default tab.
+  const statusTab = flatten(tree).find(n => n.props?.role === 'tab' && textOf(n) === 'Állapotkép');
+  assert.ok(statusTab, 'existing state view remains reachable');
+  statusTab.props.onClick();
+  tree = ctx.h.render();
   assert.ok(textOf(tree).includes('22'), 'route B workspace committed');
   assert.equal(renderedFindingsId(tree), 'fb', 'route B findings committed');
   return tree;
