@@ -18,6 +18,7 @@ import {
 } from "@/components/clients/compliance/ComplianceOverview";
 import type { ComplianceFindingView, ComplianceApplicabilityStatus, ComplianceControlsState } from "@/components/clients/compliance/ComplianceOverview";
 import { ComplianceWorkbench } from "@/components/clients/compliance/ComplianceWorkbench";
+import { ComplianceProfessionalSummary } from "@/components/clients/compliance/ComplianceProfessionalSummary";
 import { ComplianceDocumentsSection } from "@/components/clients/compliance/ComplianceDocumentsSection";
 import { complianceOverviewApi } from "@/lib/complianceOverviewApi";
 import { complianceWorkspaceApi, type ComplianceReconcileResult, type ComplianceWorkspace, type ComplianceWorkspaceArea } from "@/lib/complianceWorkspaceApi";
@@ -340,9 +341,10 @@ function WorkspaceAreaRow({ area, cases, clients, focusedFactKey, onFinding }: {
   );
 }
 
-type ComplianceView = "status" | "requirements" | "documents" | "controls" | "findings" | "workbench";
+type ComplianceView = "status" | "requirements" | "documents" | "controls" | "findings" | "workbench" | "professional";
 
 const complianceViewLabels: Record<ComplianceView, string> = {
+  professional: "Szakmai áttekintés",
   status: "Állapotkép",
   requirements: "Követelmények",
   documents: "Dokumentumok",
@@ -360,7 +362,8 @@ export default function ClientCompliancePage() {
   const [error, setError] = useState(false);
   const [modeError, setModeError] = useState(false);
   const [organizationMode, setOrganizationMode] = useState(false);
-  const [view, setView] = useState<ComplianceView>("status");
+  const [view, setView] = useState<ComplianceView>("professional");
+  const [workbenchTarget, setWorkbenchTarget] = useState<{ clientId: string; rowId: string } | null>(null);
   const [findingTarget, setFindingTarget] = useState<string | null>(null);
   const [requirementsTarget, setRequirementsTarget] = useState<{ clientId: string; applicabilityId: string; factKey: string } | null>(null);
   const [clientCases, setClientCases] = useState<CaseListItem[]>([]);
@@ -639,6 +642,11 @@ export default function ClientCompliancePage() {
                     ))}
                   </div>
 
+                  {view === "professional" ? <ComplianceProfessionalSummary key={client.id} clientId={client.id} clientName={client.name} onNavigate={(nextView, rowId) => {
+                    setWorkbenchTarget(rowId ? { clientId: client.id, rowId } : null);
+                    setView(nextView);
+                  }} /> : null}
+
                   {view === "status" ? (
                     <>
                       <Section title="Állapotkép">
@@ -798,7 +806,7 @@ export default function ClientCompliancePage() {
                     )
                   ) : null}
 
-                  {view === "workbench" ? <ComplianceWorkbench key={client.id} clientId={client.id} onNavigate={(nextView, target) => {
+                  {view === "workbench" ? <ComplianceWorkbench key={client.id} clientId={client.id} focusRowId={workbenchTarget?.clientId === client.id ? workbenchTarget.rowId : undefined} onNavigate={(nextView, target) => {
                     if (nextView === "requirements" && target) setRequirementsTarget({ clientId, ...target });
                     else setRequirementsTarget(null);
                     setView(nextView);
