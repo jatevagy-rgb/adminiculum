@@ -90,10 +90,10 @@ const complianceControlStatusLabels: Record<string, string> = {
 };
 
 export const complianceGapLabels: Record<ComplianceControlGap, string> = {
-  EVIDENCED: "Bizonyítékkal alátámasztva",
+  EVIDENCED: "Látható aktuális bizonyíték",
   MISSING_CONTROL: "Hiányzó intézkedés",
-  STALE_EVIDENCE: "Elavult bizonyíték",
-  MISSING_EVIDENCE: "Hiányzó bizonyíték",
+  STALE_EVIDENCE: "Látható bizonyíték elavult",
+  MISSING_EVIDENCE: "Nincs látható aktuális bizonyíték",
   NOT_ASSESSED: "Nincs felmérve",
 };
 
@@ -185,7 +185,7 @@ export function ComplianceControlEvidencePanel({
   return (
     <div className="mt-3 space-y-3 rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold text-[var(--adm-text)]">Rögzített bizonyítékok</p>
+        <p className="text-xs font-semibold text-[var(--adm-text)]">Ön számára látható bizonyítékok</p>
         {busy ? <span className="text-xs text-[var(--adm-text-muted)]">Folyamatban…</span> : null}
       </div>
       {error ? <p role="alert" className="text-xs text-red-800">{error}</p> : null}
@@ -213,7 +213,7 @@ export function ComplianceControlEvidencePanel({
           ))}
         </ul>
       ) : (
-        <p className="text-xs text-[var(--adm-text-muted)]">Ehhez az intézkedéshez még nincs rögzített bizonyíték.</p>
+        <p className="text-xs text-[var(--adm-text-muted)]">Ehhez az intézkedéshez nincs látható bizonyíték. Ez nem igazolja, hogy irodai szinten sem rögzítettek bizonyítékot.</p>
       )}
       {adding ? (
         <form className="space-y-2" onSubmit={(event) => { event.preventDefault(); onSubmitAdd(); }}>
@@ -333,7 +333,7 @@ export function ComplianceControlsSection({
                 <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Felülvizsgálati ütem: {control.reviewCadenceDays} nap</p>
               ) : null}
               <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
-                Bizonyíték: {control.evidenceSummary.acceptedCurrent} aktuális · {control.evidenceSummary.stale} felülvizsgálandó
+                Látható bizonyíték: {control.evidenceSummary.acceptedCurrent} aktuális · {control.evidenceSummary.stale} felülvizsgálandó
               </p>
               {Array.isArray(control.evidence) ? (
                 control.evidence.length ? (
@@ -347,7 +347,7 @@ export function ComplianceControlsSection({
                     ))}
                   </ul>
                 ) : (
-                  <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Nincs csatolt bizonyíték.</p>
+                  <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Nincs látható bizonyíték. Hozzáférési korlát mellett ez nem jelent teljes irodai hiányt.</p>
                 )
               ) : null}
               {control.nextReviewAt ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Következő felülvizsgálat: {control.nextReviewAt.slice(0, 10)}</p> : null}
