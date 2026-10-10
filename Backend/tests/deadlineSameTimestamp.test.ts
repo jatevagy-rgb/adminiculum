@@ -7,6 +7,8 @@ const mockPrismaService: any = {
   case: { findMany: jest.fn(), findUnique: jest.fn() },
   caseCollaborator: { findMany: jest.fn(), findFirst: jest.fn() },
   caseIntakeDeadline: { findMany: jest.fn() },
+  document: { findMany: jest.fn() },
+  documentReview: { findMany: jest.fn() },
   task: { findMany: jest.fn() },
   notification: { findMany: jest.fn(), count: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
 };
@@ -73,6 +75,8 @@ function resetMocks() {
   mockPrismaService.caseCollaborator.findMany.mockResolvedValue([]);
   mockPrismaService.caseCollaborator.findFirst.mockResolvedValue(null);
   mockPrismaService.caseIntakeDeadline.findMany.mockResolvedValue([]);
+  mockPrismaService.document.findMany.mockResolvedValue([]);
+  mockPrismaService.documentReview.findMany.mockResolvedValue([]);
   mockPrismaService.task.findMany.mockResolvedValue([]);
   mockPrismaService.notification.findMany.mockResolvedValue([]);
   mockPrismaService.notification.count.mockResolvedValue(0);

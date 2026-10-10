@@ -19,6 +19,8 @@ function db() {
     ).slice(0, take)) },
     case: { findMany: jest.fn(async (_query: any) => []) },
     caseIntakeDeadline: { findMany: jest.fn(async (_query: any) => []) },
+    document: { findMany: jest.fn(async (_query: any) => []) },
+    documentReview: { findMany: jest.fn(async (_query: any) => []) },
   };
 }
 
@@ -35,7 +37,7 @@ test('overdue queue includes months-old open work while the default calendar rem
   expect(oldQuery.take).toBe(101);
   expect(calendarQuery.where.dueDate).toHaveProperty('gte');
   expect(calendarQuery.where.dueDate).toHaveProperty('lte');
-  for (const model of [database.case, database.caseIntakeDeadline]) {
+  for (const model of [database.case, database.caseIntakeDeadline, database.document, database.documentReview]) {
     expect(model.findMany.mock.calls[0][0]).toMatchObject({ take: 101 });
   }
 });

@@ -23,9 +23,23 @@ const URGENCY_LABELS: Record<WorkflowDeadlineUrgency, string> = {
   LATER: "Később",
 };
 
+type DeadlineGroup = "OVERDUE" | "TODAY" | "NEXT_7_DAYS" | "LATER";
+const GROUP_LABELS: Record<DeadlineGroup, string> = {
+  OVERDUE: "Lejárt",
+  TODAY: "Ma",
+  NEXT_7_DAYS: "Következő 7 nap",
+  LATER: "Később",
+};
+
+function deadlineGroup(urgency: WorkflowDeadlineUrgency): DeadlineGroup {
+  return urgency === "TOMORROW" || urgency === "THIS_WEEK" ? "NEXT_7_DAYS" : urgency;
+}
+
 const SOURCE_LABELS: Record<string, string> = {
   TASK: "Feladat-határidő",
   CASE_DEADLINE: "Ügyhatáridő",
+  DOCUMENT_WORK: "Dokumentummunka határideje",
+  DOCUMENT_REVIEW: "Verziófelülvizsgálat határideje",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -38,6 +52,8 @@ const STATUS_LABELS: Record<string, string> = {
 function openCtaLabel(item: WorkflowDeadlineItem, caseHref: string): string {
   if (item.href === caseHref || item.sourceType === "CASE_DEADLINE") return "Ügy megnyitása";
   if (item.sourceType === "TASK") return "Feladat megnyitása";
+  if (String(item.sourceType) === "DOCUMENT_WORK") return "Dokumentummunka megnyitása";
+  if (String(item.sourceType) === "DOCUMENT_REVIEW") return "Pontos verzió felülvizsgálata";
   return "Megnyitás";
 }
 
@@ -129,7 +145,7 @@ function DeadlinesAgendaContent() {
   const [scope, setScope] = useState<"MY_WORK" | "MY_CASES" | "CASE">(initialScope);
   const [caseId] = useState(initialCaseId);
   const [status, setStatus] = useState<"OPEN" | "COMPLETED" | "ALL">("OPEN");
-  const [urgencyFilter, setUrgencyFilter] = useState<WorkflowDeadlineUrgency | "ALL">("ALL");
+  const [urgencyFilter, setUrgencyFilter] = useState<DeadlineGroup | "ALL">("ALL");
   const [calendarView, setCalendarView] = useState<"agenda" | "day" | "week">(initialView);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -200,14 +216,14 @@ function DeadlinesAgendaContent() {
       if (calendarView === "day") return dueDay === today;
       return dueDay >= today && dueDay < end;
     });
-    return urgencyFilter === "ALL" ? viewItems : viewItems.filter((item) => item.urgency === urgencyFilter);
+    return urgencyFilter === "ALL" ? viewItems : viewItems.filter((item) => deadlineGroup(item.urgency) === urgencyFilter);
   }, [calendarView, flatItems, urgencyFilter]);
   const groupedItems = useMemo(() => {
-    const order: WorkflowDeadlineUrgency[] = ["OVERDUE", "TODAY", "TOMORROW", "THIS_WEEK", "LATER"];
+    const order: DeadlineGroup[] = ["OVERDUE", "TODAY", "NEXT_7_DAYS", "LATER"];
     return order
       .map((urgency) => ({
         urgency,
-        items: visibleItems.filter((item) => item.urgency === urgency),
+        items: visibleItems.filter((item) => deadlineGroup(item.urgency) === urgency),
       }))
       .filter((group) => group.items.length > 0);
   }, [visibleItems]);
@@ -276,14 +292,11 @@ function DeadlinesAgendaContent() {
           ))}
         </div>
 
-        <div className="mt-3 grid gap-0 overflow-hidden rounded-[12px] border border-[#E5E7E6] bg-white sm:grid-cols-5">
-          {[
-            ["OVERDUE", "Lejárt"], ["TODAY", "Ma"], ["TOMORROW", "Holnap"],
-            ["THIS_WEEK", "Ezen a héten"], ["LATER", "Később"],
-          ].map(([valueKey, label]) => (
-            <button key={label} type="button" aria-pressed={urgencyFilter === valueKey} onClick={() => setUrgencyFilter(urgencyFilter === valueKey ? "ALL" : valueKey as WorkflowDeadlineUrgency)} className={`flex items-center justify-between border-r border-[#E5E7E6] px-3 py-3 text-left last:border-r-0 ${urgencyFilter === valueKey ? "bg-[#F8FAF9] outline outline-1 outline-inset outline-[#0F3D32]" : "bg-white hover:bg-[#F8FAF9]"}`}>
-              <p className="text-xs font-semibold text-[#6B7280]">{label}</p>
-              <p className="text-base font-bold text-[#1F2937]">{loading || !agenda ? "—" : `${flatItems.filter((item) => item.status === "OPEN" && item.urgency === valueKey).length}${(valueKey === "OVERDUE" ? overdue?.pagination.hasMore : agenda.pagination.hasMore) ? "+" : ""}`}</p>
+        <div className="mt-3 grid gap-0 overflow-hidden rounded-[12px] border border-[#E5E7E6] bg-white sm:grid-cols-4">
+          {(["OVERDUE", "TODAY", "NEXT_7_DAYS", "LATER"] as DeadlineGroup[]).map((valueKey) => (
+            <button key={valueKey} type="button" aria-pressed={urgencyFilter === valueKey} onClick={() => setUrgencyFilter(urgencyFilter === valueKey ? "ALL" : valueKey)} className={`flex items-center justify-between border-r border-[#E5E7E6] px-3 py-3 text-left last:border-r-0 ${urgencyFilter === valueKey ? "bg-[#F8FAF9] outline outline-1 outline-inset outline-[#0F3D32]" : "bg-white hover:bg-[#F8FAF9]"}`}>
+              <p className="text-xs font-semibold text-[#6B7280]">{GROUP_LABELS[valueKey]}</p>
+              <p className="text-base font-bold text-[#1F2937]">{loading || !agenda ? "—" : `${flatItems.filter((item) => item.status === "OPEN" && deadlineGroup(item.urgency) === valueKey).length}${(valueKey === "OVERDUE" ? overdue?.pagination.hasMore : agenda.pagination.hasMore) ? "+" : ""}`}</p>
             </button>
           ))}
         </div>
@@ -303,7 +316,7 @@ function DeadlinesAgendaContent() {
             {groupedItems.map((group) => (
               <section key={group.urgency} className="overflow-hidden rounded-[12px] border border-[#E5E7E6] bg-white">
                 <div className="mb-2 flex items-center justify-between">
-                  <h2 className="px-3 pt-3 text-xs font-bold uppercase tracking-[0.18em] text-[#6B7280]">{URGENCY_LABELS[group.urgency]}</h2>
+                  <h2 className="px-3 pt-3 text-xs font-bold uppercase tracking-[0.18em] text-[#6B7280]">{GROUP_LABELS[group.urgency]}</h2>
                   <span className="px-3 pt-3 text-xs text-[#6B7280]">{group.items.length} tétel</span>
                 </div>
                 <div className="divide-y divide-[#E5E7E6]">
