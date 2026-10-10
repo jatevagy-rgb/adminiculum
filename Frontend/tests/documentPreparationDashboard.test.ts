@@ -251,7 +251,13 @@ describe("Document preparation — placement and preservation", () => {
     }
     assert.match(source, /CaseTimeBillingSummary/);
     assert.match(source, /data-testid="case-workspace-quick-actions"/);
-    assert.match(source, /reviewSummary\?\.currentVersionId/);
+    assert.match(source, /getTaskDocuments\(taskId\)/);
+    assert.match(source, /data-testid="next-task-linked-documents"/);
+    assert.match(source, /readTaskSubmissionWorkflow\(taskId\)/);
+    assert.match(source, /data-testid="next-task-submitted-outputs"/);
+    assert.match(source, /versionId=\$\{encodeURIComponent\(document\.documentVersionId\)\}/);
+    assert.match(source, /A leadott verzió nincs rögzítve\./);
+    assert.doesNotMatch(source, /nextTask\?\.documentId/);
   });
 
   it("18. desktop uses a clean 2x2 tile layout", () => {
