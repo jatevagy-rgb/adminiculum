@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getCases,
   getClients,
@@ -31,7 +31,7 @@ import {
   type DashboardPrimaryActionIcon,
 } from "@/lib/dashboardPresentation";
 import { taskStatusLabel } from "@/lib/taskWorkflowPresentation";
-import { listTaskReviewQueue } from "@/lib/taskLifecycleApi";
+import { listTaskReviewQueue, type TaskReviewQueueItem } from "@/lib/taskLifecycleApi";
 import {
   deriveDashboardAvailability,
   getDashboardGlobalFailure,
@@ -57,6 +57,8 @@ import {
 import { CompactState, OperationalPageHeader, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
 import { AdminButton } from "@/components/adminiculum/ui";
 import { ClientAccent } from "@/components/clients/ClientAccent";
+
+import { HomeAttention } from "@/components/agenda/HomeAttention";
 
 type NewsArticle = {
   title: string;
@@ -348,12 +350,16 @@ function DashboardAttentionWorkloadBlock({
 }
 
 export function DashboardFocused() {
+  const loadGeneration = useRef(0);
   const [cases, setCases] = useState<CaseListItem[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [communications, setCommunications] = useState<CommunicationItem[]>([]);
   const [agenda, setAgenda] = useState<WorkflowAgendaResponse | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [operational, setOperational] = useState<DashboardOperationalOverview | null>(null);
+  const [attentionTasks, setAttentionTasks] = useState<TaskItem[] | null>(null);
+  const [attentionReviews, setAttentionReviews] = useState<TaskReviewQueueItem[] | null>(null);
+  const [attentionOverdue, setAttentionOverdue] = useState<WorkflowAgendaResponse | null>(null);
   const [reviewQueueCount, setReviewQueueCount] = useState<number | null>(null);
   const [news, setNews] = useState<NewsArticle[]>([]);
   const [availability, setAvailability] = useState<DashboardAvailability>(UNAVAILABLE);
@@ -363,12 +369,13 @@ export function DashboardFocused() {
   const [signalsExpanded, setSignalsExpanded] = useState(false);
 
   const load = useCallback(async () => {
+    const request = ++loadGeneration.current;
     setLoading(true);
     setError(false);
     setAvailability(UNAVAILABLE);
     setReviewQueueCount(null);
     try {
-      const [taskResult, caseResult, clientResult, communicationResult, agendaResult, statsResult, operationalResult, reviewQueueResult] = await Promise.all([
+      const [taskResult, caseResult, clientResult, communicationResult, agendaResult, statsResult, operationalResult, reviewQueueResult, overdueResult] = await Promise.all([
         getMyTasks().catch(() => null),
         getCases(1, 200).catch(() => null),
         getClients().catch(() => null),
@@ -377,9 +384,14 @@ export function DashboardFocused() {
         getDashboardStats().catch(() => null),
         getDashboardOperationalOverview().catch(() => null),
         listTaskReviewQueue().catch(() => null),
+        getWorkflowAgenda({ scope: "MY_WORK", status: "OPEN", queue: "OVERDUE", limit: 50 }).catch(() => null),
       ]);
 
+      if (request !== loadGeneration.current) return;
       setReviewQueueCount(reviewQueueSummaryCount(reviewQueueResult));
+      setAttentionTasks(taskResult);
+      setAttentionReviews(reviewQueueResult);
+      setAttentionOverdue(overdueResult);
       setCases(caseResult?.data || []);
       setClients(clientResult?.data || []);
       setCommunications(communicationResult?.communications || []);
@@ -390,14 +402,15 @@ export function DashboardFocused() {
       setAvailability(deriveDashboardAvailability(endpointResults));
       setError(getDashboardGlobalFailure(endpointResults));
     } catch {
-      setError(true);
+      if (request === loadGeneration.current) setError(true);
     } finally {
-      setLoading(false);
+      if (request === loadGeneration.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     void load();
+    return () => { loadGeneration.current += 1; };
   }, [load]);
 
   useEffect(() => {
@@ -504,12 +517,17 @@ export function DashboardFocused() {
   const primaryActions = getDashboardPrimaryActions(activeCase?.id);
 
   return (
-    <div className="min-h-full bg-[var(--adm-ivory-50)] px-4 py-4 lg:px-6">
+    <div className="min-h-full bg-white px-4 py-4 lg:px-6">
       <div className="mx-auto max-w-[1380px] space-y-7 pb-8">
         <OperationalPageHeader
           title="Műszerfal"
         />
 
+        <HomeAttention agenda={agenda} overdue={attentionOverdue} reviews={attentionReviews} tasks={attentionTasks} operational={operational} loading={loading} />
+        <AdminButton size="sm" variant="neutral" disabled={loading} onClick={() => void load()}>Munkalisták frissítése</AdminButton>
+        <details className="rounded-xl border border-[var(--adm-border)] bg-white p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-[var(--adm-green-800)] focus-visible:outline focus-visible:outline-2">További munkanézetek és gyors műveletek</summary>
+          <div className="mt-5 space-y-7">
         <section aria-labelledby="dashboard-actions-heading">
           <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -698,6 +716,8 @@ export function DashboardFocused() {
             </div>
           </details>
         ) : null}
+          </div>
+        </details>
       </div>
     </div>
   );
