@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 import * as jsx from 'react/jsx-runtime';
+import { Children } from 'react';
 
 // Deterministic async-race harness.
 //
@@ -90,6 +91,7 @@ export function createRaceHarness(
   };
 
   const hooks = {
+    Children,
     useState(initial: any) {
       const i = cursor++;
       if (!(i in slots)) slots[i] = typeof initial === 'function' ? initial() : initial;

@@ -1,11 +1,12 @@
 "use client";
 
+import { Children, useState, type ReactNode } from "react";
 import type { DashboardOperationalOverview, TaskItem, WorkflowAgendaResponse } from "@/lib/api";
 import type { TaskReviewQueueItem } from "@/lib/taskLifecycleApi";
 import { agendaRows, deadlineBucket, isOpenWork } from "@/lib/agendaPresentation";
 import { decisionOrderReason, exactReviewHref, orderDecisionQueue } from "@/lib/reviewQueuePresentation";
 import { formatDeadline } from "@/lib/businessDateTime";
-import { QuietLink } from "@/components/ui";
+import { Button, QuietLink } from "@/components/ui";
 
 type Props = {
   agenda: WorkflowAgendaResponse | null;
@@ -37,6 +38,19 @@ function AttentionRow({ title, detail, href, action = "Megnyitás" }: { title: s
   </li>;
 }
 
+function AttentionList({ id, children }: { id: string; children: ReactNode }) {
+  const [expanded, setExpanded] = useState(false);
+  const rows = Children.toArray(children);
+  return <>
+    <ul id={id} className={expanded ? undefined : "max-lg:[&>li:nth-child(n+4)]:hidden lg:[&>li:nth-child(n+6)]:hidden"}>{rows}</ul>
+    {rows.length > 3 ? <div className={`px-4 py-3 ${rows.length <= 5 ? "lg:hidden" : ""}`}>
+      <Button size="sm" variant="neutral" aria-expanded={expanded} aria-controls={id} onClick={() => setExpanded(!expanded)}>
+        {expanded ? "Kevesebb mutatása" : <><span className="lg:hidden">További {rows.length - 3} tétel</span>{rows.length > 5 ? <span className="hidden lg:inline">További {rows.length - 5} tétel</span> : null}</>}
+      </Button>
+    </div> : null}
+  </>;
+}
+
 /** Only composes already-authorized read DTOs; never grants decision or mutation authority. */
 export function HomeAttention({ agenda, overdue, reviews, tasks, operational, loading, now = new Date() }: Props) {
   const urgent = agendaRows([agenda, overdue], now).filter((item) => ["OVERDUE", "TODAY"].includes(deadlineBucket(item, now)));
@@ -51,19 +65,17 @@ export function HomeAttention({ agenda, overdue, reviews, tasks, operational, lo
     <p className="text-sm text-[var(--adm-text-secondary)]">Sürgős munka → döntések → elakadások és várakozás → folytatás. A listák rögzített forrásokra mutatnak.</p>
     <div className="grid gap-4 xl:grid-cols-2">
       <AttentionSection id="home-urgent" title="Sürgős" href="/agenda" loading={loading} unavailable={!agenda || !overdue} empty={urgent.length === 0}>
-        <ul>{urgent.slice(0, 5).map((item) => <AttentionRow key={item.id} title={item.title} detail={`${deadlineBucket(item, now) === "OVERDUE" ? "Lejárt" : "Ma"} · ${formatDeadline(item.dueAt, item.temporalType || (item.allDay ? "DATE_ONLY" : "TIMESTAMP"))} · ${item.source.displayName || "Forrás neve nincs rögzítve"}`} href={item.capabilities.canOpen ? item.href : null} />)}</ul>
-        {!loading && (urgent.length > 5 || agenda?.pagination.hasMore || overdue?.pagination.hasMore) ? <p className="px-4 pb-3 text-xs text-[var(--adm-text-secondary)]">Részleges előnézet; a teljes betöltött lista és további tételek az Agendában.</p> : null}
+        <AttentionList id="home-urgent-items">{urgent.map((item) => <AttentionRow key={item.id} title={item.title} detail={`${deadlineBucket(item, now) === "OVERDUE" ? "Lejárt" : "Ma"} · ${formatDeadline(item.dueAt, item.temporalType || (item.allDay ? "DATE_ONLY" : "TIMESTAMP"))} · ${item.source.displayName || "Forrás neve nincs rögzítve"}`} href={item.capabilities.canOpen ? item.href : null} />)}</AttentionList>
+        {!loading && (agenda?.pagination.hasMore || overdue?.pagination.hasMore) ? <p className="px-4 pb-3 text-xs text-[var(--adm-text-secondary)]">Részleges előnézet; a teljes betöltött lista és további tételek az Agendában.</p> : null}
       </AttentionSection>
       <AttentionSection id="home-decisions" title="Döntések" href="/reviews" loading={loading} unavailable={reviews === null} empty={decisions.length === 0}>
-        <ul>{decisions.slice(0, 5).map((item) => <AttentionRow key={item.id} title={item.title} detail={`${item.case.caseNumber} · ${decisionOrderReason(item, now)}${item.readOnly ? " · Csak megtekintés" : ""}`} href={exactReviewHref(item)} action={item.source === "TASK_SUBMISSION" ? "Leadás megnyitása" : "Feladat megnyitása"} />)}</ul>
-        {!loading && decisions.length > 5 ? <p className="px-4 pb-3 text-xs text-[var(--adm-text-secondary)]">Az első 5 tétel; a teljes döntési sor a Review munkanézetben.</p> : null}
+        <AttentionList id="home-decisions-items">{decisions.map((item) => <AttentionRow key={item.id} title={item.title} detail={`${item.case.caseNumber} · ${decisionOrderReason(item, now)}${item.readOnly ? " · Csak megtekintés" : ""}`} href={exactReviewHref(item)} action={item.source === "TASK_SUBMISSION" ? "Leadás megnyitása" : "Feladat megnyitása"} />)}</AttentionList>
       </AttentionSection>
       <AttentionSection id="home-waiting" title="Elakadások és várakozás" href="/tasks" loading={loading} unavailable={tasks === null || !operational} empty={blocked.length + waiting.length === 0}>
-        <ul>
-          {blocked.slice(0, 3).map((task) => <AttentionRow key={`task:${task.id}`} title={task.title} detail={`Rögzített elakadás · ${task.case.caseNumber} · ${task.case.clientName}`} href={`/tasks?taskId=${encodeURIComponent(task.id)}`} />)}
-          {waiting.slice(0, 3).map((item) => <AttentionRow key={`case:${item.id}`} title={item.title} detail={`${item.waitingLabel} · ${item.client.displayName}`} href={item.nextAction.href || item.openHref} />)}
-        </ul>
-        {!loading && (blocked.length > 3 || waiting.length > 3) ? <p className="px-4 pb-3 text-xs text-[var(--adm-text-secondary)]">Részleges előnézet; az ügyek és saját feladatok munkanézeteiben további tételek találhatók.</p> : null}
+        <AttentionList id="home-waiting-items">
+          {blocked.map((task) => <AttentionRow key={`task:${task.id}`} title={task.title} detail={`Rögzített elakadás · ${task.case.caseNumber} · ${task.case.clientName}`} href={`/tasks?taskId=${encodeURIComponent(task.id)}`} />)}
+          {waiting.map((item) => <AttentionRow key={`case:${item.id}`} title={item.title} detail={`${item.waitingLabel} · ${item.client.displayName}`} href={item.nextAction.href || item.openHref} />)}
+        </AttentionList>
       </AttentionSection>
       <AttentionSection id="home-resume" title="Munka folytatása" href="/tasks" loading={loading} unavailable={!operational} empty={!resume}>
         <ul>{resume ? <AttentionRow title={resume.title} detail={`${resume.case.caseNumber} · ${resume.case.client.displayName}`} href={resumeHref} action={resume.actionLabel} /> : null}</ul>
