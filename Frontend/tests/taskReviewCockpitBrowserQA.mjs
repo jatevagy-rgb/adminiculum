@@ -14,10 +14,11 @@ const bundle = await build({ stdin: { contents: `
 import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {TaskReviewWorkspace} from './src/components/tasks/TaskReviewWorkspace';
-import {reviewFixture,workflowFixture} from './tests/fixtures/taskReviewCockpit.fixture';
+import {reviewFixture,workflowFixture,longNoteFixture} from './tests/fixtures/taskReviewCockpit.fixture';
 const root=createRoot(document.getElementById('root'));
 window.reset=(mode='reviewer')=>{
  window.mode=mode;window.review=reviewFixture();window.workflow=workflowFixture();window.calls=[];window.cockpitClosed=0;
+ if(mode==='long-note') Object.assign(window,longNoteFixture());
  if(mode==='readonly'||mode==='self') {window.review.permittedActions.approve=false;window.review.permittedActions.return=false;}
  if(mode==='self') window.review.submission.assignedReviewer=window.review.submission.submittedBy;
  root.render(<TaskReviewWorkspace key={mode+Date.now()} item={{taskId:'task-1',submissionId:'submission-1'}} onClose={()=>window.cockpitClosed++} onQueueChanged={()=>undefined}/>);
@@ -55,11 +56,36 @@ try {
     assert.equal(await page.getByText('A leadott verzió nincs rögzítve.', {exact:true}).count(),1);
     await page.getByLabel('Kiválasztott eredmény').selectOption('output-1');
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'horizontal overflow');
+    await page.evaluate(()=>window.reset('long-note'));
+    await page.getByText(/Hosszú leadási megjegyzés/).first().waitFor();
+    const region=page.getByRole('region',{name:'Leadás döntési adatai'});
+    assert.equal(await region.evaluate(el=>el.scrollHeight>el.clientHeight+1 && /auto|scroll/.test(getComputedStyle(el).overflowY)),false,'main content must not trap scrolling');
+    assert.ok((await region.boundingBox()).height>2000,'fixture must exceed the viewport');
+    assert.equal(await page.evaluate(()=>/hidden|clip/.test(getComputedStyle(document.body).overflowY)),false,'page must not lock');
     if(width<1280) {
-      const body=await page.getByRole('region',{name:'Leadás döntési adatai'}).boundingBox();
-      const footer=await page.locator('[data-review-section="DecisionActions"]').boundingBox();
-      assert.ok(body.y+body.height<=footer.y,'decision footer must not cover the scrollable source content');
+      for(const fraction of [0,0.35,0.7,1]) {
+        await region.evaluate((el,f)=>window.scrollTo(0,el.offsetTop+(el.offsetHeight-innerHeight)*f),fraction);
+        await page.waitForTimeout(50);
+        const footer=await page.locator('[data-review-section="DecisionActions"]').boundingBox();
+        assert.ok(footer.height<150,'sticky bar remains bounded');
+        for(const name of ['Jóváhagyás','Visszaküldés']) {
+          const button=page.getByRole('button',{name,exact:true});
+          assert.equal(await button.count(),1,'single decision CTA');
+          const box=await button.boundingBox();
+          assert.ok(box.y>=0 && box.y+box.height<=1000,'decision remains in viewport while reading');
+          assert.equal(await button.evaluate(el=>{const r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));}),true,'decision is unobscured');
+        }
+      }
+      await page.screenshot({path:path.join(destination,`long-note-${width}.png`)});
+    } else {
+      assert.equal(await page.locator('[data-review-section="DecisionActions"]').evaluate(el=>getComputedStyle(el).position),'static','desktop composition remains static');
     }
+    for(const name of ['Jóváhagyás','Visszaküldés']) {
+      await page.getByRole('button',{name,exact:true}).click();await page.getByRole('dialog').waitFor();
+      await page.keyboard.press('Escape');await page.getByRole('dialog').waitFor({state:'hidden'});
+    }
+    await page.evaluate(()=>window.reset('reviewer'));await page.getByTestId('review-cockpit').waitFor();
+    await page.evaluate(()=>window.scrollTo(0,0));
     await page.screenshot({path:path.join(destination,`cockpit-${width}.png`),fullPage:true});
     const returnButton=page.getByRole('button',{name:'Visszaküldés',exact:true});
     await returnButton.click();

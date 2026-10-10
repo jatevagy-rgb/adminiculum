@@ -27,7 +27,7 @@ export function TaskReviewCockpitContent({ review, workflow, actions, externalAc
   const groups = output ? review.documentReviews.filter((group) => group.documentId === output.documentId && group.documentVersionId === output.documentVersionId) : [];
 
   return <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]" data-testid="review-cockpit">
-    <div className="grid min-w-0 max-h-[calc(100dvh-22rem)] gap-4 overflow-y-auto overscroll-contain pr-1 focus-visible:outline focus-visible:outline-2 xl:col-span-2 xl:max-h-none xl:overflow-visible xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]" role="region" aria-label="Leadás döntési adatai" tabIndex={0}>
+    <div className="grid min-w-0 gap-4 pr-1 focus-visible:outline focus-visible:outline-2 xl:col-span-2 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]" role="region" aria-label="Leadás döntési adatai" tabIndex={0}>
     <section className={`${panel} xl:col-span-2`} data-review-section="ReviewIdentity" aria-label="Leadás azonosítása">
       <div className="flex flex-wrap gap-2"><AdminStatusPill tone="gold">{submissionStatusLabel(review.submission.status, review.submission.revisionNumber)}</AdminStatusPill><AdminStatusPill tone="neutral">{taskStatusLabel(review.task.status)}</AdminStatusPill><AdminStatusPill tone={urgency === "CRITICAL" ? "burgundy" : urgency === "URGENT" ? "amber" : "neutral"}>{URGENCY_LABELS[urgency]}</AdminStatusPill></div>
       <dl className="mt-3 grid grid-cols-2 gap-3 text-sm xl:grid-cols-4">
@@ -90,7 +90,7 @@ export function TaskReviewCockpitContent({ review, workflow, actions, externalAc
 
     </div>
 
-    <section className="min-w-0 rounded-lg border border-[var(--adm-border)] bg-white p-3 shadow-sm xl:col-start-1" data-review-section="DecisionActions" aria-label="Döntési műveletek">
+    <section className={`min-w-0 rounded-lg border border-[var(--adm-border)] bg-white p-3 shadow-sm xl:col-start-1 ${actions ? "sticky bottom-0 z-10 pb-[max(0.75rem,env(safe-area-inset-bottom))] xl:static xl:z-auto xl:pb-3" : ""}`} data-review-section="DecisionActions" aria-label="Döntési műveletek">
       {review.decision && <div className="mb-3 space-y-2 text-sm"><p className="font-semibold">{review.decision.decision === "RETURNED" ? "Visszaküldve" : "Jóváhagyva"} · {review.decision.reviewer.displayName} · {formatDateTime(review.decision.createdAt)}</p>{review.decision.note && <p className="whitespace-pre-wrap">{review.decision.note}</p>}{review.decision.requestedCorrections && <p className="whitespace-pre-wrap">Kért javítások: {review.decision.requestedCorrections}</p>}{review.decision.decision === "RETURNED" && <p>Teljes review: {review.decision.requiresFullReview ? "Szükséges" : "Nem kért"} · Javítási határidő: {review.decision.correctionDeadline ? formatDate(review.decision.correctionDeadline) : "Nincs rögzítve"}</p>}</div>}
       {externalAction}{actions}
       {review.submission.status === "APPROVED" && <div className="mt-3 text-sm"><p>A leadás jóváhagyott. Az ügyfélnek szánt tartalom és a közzététel külön ellenőrzést igényel.</p>{outputHref ? <QuietLink href={`${outputHref}&mode=review#approval-publication-tools`}>Ügyfélnek közzététel előkészítése</QuietLink> : <p className="mt-2">A dokumentum közzétételéhez pontos verzió szükséges.</p>}</div>}

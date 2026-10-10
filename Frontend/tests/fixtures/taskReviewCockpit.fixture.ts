@@ -24,3 +24,18 @@ export function reviewFixture(): TaskSubmissionReviewDetail {
 export function workflowFixture(): TaskSubmissionWorkflow {
   return { task: { id: "task-1", title: "Szerződés döntési ellenőrzése", description: "Ellenőrizze a szerződés felmondási feltételét.", status: "IN_REVIEW", priority: "HIGH", dueDate: null, caseId: "case-1", matterId: "matter-1", assignee: null, case: { id: "case-1", caseNumber: "TESZT/001", title: "Teszt", client: { id: "client-1", name: "Teszt" } } }, activeDraft: null, submissions: [], latestSubmittedRevision: null, latestDecision: null, currentReviewer: null, responsibleLawyerFlow: true, responsibleLawyer: null, readiness: null, permittedActions: { read: true, createDraft: false, editDraft: false, attachDocument: false, attachTimeEntry: false, assignReviewer: false, submit: false, reviewSubmitted: true, reviseReturned: false, recordExternalCompletion: false }, nextActionCode: "REVIEW_SUBMISSION" };
 }
+
+export function longNoteFixture() {
+  const review = reviewFixture();
+  const workflow = workflowFixture();
+  const note = "Hosszú leadási megjegyzés: a szerződés részletes ellenőrzése és a kapcsolódó döntési szempontok.\n".repeat(40);
+  review.submission.workSummary = note;
+  workflow.task.description = note;
+  workflow.submissions = [{
+    ...review.submission, taskId: review.task.id, createdBy: review.submission.assignedReviewer,
+    reviewerNote: note, createdAt: "2026-10-08T10:00:00Z", updatedAt: "2026-10-08T10:00:00Z",
+    returnedAt: null, approvedAt: null, supersededAt: null, reviewDecision: null,
+    documents: [], timeEntries: [], documentCount: review.outputs.length, linkedTimeMinutes: 0,
+  }];
+  return { review, workflow };
+}
