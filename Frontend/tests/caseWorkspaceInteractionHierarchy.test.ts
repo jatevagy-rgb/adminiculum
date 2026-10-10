@@ -23,11 +23,15 @@ test("secondary deep links reveal all ancestor details after asynchronous load",
   assert.ok(source.includes("removeEventListener('hashchange'"));
   for (const id of ['ck-starting-context', 'ck-work-package', 'ck-notes', 'ck-activity', 'ck-time']) assert.ok(source.includes('id="' + id + '"'));
 });
-test("review work and active document use canonical identities", () => {
+test("review work and next-task documents use their canonical relationship identities", () => {
   assert.ok(source.includes('Ellenőrzés és jóváhagyás'));
   assert.ok(source.includes('data-testid="task-submission-leadas"'));
-  assert.ok(source.includes('reviewSummary?.currentVersionId'));
-  assert.ok(source.includes('activeDocument.id'));
-  assert.ok(source.includes('versionId='));
   assert.ok(source.includes('<TaskSubmissionWorkspace'));
+  assert.ok(source.includes('getTaskDocuments(taskId)'));
+  assert.ok(source.includes('readTaskSubmissionWorkflow(taskId)'));
+  assert.ok(source.includes('data-testid="next-task-linked-documents"'));
+  assert.ok(source.includes('data-testid="next-task-submitted-outputs"'));
+  assert.ok(source.includes('document.documentVersionId') && source.includes('versionId='));
+  assert.ok(source.includes('A leadott verzió nincs rögzítve.'));
+  assert.doesNotMatch(source, /nextTask\?\.documentId/);
 });
