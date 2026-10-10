@@ -224,6 +224,26 @@ function respond(url) {
   if (url.includes(`/cases/${CASE_ID}/workflow-graph`)) return { caseId: CASE_ID, nodes: [], edges: [], currentStatus: "ACTIVE", possibleTransitions: [] };
   if (url.includes(`/cases/${CASE_ID}/workflow-history`)) return [];
   if (url.includes(`/cases/${CASE_ID}/workspace`)) return WORKSPACE;
+  if (url.includes("/case-history/cases/")) return { items: [], nextCursor: null, totalMinutes: 0 };
+  if (url.endsWith("/documents/task/qa-task/documents")) return {
+    taskId: "qa-task",
+    documents: [{
+      linkId: "qa-document-task-link", note: null, linkedAt: "2026-10-10T08:00:00.000Z",
+      id: DOC_A, title: "Canonical kapcsolódó dokumentum", fileName: "munkaszerzodes_tervezet.docx",
+      workStatus: "IN_PROGRESS", documentRole: "WORKING", dueDate: null, currentVersion: 2,
+      responsible: null, reviewer: null,
+    }],
+  };
+  if (url.endsWith("/tasks/qa-task/workflow")) return {
+    task: { id: "qa-task", title: "QA task", description: null, status: "TODO", priority: "NORMAL", dueDate: null, caseId: CASE_ID, matterId: null, assignee: null, case: { id: CASE_ID, caseNumber: "QA-CASE-001", title: "QA Case", client: { id: "qa-client", name: "QA Client" } } },
+    activeDraft: null,
+    submissions: [{
+      id: "qa-submission", taskId: "qa-task", revisionNumber: 1, status: "SUBMITTED", submittedAt: "2026-10-10T08:00:00.000Z",
+      documents: [{ id: "qa-submission-document", documentId: DOC_B, documentVersionId: "qa-version-1", role: "OUTPUT", createdAt: "2026-10-10T08:00:00.000Z", linkedVersion: 1, isCurrentVersion: false, document: { id: DOC_B, name: "Leadott adatkezelési eredmény.docx", category: "CONTRACT", currentVersion: 3 } }],
+    }],
+    latestSubmittedRevision: null, latestDecision: null, currentReviewer: null, responsibleLawyerFlow: false, responsibleLawyer: null,
+    readiness: null, permittedActions: {}, nextActionCode: "NONE",
+  };
   if (url.endsWith(`/cases/${CASE_ID}`) && !url.includes("/hourly-rates/")) return { ...WORKSPACE.case, clientId: "qa-client" };
   if (url.includes("/documents/") && url.includes("/work-context")) {
     const id = url.match(/\/documents\/([^/]+)\/work-context/)?.[1];
@@ -284,7 +304,12 @@ async function main() {
     page.on("console", (message) => { if (message.type() === "error" && message.text().startsWith("Cannot")) consoleErrors.push(`console: ${message.text()}`); });
 
     await installSession(page);
-    await page.goto(`${BASE_URL}/cases/${CASE_ID}`, { waitUntil: "networkidle" });
+    await page.goto(`${BASE_URL}/cases/${CASE_ID}`, { waitUntil: "domcontentloaded" });
+
+    const secondaryDetails = page.locator('[data-testid="case-secondary-details"]');
+    if (!(await secondaryDetails.evaluate((element) => element.open))) await secondaryDetails.locator("summary").first().click();
+    const preparationDetails = secondaryDetails.locator("details").first();
+    if (!(await preparationDetails.evaluate((element) => element.open))) await preparationDetails.locator("summary").click();
 
     const dashboard = page.locator('[data-testid="document-preparation-dashboard"]');
     try {
@@ -296,6 +321,28 @@ async function main() {
       console.error("DEBUG body tail:", body.slice(-1200));
       console.error("DEBUG errors:", consoleErrors.join(" | "));
       throw error;
+    }
+    const linkedSection = page.locator('[data-testid="next-task-linked-documents"]');
+    const submittedSection = page.locator('[data-testid="next-task-submitted-outputs"]');
+    await linkedSection.waitFor({ state: "visible", timeout: 15000 });
+    await submittedSection.waitFor({ state: "visible", timeout: 15000 });
+    assert((await linkedSection.innerText()).includes("Canonical kapcsolódó dokumentum"), "the canonical task link must render under Kapcsolódó dokumentumok");
+    assert((await submittedSection.innerText()).includes("Leadott adatkezelési eredmény.docx"), "the exact submitted output must render under Leadott eredmények");
+    assert((await submittedSection.locator("a").getAttribute("href")).includes("versionId=qa-version-1"), "submitted output navigation must retain the pinned version ID");
+    if (process.env.TASK_DOCUMENT_ONLY === "1") {
+      for (const width of [390, 768, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.waitForTimeout(150);
+        assert(await linkedSection.isVisible(), `Kapcsolódó dokumentumok must remain visible at ${width}px`);
+        assert(await submittedSection.isVisible(), `Leadott eredmények must remain visible at ${width}px`);
+        assert(!(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)), `${width}px viewport must not overflow horizontally`);
+        await page.screenshot({ path: path.join(SHOTS, `task-document-sections-${width}.png`), fullPage: true });
+      }
+      assert(consoleErrors.length === 0, `page errors: ${consoleErrors.join("; ")}`);
+      await context.close();
+      console.log("Task document sections browser QA passed at 390, 768 and 1440px.");
+      console.log(`Screenshots: ${path.relative(ROOT, SHOTS)}`);
+      return;
     }
     for (const tile of ["preparation-tile-feladat", "preparation-tile-helyzetallas", "preparation-tile-kockazat", "preparation-tile-anonim"]) {
       assert(await page.locator(`[data-testid="${tile}"]`).isVisible(), `${tile} must render`);
@@ -314,6 +361,13 @@ async function main() {
     const overflow1440 = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     assert(!overflow1440, "1440 viewport must not overflow horizontally");
     await page.screenshot({ path: path.join(SHOTS, "selected-document-dashboard-1440.png"), fullPage: true });
+
+    await page.setViewportSize({ width: 768, height: 900 });
+    await page.waitForTimeout(300);
+    assert(await linkedSection.isVisible(), "canonical links must remain visible at 768 viewport");
+    assert(await submittedSection.isVisible(), "submitted outputs must remain visible at 768 viewport");
+    assert(!(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)), "768 viewport must not overflow horizontally");
+    await page.screenshot({ path: path.join(SHOTS, "task-document-sections-768.png"), fullPage: true });
 
     // 2. Delete confirmation dialog.
     await page.locator('[data-testid="preparation-delete"]').click();
@@ -336,7 +390,9 @@ async function main() {
     await page.waitForTimeout(300);
     const overflow390 = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     assert(!overflow390, "390 viewport must not overflow horizontally");
-    await page.screenshot({ path: path.join(SHOTS, "selected-document-dashboard-390.png"), fullPage: true });
+    assert(await linkedSection.isVisible(), "canonical links must remain visible at 390 viewport");
+    assert(await submittedSection.isVisible(), "submitted outputs must remain visible at 390 viewport");
+    await page.screenshot({ path: path.join(SHOTS, "task-document-sections-390.png"), fullPage: true });
 
     assert(consoleErrors.length === 0, `page errors: ${consoleErrors.join("; ")}`);
     await context.close();

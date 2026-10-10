@@ -12,12 +12,13 @@
 import Link from "next/link";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getCaseResponsibility, getCaseWorkspace, startTask, type CaseResponsibilityResponse, type CaseWorkspace } from "@/lib/api";
+import { getCaseResponsibility, getCaseWorkspace, getTaskDocuments, startTask, type CaseResponsibilityResponse, type CaseWorkspace, type TaskDocumentsResponse } from "@/lib/api";
 import { getCaseComments, createCaseComment, type CaseCommentDto } from "@/lib/api";
 import { ApiError, linkCommunicationToCase } from "@/lib/api";
 import { linkThreadErrorMessage } from "@/lib/communicationLinkErrors";
 import { useTaskCreateCapabilities } from "@/lib/useTaskCreateCapabilities";
-import { listTaskLifecycleItems, type TaskLifecycleListItem } from "@/lib/taskLifecycleApi";
+import { listTaskLifecycleItems, readTaskSubmissionWorkflow, type TaskLifecycleListItem, type TaskSubmissionWorkflow } from "@/lib/taskLifecycleApi";
+import { selectTaskDocumentSections } from "@/lib/taskDocumentPresentation";
 import { getCaseMatterTypeLabel, getCaseStatusLabel } from "@/lib/caseLabels";
 import { taskStatusLabel } from "@/lib/taskWorkflowPresentation";
 import { attentionPresentation, type AttentionCategory } from "@/lib/attentionCategory";
@@ -66,6 +67,23 @@ function isAttention(v: string | null): v is AttentionCategory {
   return v === "QUICK_SCAN" || v === "APPROVAL" || v === "SIGNATURE" || v === "EDITING" || v === "DETAILED_REVIEW";
 }
 
+function resolveNextTask(workspace: CaseWorkspace | null): WorkspaceTask | null {
+  if (!workspace) return null;
+  const tasksById = new Map(workspace.tasks.map((task) => [task.id, task]));
+  const reviewIds = new Set(workspace.tasks
+    .filter((task) => ['IN_REVIEW', 'UNDER_REVIEW', 'SUBMITTED'].includes(task.status.toUpperCase()))
+    .map((task) => task.id));
+  const firstOpenTask = (ids: string[]) => ids
+    .map((id) => tasksById.get(id))
+    .find((task): task is WorkspaceTask => Boolean(task && !reviewIds.has(task.id))) || null;
+  return tasksById.get(workspace.cockpit.nextStep?.objectId || '')
+    || firstOpenTask(workspace.cockpit.taskGroups.immediate)
+    || firstOpenTask(workspace.cockpit.taskGroups.today)
+    || firstOpenTask(workspace.cockpit.taskGroups.later)
+    || workspace.tasks.find((task) => reviewIds.has(task.id))
+    || null;
+}
+
 const URGENCY_STYLE: Record<string, { label: string; accent: Accent }> = {
   CRITICAL: { label: "Sürgős beavatkozás", accent: "terracotta" },
   ATTENTION: { label: "Figyelmet igényel", accent: "ochre" },
@@ -92,6 +110,9 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
   const [aiPromptInitialDraftId, setAiPromptInitialDraftId] = useState<string | null>(null);
   const [aiResultsRefreshKey, setAiResultsRefreshKey] = useState(0);
   const [lifecycleTasks, setLifecycleTasks] = useState<TaskLifecycleListItem[]>([]);
+  const [nextTaskDocuments, setNextTaskDocuments] = useState<{ taskId: string; state: "loading" | "ready" | "error"; documents: TaskDocumentsResponse["documents"] }>({ taskId: "", state: "loading", documents: [] });
+  const [nextTaskSubmission, setNextTaskSubmission] = useState<{ taskId: string; state: "loading" | "ready" | "error"; workflow: TaskSubmissionWorkflow | null }>({ taskId: "", state: "loading", workflow: null });
+  const [taskDocumentRefreshKey, setTaskDocumentRefreshKey] = useState(0);
   const [selectedLifecycleTask, setSelectedLifecycleTask] = useState<TaskLifecycleListItem | null>(null);
   const [handoffTask, setHandoffTask] = useState<TaskLifecycleListItem | null>(null);
   const [timeDialogOpen, setTimeDialogOpen] = useState(false);
@@ -139,6 +160,7 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
     setRefreshing(true);
     try {
       await load({ background: true });
+      setTaskDocumentRefreshKey((value) => value + 1);
       setNotesRefreshKey((value) => value + 1);
       setAiResultsRefreshKey((value) => value + 1);
     }
@@ -168,6 +190,30 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
   }, [caseId, refresh]);
 
   useEffect(() => { void load(); return () => { ++loadGeneration.current; }; }, [load]);
+
+  const nextTask = resolveNextTask(ws);
+  useEffect(() => {
+    const taskId = nextTask?.id;
+    if (!taskId) {
+      setNextTaskDocuments({ taskId: "", state: "loading", documents: [] });
+      setNextTaskSubmission({ taskId: "", state: "loading", workflow: null });
+      return;
+    }
+    let active = true;
+    setNextTaskDocuments({ taskId, state: "loading", documents: [] });
+    setNextTaskSubmission({ taskId, state: "loading", workflow: null });
+    void getTaskDocuments(taskId).then((result) => {
+      if (active) setNextTaskDocuments({ taskId, state: "ready", documents: result.documents });
+    }).catch(() => {
+      if (active) setNextTaskDocuments({ taskId, state: "error", documents: [] });
+    });
+    void readTaskSubmissionWorkflow(taskId).then((workflow) => {
+      if (active) setNextTaskSubmission({ taskId, state: "ready", workflow });
+    }).catch(() => {
+      if (active) setNextTaskSubmission({ taskId, state: "error", workflow: null });
+    });
+    return () => { active = false; };
+  }, [nextTask?.id, taskDocumentRefreshKey]);
 
   // The risk-matrix selection is always case-scoped: switching cases clears it,
   // and a refreshed workspace that no longer contains the selected document
@@ -231,8 +277,9 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
   const today = groupTasks(cp.taskGroups.today);
   const later = groupTasks(cp.taskGroups.later);
   const reviewTasks = ws.tasks.filter((task) => reviewIds.has(task.id));
-  const nextTask = tasksById.get(cp.nextStep?.objectId || '') || immediate[0] || today[0] || later[0] || reviewTasks[0] || null;
-  const activeDocument = nextTask?.documentId ? ws.documents.find((doc) => doc.id === nextTask.documentId) : null;
+  const taskDocuments = nextTaskDocuments.taskId === nextTask?.id ? nextTaskDocuments : null;
+  const submissionWorkflow = nextTaskSubmission.taskId === nextTask?.id ? nextTaskSubmission : null;
+  const documentSections = selectTaskDocumentSections(taskDocuments?.documents || [], submissionWorkflow?.workflow || null);
 
   const allDeadlines = [
     ...cp.deadlineGroups.today, ...cp.deadlineGroups.tomorrow,
@@ -365,9 +412,32 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
         <p className="text-xs font-semibold text-[var(--adm-text-muted)]">{reviewIds.has(nextTask.id) ? 'Ellenőrzésre vár' : 'Most ezen dolgozunk'}</p>
         <Link href={`/tasks?taskId=${encodeURIComponent(nextTask.id)}`} className="mt-1 text-lg font-semibold text-[var(--adm-green-800)]">{nextTask.title}</Link>
         <p className="text-sm">{nextTask.assignee?.name || 'Még nincs feladatfelelős'} · <PersistedDeadline dueAt={nextTask.dueDate} /></p>
-        {activeDocument ? <Link className="mt-2 text-sm underline" href={`/cases/${caseId}/documents?documentId=${encodeURIComponent(activeDocument.id)}${activeDocument.reviewSummary?.currentVersionId ? `&versionId=${encodeURIComponent(activeDocument.reviewSummary.currentVersionId)}` : ''}`}>
-          Kapcsolt dokumentum: {activeDocument.fileName}{activeDocument.version ? ` · aktuális v${activeDocument.version}` : ' · verzió nem ismert'}
-        </Link> : <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Ehhez a feladathoz nincs rögzített dokumentumkapcsolat.</p>}
+        <div className="mt-3 grid min-w-0 gap-3 sm:grid-cols-2">
+          <section aria-label="Kapcsolódó dokumentumok" data-testid="next-task-linked-documents" className="min-w-0 rounded-lg border border-[var(--adm-border)] p-3">
+            <h3 className="text-xs font-semibold">Kapcsolódó dokumentumok</h3>
+            {taskDocuments?.state === "loading" || !taskDocuments ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Betöltés…</p>
+              : taskDocuments.state === "error" ? <p role="status" className="mt-1 text-xs text-[var(--adm-text-muted)]">A kapcsolódó dokumentumok most nem érhetők el.</p>
+              : documentSections.linkedDocuments.length ? <ul className="mt-1 space-y-1">{documentSections.linkedDocuments.map((document) => <li key={document.linkId} className="min-w-0 text-xs">
+                <Link className="break-words underline" href={`/cases/${caseId}/documents?documentId=${encodeURIComponent(document.id)}`}>{document.title}</Link>
+                <span className="text-[var(--adm-text-muted)]">{document.currentVersion ? ` · aktuális v${document.currentVersion}` : " · verzió nem ismert"}</span>
+              </li>)}</ul>
+              : <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Ehhez a feladathoz nincs kapcsolódó dokumentum.</p>}
+          </section>
+          <section aria-label="Leadott eredmények" data-testid="next-task-submitted-outputs" className="min-w-0 rounded-lg border border-[var(--adm-border)] p-3">
+            <h3 className="text-xs font-semibold">Leadott eredmények</h3>
+            {submissionWorkflow?.state === "loading" || !submissionWorkflow ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Betöltés…</p>
+              : submissionWorkflow.state === "error" ? <p role="status" className="mt-1 text-xs text-[var(--adm-text-muted)]">A leadott eredmények most nem érhetők el.</p>
+              : documentSections.submittedOutputs.length ? <ul className="mt-1 space-y-1">{documentSections.submittedOutputs.map(({ submission, document }) => <li key={`${submission.id}:${document.id}`} className="min-w-0 text-xs">
+                {document.documentVersionId
+                  ? <Link className="break-words underline" href={`/cases/${caseId}/documents?documentId=${encodeURIComponent(document.documentId)}&versionId=${encodeURIComponent(document.documentVersionId)}`}>{document.document.name}</Link>
+                  : <span className="break-words">{document.document.name}</span>}
+                <span className="text-[var(--adm-text-muted)]">{document.documentVersionId && document.linkedVersion ? ` · v${document.linkedVersion}` : ""} · {`Leadás ${submission.revisionNumber}`}</span>
+                {!document.documentVersionId ? <span className="block text-[var(--adm-text-muted)]">A leadott verzió nincs rögzítve.</span>
+                  : !document.linkedVersion ? <span className="block break-all text-[var(--adm-text-muted)]">Verzióazonosító: {document.documentVersionId}</span> : null}
+              </li>)}</ul>
+              : <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Ehhez a feladathoz nincs leadott eredmény.</p>}
+          </section>
+        </div>
       </section> : null}
 
       <section aria-label="Műveletek" data-testid="case-workspace-quick-actions" className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5">
