@@ -1,9 +1,151 @@
 import { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import { TaskSubmissionService } from '../src/modules/tasks/taskSubmission.service';
 import { TaskReviewDecisionService } from '../src/modules/tasks/taskReviewDecision.service';
 
 const databaseUrl = process.env.TASK_REVIEW_DECISION_TEST_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
+
+describeWithDatabase('Exact submitted document review round context (PostgreSQL)', () => {
+  let db: PrismaClient;
+  let service: TaskReviewDecisionService;
+  beforeAll(async () => {
+    const parsed = new URL(databaseUrl!);
+    expect(['127.0.0.1', 'localhost', '::1']).toContain(parsed.hostname);
+    expect(parsed.pathname.slice(1)).toMatch(/^adminiculum_task_review_decision_backend_/);
+    db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+    await db.$connect();
+    service = new TaskReviewDecisionService(db);
+  });
+  afterAll(async () => { await db?.$disconnect(); });
+
+  async function fixture() {
+    const user = async (role: 'LAWYER' | 'PARTNER' | 'ADMIN' | 'CLIENT') => {
+      const id = randomUUID();
+      return db.user.create({ data: { id, email: `${id}@round-context.invalid`, name: role, role, status: 'ACTIVE', isActive: true, skills: [] } });
+    };
+    const reviewer = await user('PARTNER'), worker = await user('LAWYER'), outsider = await user('ADMIN'), external = await user('CLIENT');
+    const client = await db.client.create({ data: { name: 'Synthetic round context' } });
+    const caseRow = await db.case.create({ data: { caseNumber: randomUUID(), title: 'Round context', caseType: 'CONTRACT_REVIEW', clientId: client.id, createdById: reviewer.id, assignedLawyerId: reviewer.id } });
+    const foreignCase = await db.case.create({ data: { caseNumber: randomUUID(), title: 'Other case', caseType: 'CONTRACT_REVIEW', clientId: client.id, createdById: outsider.id, assignedLawyerId: outsider.id } });
+    const document = await db.document.create({ data: { name: 'Submitted document', category: 'OTHER', caseId: caseRow.id, clientId: client.id, currentVersion: 3 } });
+    const foreignDocument = await db.document.create({ data: { name: 'Other document', category: 'OTHER', caseId: foreignCase.id, clientId: client.id } });
+    const version = (documentId: string, number: number, isCurrent: boolean) => db.documentVersion.create({ data: { documentId, version: number, name: `v${number}`, originalFileName: `v${number}.docx`, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', size: 1, isCurrent, uploadedById: worker.id } });
+    const v1 = await version(document.id, 1, false), v2 = await version(document.id, 2, false), v3 = await version(document.id, 3, true), foreignVersion = await version(foreignDocument.id, 1, true);
+    const task = await db.task.create({ data: { title: 'Exact round task', taskType: 'OTHER', status: 'IN_REVIEW', priority: 'MEDIUM', requiredSkills: [], caseId: caseRow.id, assignedToId: worker.id, assignedById: reviewer.id } });
+    const submission = await db.taskSubmission.create({ data: { taskId: task.id, revisionNumber: 1, status: 'SUBMITTED', createdById: worker.id, submittedById: worker.id, assignedReviewerId: reviewer.id, submittedAt: new Date(), idempotencyKey: randomUUID() } });
+    const link = await db.taskSubmissionDocument.create({ data: { submissionId: submission.id, documentId: document.id, documentVersionId: v1.id, role: 'PRIMARY_OUTPUT', createdById: worker.id } });
+    const review = await db.documentReview.create({ data: { documentId: document.id, documentVersionId: v1.id, status: 'APPROVED', currentRoundNumber: 3, approvedVersionId: v3.id, createdById: worker.id, assignedReviewerId: reviewer.id } });
+    const round = (roundNumber: number, reviewVersionId: string, status: 'CHANGES_REQUESTED' | 'APPROVED') => db.documentReviewRound.create({ data: { reviewId: review.id, roundNumber, reviewVersionId, status, createdById: reviewer.id } });
+    const r1 = await round(1, v1.id, 'CHANGES_REQUESTED'), r2 = await round(2, v2.id, 'CHANGES_REQUESTED'), r3 = await round(3, v3.id, 'APPROVED');
+    await db.documentReview.update({ where: { id: review.id }, data: { currentRoundId: r3.id } });
+    await db.reviewPoint.createMany({ data: [
+      { reviewRoundId: r1.id, status: 'OPEN' as const, severity: 'BLOCKING' as const },
+      { reviewRoundId: r1.id, status: 'RESOLVED' as const, severity: 'NORMAL' as const },
+      { reviewRoundId: r2.id, status: 'ANSWERED' as const, severity: 'NORMAL' as const },
+      { reviewRoundId: r2.id, status: 'OPEN' as const, severity: 'BLOCKING' as const },
+      { reviewRoundId: r3.id, status: 'RESOLVED' as const, severity: 'NORMAL' as const },
+    ].map(point => ({ ...point, reviewId: review.id, type: 'WHOLE_DOCUMENT', title: 'Round-owned point', createdById: reviewer.id })) });
+    await db.reviewDecision.createMany({ data: [
+      { reviewRoundId: r1.id, versionId: v1.id, action: 'CHANGES_REQUESTED' as const, createdAt: new Date('2026-01-01T12:00:00Z') },
+      { reviewRoundId: r2.id, versionId: v2.id, action: 'STARTED' as const, createdAt: new Date('2026-02-01T12:00:00Z') },
+      { reviewRoundId: r3.id, versionId: v3.id, action: 'APPROVED' as const, createdAt: new Date('2026-03-01T12:00:00Z') },
+    ].map(decision => ({ ...decision, reviewId: review.id, actorId: reviewer.id })) });
+    const detail = () => service.getReviewDetail(task.id, submission.id, reviewer.id);
+    return { reviewer, worker, outsider, external, document, foreignDocument, foreignVersion, v1, v2, v3, task, submission, link, review, r1, r2, r3, detail };
+  }
+
+  it('projects historical round status, old points and old decision despite a newer approved current round', async () => {
+    const f = await fixture();
+    const detail = await f.detail();
+    expect(detail.outputs[0].newerVersionExists).toBe(true);
+    expect(detail.permittedActions.approve).toBe(true);
+    expect(detail.documentReviews[0]).toMatchObject({ documentId: f.document.id, documentVersionId: f.v1.id, unavailableReason: null });
+    expect(detail.documentReviews[0].reviews).toEqual([expect.objectContaining({
+      id: f.review.id, roundId: f.r1.id, roundNumber: 1, currentRoundNumber: 3, status: 'CHANGES_REQUESTED', documentVersionId: f.v1.id,
+      counts: { open: 1, blocking: 1, total: 2 }, approvedVersionId: null,
+      lastDecision: expect.objectContaining({ action: 'CHANGES_REQUESTED', versionId: f.v1.id }), reviewLink: null,
+    })]);
+    expect(detail.documentReviews[0].reviews[0].rounds.map(r => r.id)).toEqual([f.r1.id]);
+    expect(await db.taskReviewDecision.count({ where: { submissionId: f.submission.id } })).toBe(0);
+    expect((await db.documentReview.findUniqueOrThrow({ where: { id: f.review.id } })).approvedVersionId).toBe(f.v3.id);
+  });
+
+  it('finds an intermediate submitted version through its round even when neither initial nor current', async () => {
+    const f = await fixture();
+    await db.taskSubmissionDocument.update({ where: { id: f.link.id }, data: { documentVersionId: f.v2.id } });
+    const entry = (await f.detail()).documentReviews[0].reviews[0];
+    expect(entry).toMatchObject({ roundId: f.r2.id, roundNumber: 2, status: 'CHANGES_REQUESTED', counts: { open: 2, blocking: 1, total: 2 }, lastDecision: { action: 'STARTED', versionId: f.v2.id } });
+  });
+
+  it('keeps current-version context exact too', async () => {
+    const f = await fixture();
+    await db.taskSubmissionDocument.update({ where: { id: f.link.id }, data: { documentVersionId: f.v3.id } });
+    const entry = (await f.detail()).documentReviews[0].reviews[0];
+    expect(entry).toMatchObject({ roundId: f.r3.id, status: 'APPROVED', counts: { open: 0, blocking: 0, total: 1 }, approvedVersionId: f.v3.id, lastDecision: { action: 'APPROVED', versionId: f.v3.id } });
+  });
+
+  it('keeps multiple explicit rounds for the same version separate instead of choosing or aggregating', async () => {
+    const f = await fixture();
+    const repeated = await db.documentReviewRound.create({ data: { reviewId: f.review.id, roundNumber: 4, reviewVersionId: f.v1.id, status: 'DRAFT', createdById: f.reviewer.id } });
+    const entries = (await f.detail()).documentReviews[0].reviews;
+    expect(entries.map(r => [r.roundId, r.counts?.total])).toEqual([[f.r1.id, 2], [repeated.id, 0]]);
+    expect(entries[1].lastDecision).toBeNull();
+  });
+
+  it('reports missing round provenance instead of falling back to current-round facts', async () => {
+    const f = await fixture();
+    await db.documentReviewRound.delete({ where: { id: f.r1.id } });
+    expect((await f.detail()).documentReviews[0]).toMatchObject({ unavailableReason: 'SOURCE_ROUND_BINDING_GAP', reviews: [] });
+  });
+
+  it('does not attach an unbound decision to a round using only its version or timestamp', async () => {
+    const f = await fixture();
+    await db.reviewDecision.create({ data: { reviewId: f.review.id, reviewRoundId: null, action: 'APPROVED', actorId: f.reviewer.id, versionId: f.v1.id } });
+    expect((await f.detail()).documentReviews[0].reviews[0]).toMatchObject({ lastDecision: null, lastDecisionUnavailableReason: 'SOURCE_ROUND_BINDING_GAP', approvedVersionId: null });
+  });
+
+  it('reports an orphaned intermediate-version decision as a binding gap, not absence of review', async () => {
+    const f = await fixture();
+    await db.taskSubmissionDocument.update({ where: { id: f.link.id }, data: { documentVersionId: f.v2.id } });
+    await db.documentReviewRound.delete({ where: { id: f.r2.id } });
+    expect((await f.detail()).documentReviews[0]).toMatchObject({ unavailableReason: 'SOURCE_ROUND_BINDING_GAP', reviews: [] });
+  });
+
+  it('accepts round-bound point decisions with no redundant version but rejects conflicting decision versions', async () => {
+    const f = await fixture();
+    await db.reviewDecision.create({ data: { reviewId: f.review.id, reviewRoundId: f.r1.id, action: 'POINT_UPDATED', actorId: f.reviewer.id } });
+    expect((await f.detail()).documentReviews[0].reviews[0].lastDecision?.action).toBe('POINT_UPDATED');
+    await db.reviewDecision.create({ data: { reviewId: f.review.id, reviewRoundId: f.r1.id, versionId: f.v3.id, action: 'APPROVED', actorId: f.reviewer.id } });
+    expect((await f.detail()).documentReviews[0].reviews[0]).toMatchObject({ lastDecision: null, lastDecisionUnavailableReason: 'SOURCE_ROUND_BINDING_GAP', approvedVersionId: null });
+  });
+
+  it('rejects unauthorized actors and mismatched task/submission identity', async () => {
+    const f = await fixture();
+    for (const actor of [f.outsider, f.external]) await expect(service.getReviewDetail(f.task.id, f.submission.id, actor.id)).rejects.toMatchObject({ statusCode: 404 });
+    await expect(service.getReviewDetail(randomUUID(), f.submission.id, f.reviewer.id)).rejects.toMatchObject({ statusCode: 404 });
+    expect((await service.getReviewDetail(f.task.id, f.submission.id, f.worker.id)).permittedActions.approve).toBe(false);
+  });
+
+  it('does not project cross-case reviews or a round bound to another document version', async () => {
+    const f = await fixture();
+    const foreignReview = await db.documentReview.create({ data: { documentId: f.foreignDocument.id, documentVersionId: f.foreignVersion.id, createdById: f.outsider.id } });
+    await db.documentReviewRound.create({ data: { reviewId: foreignReview.id, roundNumber: 1, reviewVersionId: f.foreignVersion.id, createdById: f.outsider.id } });
+    await db.taskSubmissionDocument.update({ where: { id: f.link.id }, data: { documentId: f.foreignDocument.id, documentVersionId: f.foreignVersion.id } });
+    expect((await f.detail()).documentReviews[0].reviews).toEqual([]);
+    await db.taskSubmissionDocument.update({ where: { id: f.link.id }, data: { documentId: f.document.id, documentVersionId: f.foreignVersion.id } });
+    await db.documentReviewRound.create({ data: { reviewId: f.review.id, roundNumber: 4, reviewVersionId: f.foreignVersion.id, createdById: f.reviewer.id } });
+    expect((await f.detail()).documentReviews[0]).toMatchObject({ unavailableReason: 'SOURCE_ROUND_BINDING_GAP', reviews: [] });
+  });
+
+  it('fails closed on inconsistent point/decision review IDs instead of leaking another review', async () => {
+    const f = await fixture();
+    const other = await db.documentReview.create({ data: { documentId: f.foreignDocument.id, documentVersionId: f.foreignVersion.id, createdById: f.outsider.id } });
+    await db.reviewPoint.create({ data: { reviewId: other.id, reviewRoundId: f.r1.id, type: 'WHOLE_DOCUMENT', title: 'Foreign point', severity: 'BLOCKING', createdById: f.outsider.id } });
+    await db.reviewDecision.create({ data: { reviewId: other.id, reviewRoundId: f.r1.id, versionId: f.v1.id, action: 'APPROVED', actorId: f.outsider.id } });
+    expect((await f.detail()).documentReviews[0].reviews[0]).toMatchObject({ counts: null, lastDecision: null, lastDecisionUnavailableReason: 'SOURCE_ROUND_BINDING_GAP', approvedVersionId: null });
+  });
+});
 
 const ids = {
   worker: '11000000-0000-4000-8000-000000000001',

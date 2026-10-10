@@ -379,51 +379,86 @@ export class TaskReviewDecisionService {
     const targets = outputs.filter((output) => output.documentId && output.documentVersionId);
     if (targets.length === 0) return [];
     const reviews = await db.documentReview.findMany({
-      where: { documentId: { in: Array.from(new Set(targets.map((target) => target.documentId))) } },
+      where: {
+        documentId: { in: Array.from(new Set(targets.map((target) => target.documentId))) },
+        document: { caseId },
+      },
       include: {
-        currentRound: { select: { id: true, roundNumber: true, reviewVersionId: true, status: true } },
-        rounds: { select: { id: true, roundNumber: true, reviewVersionId: true, status: true }, orderBy: { roundNumber: 'asc' as const } },
+        rounds: {
+          select: {
+            id: true, roundNumber: true, reviewVersionId: true, status: true,
+            reviewVersion: { select: { documentId: true } },
+            points: { select: { id: true, reviewId: true, status: true, severity: true } },
+            decisions: {
+              select: { id: true, reviewId: true, action: true, actorId: true, versionId: true, createdAt: true },
+              orderBy: [{ createdAt: 'desc' as const }, { id: 'desc' as const }],
+            },
+          },
+          orderBy: { roundNumber: 'asc' as const },
+        },
         assignedReviewer: { select: { id: true, name: true, email: true } },
-        points: { select: { id: true, status: true, severity: true } },
-        decisions: { select: { id: true, action: true, actorId: true, versionId: true, createdAt: true }, orderBy: { createdAt: 'desc' as const }, take: 1 },
+        // A version alone cannot establish which round owns a legacy decision.
+        decisions: { where: { reviewRoundId: null }, select: { versionId: true } },
       },
     });
     return targets.map((target) => {
-      const matching = reviews.filter((review) =>
-        review.documentId === target.documentId
-        && (review.documentVersionId === target.documentVersionId || review.currentRound?.reviewVersionId === target.documentVersionId));
+      const matching = reviews.filter((review) => review.documentId === target.documentId);
+      const exactRounds = (review: typeof reviews[number]) => review.rounds.filter((round) =>
+        round.reviewVersionId === target.documentVersionId && round.reviewVersion.documentId === target.documentId);
+      const missingRound = matching.some((review) =>
+        (review.documentVersionId === target.documentVersionId
+          || review.rounds.some((round) => round.reviewVersionId === target.documentVersionId)
+          || review.decisions.some((entry) => entry.versionId === target.documentVersionId))
+        && exactRounds(review).length === 0);
       return {
         documentId: target.documentId,
         documentVersionId: target.documentVersionId,
-        reviews: matching.map((review) => ({
+        unavailableReason: missingRound ? 'SOURCE_ROUND_BINDING_GAP' as const : null,
+        // One entry per explicit matching round, never an aggregate across rounds.
+        reviews: matching.flatMap((review) => exactRounds(review).map((round) => {
+          const points = round.points.filter((point) => point.reviewId === review.id);
+          const decisions = round.decisions.filter((entry) => entry.reviewId === review.id
+            && (entry.versionId === null || entry.versionId === target.documentVersionId));
+          const decisionGap = review.decisions.some((entry) => entry.versionId === null || entry.versionId === target.documentVersionId)
+            || decisions.length !== round.decisions.length;
+          const lastDecision = decisionGap ? null : decisions[0];
+          return {
           id: review.id,
-          status: String(review.status),
+          roundId: round.id,
+          roundNumber: round.roundNumber,
+          status: String(round.status),
+          // Retained as review-level metadata; never used as the selected round.
           currentRoundNumber: review.currentRoundNumber,
-          documentVersionId: review.documentVersionId,
-          approvedVersionId: review.approvedVersionId,
+          documentVersionId: round.reviewVersionId,
+          approvedVersionId: decisions.some((entry) => entry.action === 'APPROVED' && entry.versionId === target.documentVersionId)
+            ? target.documentVersionId : null,
           reviewer: review.assignedReviewer
             ? { id: review.assignedReviewer.id, displayName: review.assignedReviewer.name || review.assignedReviewer.email, role: '' }
             : null,
-          rounds: review.rounds.map((round) => ({
+          rounds: [{
             id: round.id,
             roundNumber: round.roundNumber,
             reviewVersionId: round.reviewVersionId,
             status: String(round.status),
-          })),
-          counts: {
-            open: review.points.filter((point) => ['OPEN', 'ANSWERED'].includes(String(point.status))).length,
-            blocking: review.points.filter((point) => point.severity === 'BLOCKING' && ['OPEN', 'ANSWERED'].includes(String(point.status))).length,
-            total: review.points.length,
+          }],
+          counts: points.length !== round.points.length ? null : {
+            open: points.filter((point) => ['OPEN', 'ANSWERED'].includes(String(point.status))).length,
+            blocking: points.filter((point) => point.severity === 'BLOCKING' && ['OPEN', 'ANSWERED'].includes(String(point.status))).length,
+            total: points.length,
           },
-          lastDecision: review.decisions[0]
+          lastDecisionUnavailableReason: decisionGap ? 'SOURCE_ROUND_BINDING_GAP' as const : null,
+          lastDecision: lastDecision
             ? {
-                action: String(review.decisions[0].action),
-                actorId: review.decisions[0].actorId,
-                versionId: review.decisions[0].versionId,
-                createdAt: review.decisions[0].createdAt.toISOString(),
+                action: String(lastDecision.action),
+                actorId: lastDecision.actorId,
+                versionId: lastDecision.versionId,
+                createdAt: lastDecision.createdAt.toISOString(),
               }
             : null,
-          reviewLink: `/cases/${encodeURIComponent(caseId)}/documents?documentId=${encodeURIComponent(target.documentId)}&mode=review`,
+          // The current document review panel cannot select an exact round.
+          // Do not send the user to a different review under this round's label.
+          reviewLink: null,
+          };
         })),
       };
     });

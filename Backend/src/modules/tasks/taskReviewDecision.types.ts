@@ -12,22 +12,26 @@ export interface AttentionEstimateDto {
 export interface DocumentReviewContextDto {
   documentId: string;
   documentVersionId: string;
+  unavailableReason: 'SOURCE_ROUND_BINDING_GAP' | null;
   reviews: Array<{
     id: string;
+    roundId: string;
+    roundNumber: number;
     status: string;
     currentRoundNumber: number;
     documentVersionId: string | null;
     approvedVersionId: string | null;
     reviewer: ReviewSafeUserDto | null;
     rounds: Array<{ id: string; roundNumber: number; reviewVersionId: string; status: string }>;
-    counts: { open: number; blocking: number; total: number };
+    counts: { open: number; blocking: number; total: number } | null;
+    lastDecisionUnavailableReason: 'SOURCE_ROUND_BINDING_GAP' | null;
     lastDecision: {
       action: string;
       actorId: string;
       versionId: string | null;
       createdAt: string;
     } | null;
-    reviewLink: string;
+    reviewLink: string | null;
   }>;
 }
 

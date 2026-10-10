@@ -175,11 +175,12 @@ describe('Mapped surface wiring', () => {
     assert.match(card, /documentRoleLabel\(card\.documentRole\)/);
     assert.doesNotMatch(card, /` · \$\{card\.documentRole\}`/);
 
-    const review = read('src/components/tasks/TaskReviewWorkspace.tsx');
-    assert.match(review, /documentReviewStatusLabel\(documentReview\.status\)/);
-    assert.match(review, /reviewActionLabel\(documentReview\.lastDecision\.action\)/);
-    assert.doesNotMatch(review, /\{documentReview\.status\}/);
-    assert.doesNotMatch(review, /\{documentReview\.lastDecision\.action\}/);
+    assert.match(read('src/components/tasks/TaskReviewWorkspace.tsx'), /<TaskReviewCockpitContent/);
+    const review = read('src/components/tasks/TaskReviewCockpitContent.tsx');
+    assert.match(review, /documentReviewStatusLabel\(entry\.status\)/);
+    assert.match(review, /reviewActionLabel\(entry\.lastDecision\.action\)/);
+    assert.doesNotMatch(review, /\{entry\.status\}/);
+    assert.doesNotMatch(review, /\{entry\.lastDecision\.action\}/);
   });
 
   it('wires the compliance operational status and recommendation labels', () => {
