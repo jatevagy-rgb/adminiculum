@@ -12,6 +12,7 @@ import { DemoContentBanner } from "@/components/client-portal/PortalPresentation
 import { BusinessSystemPanel, type SystemEditValue } from "@/components/clients/company-operations/BusinessSystemPanel";
 import { BusinessProcessPanel, type ProcessEditValue } from "@/components/clients/company-operations/BusinessProcessPanel";
 import { BusinessProcessStepsPanel } from "@/components/clients/company-operations/BusinessProcessStepsPanel";
+import { OperationalMeasurementPanel } from "@/components/clients/OperationalMeasurementPanel";
 
 export type WorkspaceSection =
   | "overview"
@@ -654,6 +655,10 @@ export function ClientCompanyWorkspace({
       {!loading && !error && room ? <>
           {activeSection === "overview" ? (
             <Panel id="overview" title="Áttekintés">
+              <details className="mb-5 rounded-lg border border-[var(--adm-border-canonical)] bg-white p-4">
+                <summary className="cursor-pointer font-semibold text-[var(--adm-brand-green)] focus-visible:outline">Mérés és indulás</summary>
+                <div className="mt-4"><OperationalMeasurementPanel clientId={clientId} /></div>
+              </details>
               {/* Primary KPI Row */}
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 <CountCard

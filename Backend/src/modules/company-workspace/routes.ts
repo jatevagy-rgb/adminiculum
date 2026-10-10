@@ -12,6 +12,7 @@ import { Request, Response, Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import { InteractionError } from '../client-interaction/base';
 import * as workspace from './service';
+import { getOperationalMetrics } from './operationalMetricsService';
 
 export const companyWorkspaceRouter = Router();
 
@@ -28,6 +29,13 @@ function fail(res: Response, error: unknown): void {
 }
 
 companyWorkspaceRouter.use(authenticate);
+
+companyWorkspaceRouter.get('/clients/:clientId/metrics', async (req, res) => {
+  try {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(await getOperationalMetrics(actor(req), String(req.params.clientId), req.query));
+  } catch (e) { fail(res, e); }
+});
 
 companyWorkspaceRouter.get('/clients/:clientId/overview', async (req, res) => {
   try { res.json(await workspace.getWorkspaceOverview(actor(req), String(req.params.clientId))); } catch (e) { fail(res, e); }
