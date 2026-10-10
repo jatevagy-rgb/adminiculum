@@ -90,9 +90,9 @@ describe('canonical document upload persistence', () => {
       storageReference: 'sp-item-1',
       spItemId: 'sp-item-1',
       isCurrent: true,
-      securityScanStatus: 'CLEAN',
+      securityScanStatus: 'PENDING_SCAN',
     });
-    expect(mockQueueDocumentVersionScan).not.toHaveBeenCalled();
+    expect(mockQueueDocumentVersionScan).toHaveBeenCalledTimes(1);
     expect(mockPrisma.timelineEvent.create).toHaveBeenCalledTimes(1);
     expect(mockPrisma.case.update).toHaveBeenCalledWith({
       where: { id: 'case-1' },
@@ -100,16 +100,25 @@ describe('canonical document upload persistence', () => {
     });
   });
 
+  it('queues the malware scan with the EXACT uploaded bytes for the initial LAWYER_UPLOAD version', async () => {
+    await documentsService.createDocument(input);
+
+    expect(mockQueueDocumentVersionScan).toHaveBeenCalledTimes(1);
+    const [versionId, buffer] = mockQueueDocumentVersionScan.mock.calls[0];
+    expect(versionId).toBe(mockPrisma.document.create.mock.calls[0][0].data.versions.create.id);
+    expect(Buffer.from(buffer)).toEqual(input.fileContent);
+  });
+
   it.each([
     ['default source', undefined],
     ['explicit workforce source', 'LAWYER_UPLOAD'],
-  ])('uploadNewVersion with %s is CLEAN and skips scanning', async (_label, uploadSource) => {
+  ])('uploadNewVersion with %s is PENDING_SCAN and queues scanning', async (_label, uploadSource) => {
     await documentsService.uploadNewVersion('document-1', Buffer.from('new content'), 'user-1', undefined, uploadSource ? { uploadSource } : undefined);
 
     expect(mockPrisma.documentVersion.create.mock.calls[0][0].data).toMatchObject({
-      uploadSource: 'LAWYER_UPLOAD', securityScanStatus: 'CLEAN',
+      uploadSource: 'LAWYER_UPLOAD', securityScanStatus: 'PENDING_SCAN',
     });
-    expect(mockQueueDocumentVersionScan).not.toHaveBeenCalled();
+    expect(mockQueueDocumentVersionScan).toHaveBeenCalledTimes(1);
   });
 
   it.each(['CLIENT_UPLOAD', 'EMAIL_IMPORT'])('uploadNewVersion with %s remains pending and queues scanning', async (uploadSource) => {
@@ -129,9 +138,9 @@ describe('canonical document upload persistence', () => {
     expect(mockPrisma.document.create.mock.calls[0][0].data).toMatchObject({ category: 'CLIENT_INPUT' });
     expect(mockPrisma.document.create.mock.calls[0][0].data.versions.create).toMatchObject({
       uploadSource: 'LAWYER_UPLOAD',
-      securityScanStatus: 'CLEAN',
+      securityScanStatus: 'PENDING_SCAN',
     });
-    expect(mockQueueDocumentVersionScan).not.toHaveBeenCalled();
+    expect(mockQueueDocumentVersionScan).toHaveBeenCalledTimes(1);
   });
 
   it('removes SharePoint content and persists no document when canonical persistence fails', async () => {

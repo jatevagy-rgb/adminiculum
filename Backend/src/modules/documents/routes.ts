@@ -701,7 +701,7 @@ router.get('/:id/versions/:versionId/text', authenticate, requireDocumentReadAcc
       return;
     }
 
-    const blocked = securityScanBlock(version.securityScanStatus || 'CLEAN');
+    const blocked = securityScanBlock(version.securityScanStatus);
     if (blocked) {
       res.status(blocked.status).json(blocked);
       return;
@@ -776,7 +776,7 @@ router.post('/:id/versions/:versionId/security-scan/retry', authenticate, requir
     res.status(404).json({ status: 404, code: 'DOCUMENT_VERSION_NOT_FOUND', message: 'Document version not found.' });
     return;
   }
-  if (version.securityScanStatus !== 'SCAN_FAILED') {
+  if (version.securityScanStatus !== 'SCAN_FAILED' && version.securityScanStatus !== 'PENDING_SCAN') {
     res.status(409).json({ status: 409, code: 'DOCUMENT_SCAN_RETRY_NOT_ALLOWED', message: 'This document does not need a security scan retry.' });
     return;
   }
@@ -892,7 +892,7 @@ router.get('/:id/text', authenticate, requireDocumentObjectReadAccess, async (re
       res.status(409).json({ code: 'SOURCE_NOT_AVAILABLE', message: 'A dokumentum hiteles forrása nem érhető el.' });
       return;
     }
-    const textBlocked = securityScanBlock(currentVersion?.securityScanStatus || 'CLEAN');
+    const textBlocked = securityScanBlock(currentVersion?.securityScanStatus);
     if (textBlocked) {
       res.status(textBlocked.status).json(textBlocked);
       return;
@@ -1292,10 +1292,19 @@ router.get('/:id/download', authenticate, requireDocumentObjectReadAccess, async
   try {
     const { id } = req.params as { id: string };
 
-    // Get document to find SharePoint item ID
+    // Get document + current version storage identity. The security decision is
+    // version-bound: the bytes released MUST be the exact bytes whose scan
+    // verdict was gated, so the download reads the CURRENT immutable version's
+    // own storage identity — never the legacy document-level spItemId.
     const document = await prisma.document.findUnique({
       where: { id },
-      include: { versions: { where: { isCurrent: true }, select: { securityScanStatus: true }, take: 1 } },
+      include: {
+        versions: {
+          where: { isCurrent: true },
+          select: { securityScanStatus: true, storageReference: true, spItemId: true },
+          take: 1,
+        },
+      },
     });
 
     if (!document) {
@@ -1307,13 +1316,18 @@ router.get('/:id/download', authenticate, requireDocumentObjectReadAccess, async
       return;
     }
 
-    const downloadBlocked = securityScanBlock(document.versions?.[0]?.securityScanStatus || 'CLEAN');
+    const currentVersion = document.versions?.[0] ?? null;
+    const downloadBlocked = securityScanBlock(currentVersion?.securityScanStatus);
     if (downloadBlocked) {
       res.status(downloadBlocked.status).json(downloadBlocked);
       return;
     }
 
-    if (!document.spItemId) {
+    // No legacy document-pointer fallback after a version-bound security
+    // decision: if the current version carries no storage identity, the content
+    // cannot be truthfully released.
+    const storageId = currentVersion?.spItemId || currentVersion?.storageReference || null;
+    if (!storageId) {
       res.status(400).json({ 
         status: 400, 
         code: 'NO_SHAREPOINT_ITEM', 
@@ -1322,9 +1336,9 @@ router.get('/:id/download', authenticate, requireDocumentObjectReadAccess, async
       return;
     }
 
-    // Download from SharePoint
+    // Download the exact current-version bytes from SharePoint.
     const driveService = (await import('../sharepoint/driveService.js')).default;
-    const downloadResult = await driveService.downloadDocumentResult(document.spItemId);
+    const downloadResult = await driveService.downloadDocumentResult(storageId);
 
     if (downloadResult.success === false) {
       const mappedStatus =

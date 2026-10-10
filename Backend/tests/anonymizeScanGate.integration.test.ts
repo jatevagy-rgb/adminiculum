@@ -1,9 +1,13 @@
 import { randomUUID } from 'crypto';
 import express from 'express';
 import type { Server } from 'http';
+import { Client } from 'pg';
 import { prisma } from '../src/prisma/prisma.service';
 import anonymizeRouter from '../src/modules/anonymize/routes';
 import driveService from '../src/modules/sharepoint/driveService';
+import { scanDocumentVersionInBackground } from '../src/modules/documents/securityScan.service';
+import { scanClaimKey, closeScanClaimPool } from '../src/modules/documents/scanClaim';
+import { setScanner } from '../src/modules/upload-security/scannerAdapter';
 
 jest.mock('../src/middleware/auth', () => ({
   authenticate: (req: any, res: any, next: any) => {
@@ -53,6 +57,7 @@ beforeAll(async () => {
 afterAll(async () => {
   if (server) await new Promise<void>((r) => server.close(() => r()));
   await prisma.$disconnect();
+  await closeScanClaimPool();
 });
 
 async function setCurrentStatus(status: 'PENDING_SCAN' | 'CLEAN' | 'SCAN_FAILED' | 'INFECTED') {
@@ -146,7 +151,7 @@ test('caller text cannot bypass an infected canonical version or write an artifa
   expect(await artifactCount()).toBe(before);
 });
 
-test('legacy unbound documents without any version keep their existing behavior', async () => {
+test('legacy unbound documents without any version stay blocked (no trustworthy scan verdict)', async () => {
   const legacyDoc = randomUUID();
   await prisma.document.create({ data: { id: legacyDoc, caseId, clientId: client, name: 'LEGACY_UNBOUND', category: 'OTHER', mimeType: 'text/plain', spItemId: `synthetic-sp-legacy-${randomUUID()}` } });
   downloads = 0;
@@ -156,7 +161,119 @@ test('legacy unbound documents without any version keep their existing behavior'
     body: JSON.stringify({ aiTask: 'SUMMARIZE' }),
   });
   const body = await r.json() as any;
-  expect(r.status).toBe(200);
-  expect(downloads).toBe(1);
-  expect(body.redactedText).toBeDefined();
+  expect(r.status).toBe(409);
+  expect(body.code).toBe('SECURITY_SCAN_BLOCKED');
+  expect(downloads).toBe(0);
+  expect(JSON.stringify(body)).not.toMatch(/SecretClient|LEGACY_UNBOUND/);
+});
+
+test('scan verdict is monotonic: INFECTED overwrites an earlier CLEAN and never loses to a later CLEAN', async () => {
+  const conDocId = randomUUID();
+  const conVersionId = randomUUID();
+  await prisma.document.create({ data: { id: conDocId, caseId, clientId: client, name: 'CONCURRENCY_GATE', category: 'OTHER', mimeType: 'text/plain', spItemId: 'sp-conc' } });
+  await prisma.documentVersion.create({ data: { id: conVersionId, documentId: conDocId, version: 1, name: 'v1', originalFileName: 'conc.txt', mimeType: 'text/plain', uploadedById: user, storageReference: 'conc-store', securityScanStatus: 'PENDING_SCAN', isCurrent: true } });
+
+  const clean = { provider: 'FAKE', scan: async () => ({ outcome: 'CLEAN' as const, provider: 'FAKE', codeSafe: 'FAKE_CLEAN' }) };
+  const infected = { provider: 'FAKE', scan: async () => ({ outcome: 'INFECTED' as const, provider: 'FAKE', codeSafe: 'FAKE_INFECTED' }) };
+
+  try {
+    // Scan 1 (e.g. original background scan) establishes CLEAN.
+    setScanner(clean);
+    await scanDocumentVersionInBackground(conVersionId, Buffer.from('bytes'));
+    expect((await prisma.documentVersion.findUnique({ where: { id: conVersionId } }))?.securityScanStatus).toBe('CLEAN');
+
+    // Scan 2 (e.g. concurrent retry) returns INFECTED: it must overwrite CLEAN.
+    setScanner(infected);
+    await scanDocumentVersionInBackground(conVersionId, Buffer.from('bytes'));
+    expect((await prisma.documentVersion.findUnique({ where: { id: conVersionId } }))?.securityScanStatus).toBe('INFECTED');
+
+    // A later CLEAN must never downgrade the persisted INFECTED.
+    setScanner(clean);
+    await scanDocumentVersionInBackground(conVersionId, Buffer.from('bytes'));
+    expect((await prisma.documentVersion.findUnique({ where: { id: conVersionId } }))?.securityScanStatus).toBe('INFECTED');
+  } finally {
+    setScanner(null);
+  }
+});
+
+async function createPendingVersion(): Promise<string> {
+  const docId = randomUUID();
+  const versionId = randomUUID();
+  await prisma.document.create({ data: { id: docId, caseId, clientId: client, name: `CLAIM_${docId}`, category: 'OTHER', mimeType: 'text/plain', spItemId: `sp-${docId}` } });
+  await prisma.documentVersion.create({ data: { id: versionId, documentId: docId, version: 1, name: 'v1', originalFileName: 'claim.txt', mimeType: 'text/plain', uploadedById: user, storageReference: `store-${versionId}`, securityScanStatus: 'PENDING_SCAN', isCurrent: true } });
+  return versionId;
+}
+
+async function statusOf(versionId: string): Promise<string | undefined> {
+  return (await prisma.documentVersion.findUnique({ where: { id: versionId } }))?.securityScanStatus;
+}
+
+test('X2 — cross-process claim: no temporary CLEAN while another worker scans the same version', async () => {
+  const versionId = await createPendingVersion();
+
+  // Worker A (a different session/process) acquires the advisory lock and holds
+  // it, simulating an in-flight scan whose eventual verdict is INFECTED.
+  const workerA = new Client({ connectionString: process.env.DATABASE_URL });
+  await workerA.connect();
+  await workerA.query('SELECT pg_advisory_lock($1::int, $2::int)', scanClaimKey(versionId));
+
+  let bScans = 0;
+  setScanner({ provider: 'FAKE', scan: async () => { bScans += 1; return { outcome: 'CLEAN', provider: 'FAKE', codeSafe: 'FAKE_CLEAN' }; } });
+  try {
+    await scanDocumentVersionInBackground(versionId, Buffer.from('bytes'));
+    // Worker B must NOT run a competing scanner, and status must NOT become CLEAN.
+    expect(bScans).toBe(0);
+    expect(await statusOf(versionId)).toBe('PENDING_SCAN');
+  } finally {
+    setScanner(null);
+    await workerA.query('SELECT pg_advisory_unlock_all()');
+    await workerA.end();
+  }
+
+  // Worker A's eventual verdict wins and is INFECTED.
+  setScanner({ provider: 'FAKE', scan: async () => ({ outcome: 'INFECTED', provider: 'FAKE', codeSafe: 'FAKE_INFECTED' }) });
+  try {
+    await scanDocumentVersionInBackground(versionId, Buffer.from('bytes'));
+    expect(await statusOf(versionId)).toBe('INFECTED');
+  } finally {
+    setScanner(null);
+  }
+});
+
+test('X4 — claim releases on connection/process death and recovery can rescan exact bytes', async () => {
+  const versionId = await createPendingVersion();
+
+  // Worker A acquires the lock then dies WITHOUT unlocking (connection closes).
+  const workerA = new Client({ connectionString: process.env.DATABASE_URL });
+  await workerA.connect();
+  await workerA.query('SELECT pg_advisory_lock($1::int, $2::int)', scanClaimKey(versionId));
+  await workerA.end(); // simulate process death: session ends, lock auto-released
+
+  setScanner({ provider: 'FAKE', scan: async () => ({ outcome: 'CLEAN', provider: 'FAKE', codeSafe: 'FAKE_CLEAN' }) });
+  try {
+    await scanDocumentVersionInBackground(versionId, Buffer.from('bytes'));
+    expect(await statusOf(versionId)).toBe('CLEAN');
+  } finally {
+    setScanner(null);
+  }
+});
+
+test('X5 — different versions scan independently (lock scope is version identity only)', async () => {
+  const vA = await createPendingVersion();
+  const vB = await createPendingVersion();
+
+  const workerA = new Client({ connectionString: process.env.DATABASE_URL });
+  await workerA.connect();
+  await workerA.query('SELECT pg_advisory_lock($1::int, $2::int)', scanClaimKey(vA));
+
+  setScanner({ provider: 'FAKE', scan: async () => ({ outcome: 'CLEAN', provider: 'FAKE', codeSafe: 'FAKE_CLEAN' }) });
+  try {
+    await scanDocumentVersionInBackground(vB, Buffer.from('bytes'));
+    expect(await statusOf(vB)).toBe('CLEAN');
+    expect(await statusOf(vA)).toBe('PENDING_SCAN');
+  } finally {
+    setScanner(null);
+    await workerA.query('SELECT pg_advisory_unlock_all()');
+    await workerA.end();
+  }
 });

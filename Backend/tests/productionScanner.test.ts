@@ -228,6 +228,83 @@ describe('HttpMalwareScanner — fail-closed on abnormal paths', () => {
   });
 });
 
+describe('HttpMalwareScanner — total HTTP deadline covers the response body', () => {
+  // A provider that returns headers immediately (so the pre-fix timer would be
+  // cleared) but then stalls its body must still fail closed as a timeout.
+  function stallingBodyResponse(prefixChunk?: string): Response {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        if (prefixChunk) controller.enqueue(encoder.encode(prefixChunk));
+        // Never enqueue more and never close: the body stalls/trickles forever.
+      },
+    });
+    return new Response(stream, { status: 200 });
+  }
+
+  it('headers then stalled body past deadline → SCAN_FAILED (HTTP_SCAN_TIMEOUT)', async () => {
+    global.fetch = jest.fn(async () => stallingBodyResponse()) as any;
+    const r = await new HttpMalwareScanner({ url: URL, timeoutMs: 30 }).scan(SCAN_INPUT);
+    expect(r.outcome).toBe('SCAN_FAILED');
+    expect(r.codeSafe).toBe('HTTP_SCAN_TIMEOUT');
+  });
+
+  it('headers then trickle body past deadline → SCAN_FAILED (HTTP_SCAN_TIMEOUT)', async () => {
+    // Emit a partial JSON chunk so the first read() resolves, then stall the
+    // remainder past the deadline.
+    global.fetch = jest.fn(async () => stallingBodyResponse('{"result":')) as any;
+    const r = await new HttpMalwareScanner({ url: URL, timeoutMs: 30 }).scan(SCAN_INPUT);
+    expect(r.outcome).toBe('SCAN_FAILED');
+    expect(r.codeSafe).toBe('HTTP_SCAN_TIMEOUT');
+  });
+
+  it('clean body completed within deadline still returns CLEAN', async () => {
+    global.fetch = jest.fn(async () => jsonResponse({ result: 'clean' })) as any;
+    const r = await new HttpMalwareScanner({ url: URL, timeoutMs: 500 }).scan(SCAN_INPUT);
+    expect(r.outcome).toBe('CLEAN');
+    expect(r.codeSafe).toBe('HTTP_SCAN_CLEAN');
+  });
+});
+
+describe('HttpMalwareScanner — body-cancellation rejection is consumed', () => {
+  // P1: on timeout after headers, onAbort() cancels the stream reader. Under
+  // Node/Undici the reader.cancel() promise can reject when the stream already
+  // errored on abort. The discarded promise (void) then becomes an
+  // unhandledRejection, which can terminate/disrupt the backend process even
+  // though the scan correctly returns HTTP_SCAN_TIMEOUT.
+  function rejectingCancelResponse(): Response {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('{"result":')); // trickle one chunk, then stall
+      },
+      cancel() {
+        return Promise.reject(new Error('cancel rejected'));
+      },
+    });
+    return new Response(stream, { status: 200 });
+  }
+
+  it('reader.cancel() rejection never becomes unhandledRejection and still yields HTTP_SCAN_TIMEOUT', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown): void => { unhandled.push(reason); };
+    process.on('unhandledRejection', onUnhandled);
+
+    global.fetch = jest.fn(async () => rejectingCancelResponse()) as any;
+    try {
+      const r = await new HttpMalwareScanner({ url: URL, timeoutMs: 30 }).scan(SCAN_INPUT);
+      expect(r.outcome).toBe('SCAN_FAILED');
+      expect(r.codeSafe).toBe('HTTP_SCAN_TIMEOUT');
+
+      // Let any discarded rejection surface on a later tick.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(unhandled).toHaveLength(0);
+    } finally {
+      process.removeListener('unhandledRejection', onUnhandled);
+    }
+  });
+});
+
 describe('secrets & provider detail never reach logs', () => {
   it('SECRET_NOT_LOGGED: fail-closed logs carry no api key, url, or provider body', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});

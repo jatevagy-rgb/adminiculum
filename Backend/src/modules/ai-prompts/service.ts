@@ -578,7 +578,7 @@ async function loadDocuments(
         });
       }
 
-      const scanBlocked = securityScanBlock(version.securityScanStatus as any || 'CLEAN');
+      const scanBlocked = securityScanBlock(version.securityScanStatus as any);
       if (scanBlocked) {
         throw Object.assign(new Error(scanBlocked.error), {
           status: scanBlocked.status || 409,
