@@ -56,7 +56,7 @@ function MeasurementSession({ clientId }: { clientId: string }) {
       <div className="grid gap-3 md:grid-cols-2">
         {data.items.map(metric => <article key={metric.metricKey} className={CARD}>
           <h3 className="font-semibold">{OPERATIONAL_METRIC_LABELS[metric.metricKey] || metric.metricKey}</h3>
-          <p className="mt-2 text-xl font-semibold text-[var(--adm-brand-green)]">{metric.value === null ? 'Nincs rögzített minta' : metric.unit === 'RATIO' ? `${(metric.value * 100).toLocaleString('hu-HU', { maximumFractionDigits: 1 })}%` : `${metric.value.toLocaleString('hu-HU', { maximumFractionDigits: 1 })} ${metric.unit === 'RECORDED_LABOUR_MINUTES' ? 'rögzített munkaperc' : 'eltelt perc'}`}</p>
+          <p className={metric.value === null ? 'mt-2 text-sm text-[var(--adm-text-secondary)]' : 'mt-2 text-xl font-semibold text-[var(--adm-brand-green)]'}>{metric.value === null ? 'Nincs rögzített minta' : metric.unit === 'RATIO' ? `${(metric.value * 100).toLocaleString('hu-HU', { maximumFractionDigits: 1 })}%` : `${metric.value.toLocaleString('hu-HU', { maximumFractionDigits: 1 })} ${metric.unit === 'RECORDED_LABOUR_MINUTES' ? 'rögzített munkaperc' : 'eltelt perc'}`}</p>
           <p className="mt-2 text-sm">Minta: {metric.sampleCount} · Kizárt / hiányos: {metric.missingCount}</p>
           <details className="mt-3 text-sm"><summary className="cursor-pointer focus-visible:outline">Definíció és források</summary>
             <p>Definíció: {metric.definitionVersion} · {metric.period.from} – {metric.period.to} ({metric.period.timeZone})</p>
