@@ -19,6 +19,8 @@ const root=createRoot(document.getElementById('root'));
 window.reset=(mode='reviewer')=>{
  window.mode=mode;window.review=reviewFixture();window.workflow=workflowFixture();window.calls=[];window.cockpitClosed=0;
  if(mode==='long-note') Object.assign(window,longNoteFixture());
+ if(mode==='round-gap') {window.review.documentReviews[0].reviews=[];window.review.documentReviews[0].unavailableReason='SOURCE_ROUND_BINDING_GAP';}
+ if(mode==='decision-gap') {const entry=window.review.documentReviews[0].reviews[0];entry.lastDecisionUnavailableReason='SOURCE_ROUND_BINDING_GAP';entry.counts=null;}
  if(mode==='readonly'||mode==='self') {window.review.permittedActions.approve=false;window.review.permittedActions.return=false;}
  if(mode==='self') window.review.submission.assignedReviewer=window.review.submission.submittedBy;
  root.render(<TaskReviewWorkspace key={mode+Date.now()} item={{taskId:'task-1',submissionId:'submission-1'}} onClose={()=>window.cockpitClosed++} onQueueChanged={()=>undefined}/>);
@@ -49,6 +51,11 @@ try {
     await page.addScriptTag({ content: bundle.outputFiles[0].text });
     await page.getByTestId('review-cockpit').waitFor();
     assert.equal(await page.locator('[data-time-state]').getAttribute('data-time-state'), 'MISSING');
+    const exactRound=page.locator('[data-review-round-id="round-2"]');
+    assert.match(await exactRound.innerText(), /2\. kör/);
+    assert.doesNotMatch(await exactRound.innerText(), /3\. kör/);
+    assert.equal(await exactRound.getByRole('link').count(),0,'unbound current-review drilldown is unavailable');
+    await exactRound.getByText('A pontos review-kör részletes megnyitása ezen a felületen nem érhető el.').waitFor();
     assert.deepEqual(await page.locator('[data-review-section]').evaluateAll(nodes=>nodes.map(n=>n.dataset.reviewSection)), ['ReviewIdentity','DecisionSummary','SubmittedOutputs','VersionComparisonContext','OpenReviewPoints','WorkInstructionAndRisks','TimeSummary','DecisionActions','ContextDrawer']);
     assert.match(await page.getByRole('link',{name:'Beküldött pontos verzió megnyitása'}).getAttribute('href'), /documentId=document-1&versionId=version-2$/);
     await page.getByLabel('Kiválasztott eredmény').selectOption('output-legacy');
@@ -127,6 +134,13 @@ try {
     assert.equal(await page.evaluate(()=>window.cockpitClosed),0,'approval retains its exact context');
     await page.evaluate(()=>window.reset('forbidden'));await page.getByRole('alert').waitFor();
     assert.equal(await page.getByTestId('review-cockpit').count(),0,'forbidden review must not show stale or empty review content');
+    await page.evaluate(()=>window.reset('round-gap'));
+    await page.getByText('A leadott verzió review-körének kapcsolata nem állapítható meg a rögzített forrásból.').waitFor();
+    assert.equal(await page.getByText('Ehhez a beküldött verzióhoz nincs kapcsolt formális dokumentumreview.').count(),0,'missing provenance is not no review');
+    await page.evaluate(()=>window.reset('decision-gap'));
+    await page.getByText('A döntés review-körhöz tartozása nincs egyértelműen rögzítve.').waitFor();
+    await page.getByText('A review-pontok körhöz tartozása nem állapítható meg.').waitFor();
+    assert.equal(await page.getByText(/0 nyitott/).count(),0,'unknown point count is not zero');
     assert.deepEqual(errors,[]);
     results.push({width,status:'PASS',assertions:'exact identity, missing time, DOM order, output selection, return fields/headers, read-only, self-review projection, unavailable context, stale ETag, explicit publication, overflow, modal focus'});
     await page.close();
